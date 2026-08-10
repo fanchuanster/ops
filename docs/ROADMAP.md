@@ -18,8 +18,10 @@ foundation rather than reading as an oversight.
   standalone public conversion portal.
 - **Part-level rights overrides** — currently rights status lives only on
   the Book; a Part inheriting a different status isn't supported yet.
-- **Staged/scheduled releases** — timed unlock of later parts after a
-  prior part's release.
+- **Staged release: paid early unlock** — the time-delay half is built
+  (see `ARCHITECTURE_REVIEW.md` section 7); the "pay a small amount to
+  open the next part early" half still needs WooCommerce, and should stay
+  a seriousness gate rather than a revenue mechanism per `CLAUDE.md`.
 
 ## Monetization (secondary to the reading mission — see CLAUDE.md's
 ## Business Model section; no dark patterns)

@@ -27,6 +27,11 @@ function nr_register_settings() {
         'sanitize_callback' => 'absint',
         'default' => 5,
     ]);
+    register_setting('nobleread_core', 'nr_unlock_delay_hours', [
+        'type' => 'integer',
+        'sanitize_callback' => 'absint',
+        'default' => 72,
+    ]);
 }
 
 function nr_render_settings_page() {
@@ -46,6 +51,15 @@ function nr_render_settings_page() {
                     <td>
                         <input type="number" min="1" id="nr_download_limit_per_day" name="nr_download_limit_per_day" value="<?php echo esc_attr(get_option('nr_download_limit_per_day', 5)); ?>">
                         <p class="description"><?php esc_html_e('How many distinct books a logged-in reader may start within a rolling 24-hour period. Once a book is started, all of its parts and formats are free — the cap is on volume of books, not on files or network bandwidth.', 'nobleread-core'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="nr_unlock_delay_hours"><?php esc_html_e('Default unlock delay (hours)', 'nobleread-core'); ?></label>
+                    </th>
+                    <td>
+                        <input type="number" min="0" id="nr_unlock_delay_hours" name="nr_unlock_delay_hours" value="<?php echo esc_attr(get_option('nr_unlock_delay_hours', 72)); ?>">
+                        <p class="description"><?php esc_html_e('For books released in stages: how long after a reader starts one part the next one opens, roughly the time needed to read it. 72 = three days. Individual parts can override this.', 'nobleread-core'); ?></p>
                     </td>
                 </tr>
             </table>

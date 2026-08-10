@@ -156,6 +156,21 @@
     font-size: 0.9rem;
 }
 
+/* A locked part is dimmed but never hidden — readers should be able to
+   see what's ahead of them, and why it isn't open yet. */
+.nr-part-locked .nr-part-title {
+    color: #8a8578;
+    font-weight: 500;
+}
+
+.nr-part-lock {
+    font-size: 0.85rem;
+    color: #6b6553;
+    background: #f5f2ea;
+    border-radius: 999px;
+    padding: 0.25rem 0.8rem;
+}
+
 .nr-login-prompt {
     padding: 1rem;
     background: #f7f5f0;

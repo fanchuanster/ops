@@ -101,6 +101,14 @@ function nr_handle_download_request() {
     }
 
     $user_id = get_current_user_id();
+
+    // Checked before the rate limit on purpose: a part the reader isn't
+    // allowed to open yet must never burn one of their daily slots.
+    $staged = NR_Staged_Release::status($part_id, $user_id);
+    if (!$staged['unlocked']) {
+        nr_download_die(NR_Staged_Release::lock_message($staged), 403);
+    }
+
     if (!NR_Download_Limiter::under_limit($user_id, $book_id)) {
         nr_download_die(
             sprintf(

@@ -24,6 +24,7 @@ define('NR_VERSION', '0.1.0');
 require_once NR_PLUGIN_DIR . 'includes/post-types.php';
 require_once NR_PLUGIN_DIR . 'includes/meta-boxes.php';
 require_once NR_PLUGIN_DIR . 'includes/rate-limit.php';
+require_once NR_PLUGIN_DIR . 'includes/staged-release.php';
 require_once NR_PLUGIN_DIR . 'includes/downloads.php';
 require_once NR_PLUGIN_DIR . 'includes/templates.php';
 require_once NR_PLUGIN_DIR . 'includes/shortcodes.php';

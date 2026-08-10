@@ -67,11 +67,16 @@ while (have_posts()) :
                     <ul class="nr-part-list">
                         <?php foreach ($parts as $part) :
                             $formats = nr_part_available_formats($part->ID);
+                            $staged = NR_Staged_Release::status($part->ID, get_current_user_id());
                             ?>
-                            <li class="nr-part">
+                            <li class="nr-part<?php echo $staged['unlocked'] ? '' : ' nr-part-locked'; ?>">
                                 <span class="nr-part-title"><?php echo esc_html(get_the_title($part)); ?></span>
                                 <?php if (empty($formats)) : ?>
                                     <span class="nr-part-pending"><?php esc_html_e('Coming soon', 'nobleread-core'); ?></span>
+                                <?php elseif (!$staged['unlocked']) : ?>
+                                    <span class="nr-part-lock">
+                                        <?php echo esc_html(NR_Staged_Release::lock_message($staged)); ?>
+                                    </span>
                                 <?php else : ?>
                                     <span class="nr-part-downloads">
                                         <?php foreach ($formats as $format => $label) : ?>

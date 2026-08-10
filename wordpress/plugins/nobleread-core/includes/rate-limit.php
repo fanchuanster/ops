@@ -101,6 +101,22 @@ class NR_Download_Limiter {
         return max(0, self::limit_per_day() - self::count_books_since($user_id, self::window_start()));
     }
 
+    /**
+     * When this reader first took anything from this part, as a UTC
+     * timestamp, or null. Deliberately spans all history rather than the
+     * rate-limit window — the staged-release clock is unrelated to it.
+     */
+    public static function first_download_at($user_id, $part_id) {
+        global $wpdb;
+        $table = self::table_name();
+        $when = $wpdb->get_var($wpdb->prepare(
+            "SELECT MIN(created_at) FROM {$table} WHERE user_id = %d AND part_id = %d",
+            $user_id,
+            $part_id
+        ));
+        return $when ? strtotime($when . ' UTC') : null;
+    }
+
     public static function record($user_id, $part_id, $book_id, $format) {
         global $wpdb;
         $wpdb->insert(

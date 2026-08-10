@@ -78,6 +78,7 @@ function nr_register_post_meta() {
         'nr_translator' => 'string',
         'nr_language' => 'string',
         'nr_rights_status' => 'string',
+        'nr_staged_release' => 'string',
     ];
     foreach ($book_meta as $key => $type) {
         register_post_meta('nr_book', $key, [
@@ -96,6 +97,7 @@ function nr_register_post_meta() {
         'nr_pdf_standard_attachment_id' => 'integer',
         'nr_pdf_large_attachment_id' => 'integer',
         'nr_pdf_xl_attachment_id' => 'integer',
+        'nr_unlock_delay_hours' => 'string',
     ];
     foreach ($part_meta as $key => $type) {
         register_post_meta('nr_part', $key, [

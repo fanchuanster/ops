@@ -125,7 +125,36 @@ over-limit request returns a positively-worded 429 rather than a raw
 WordPress error, in keeping with `CLAUDE.md`'s "no dark patterns"
 guidance on the business model.
 
-## 7. What's deferred
+## 7. Staged release: per-reader clock, opt-in per book
+
+`CLAUDE.md` core feature 4 says later parts are "locked for a delay
+period after the prior part's release/download — the delay is roughly
+the estimated time needed to finish reading the prior part."
+
+That last clause decides the design: the clock starts when **this
+reader** first downloads the previous part, not on a global publication
+date. A global schedule would lock out someone who finds a book late
+while giving nothing to anyone, whereas the stated intent is pacing one
+person's reading. `wp_nr_downloads` already records who took what and
+when, so the clock needs no extra storage — `first_download_at()` reads
+it directly, deliberately across all history rather than the rate-limit
+window, since the two have nothing to do with each other.
+
+Staged release is opt-in per book (`nr_staged_release`), so single-part
+titles and anything that should simply be available are unaffected. The
+delay is a site-wide default (72h) with a per-part override, since
+"time needed to read it" genuinely varies by part.
+
+Gating is enforced at the download endpoint, not just hidden in the UI,
+and is checked **before** the rate limit so a part the reader may not
+open yet can never consume one of their daily book slots. Users who can
+edit the book bypass the gate, so editors can verify a late part's files
+without waiting out the delay.
+
+The paid early-unlock half of the feature is not implemented — it needs
+WooCommerce and is tracked in `docs/ROADMAP.md`.
+
+## 8. What's deferred
 
 See `docs/ROADMAP.md` for the full list. In short: the OCR/AI conversion
 pipeline, WooCommerce-based paid unlocks and donations, Send-to-Kindle,

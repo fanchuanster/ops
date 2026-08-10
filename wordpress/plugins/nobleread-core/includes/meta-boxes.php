@@ -48,6 +48,17 @@ function nr_render_book_meta_box($post) {
             <?php esc_html_e('Only Public domain, Licensed, or Permission granted books offer public downloads. Every other status is blocked at the download endpoint, regardless of which files are attached to its parts.', 'nobleread-core'); ?>
         </p>
     </p>
+    <hr>
+    <?php $staged = '1' === (string) get_post_meta($post->ID, 'nr_staged_release', true); ?>
+    <p>
+        <label>
+            <input type="checkbox" name="nr_staged_release" value="1" <?php checked($staged); ?>>
+            <strong><?php esc_html_e('Release this book in stages', 'nobleread-core'); ?></strong>
+        </label>
+    </p>
+    <p class="description">
+        <?php esc_html_e('The first part is always available. Each later part opens once the reader has started the part before it, plus a delay set under Settings > NobleRead (or overridden on the part itself). Leave off for single-part books or anything that should simply be available.', 'nobleread-core'); ?>
+    </p>
     <?php
 }
 
@@ -74,6 +85,8 @@ function nr_save_book_meta($post_id) {
     if (isset($_POST['nr_rights_status']) && array_key_exists($_POST['nr_rights_status'], nr_rights_statuses())) {
         update_post_meta($post_id, 'nr_rights_status', sanitize_key($_POST['nr_rights_status']));
     }
+    // Unchecked checkboxes aren't posted, so absence means "off".
+    update_post_meta($post_id, 'nr_staged_release', isset($_POST['nr_staged_release']) ? '1' : '');
 }
 
 /**
@@ -120,6 +133,19 @@ function nr_render_part_meta_box($post) {
         <label for="nr_part_order"><strong><?php esc_html_e('Order', 'nobleread-core'); ?></strong></label><br>
         <input type="number" id="nr_part_order" name="nr_part_order" value="<?php echo esc_attr($post->menu_order); ?>" style="width:6em;">
         <span class="description"><?php esc_html_e('Lower numbers appear first (Part 1, Part 2, …).', 'nobleread-core'); ?></span>
+    </p>
+    <p>
+        <label for="nr_unlock_delay_hours"><strong><?php esc_html_e('Unlock delay (hours)', 'nobleread-core'); ?></strong></label><br>
+        <input type="number" min="0" id="nr_unlock_delay_hours" name="nr_unlock_delay_hours" value="<?php echo esc_attr(get_post_meta($post->ID, 'nr_unlock_delay_hours', true)); ?>" style="width:8em;">
+        <span class="description">
+            <?php
+            printf(
+                /* translators: %d: site-wide default delay in hours */
+                esc_html__('How long after starting the previous part this one opens. Leave blank to use the site default (%d hours). Only applies when the parent book releases in stages.', 'nobleread-core'),
+                (int) NR_Staged_Release::default_delay_hours()
+            );
+            ?>
+        </span>
     </p>
     <hr>
     <?php foreach (nr_part_format_fields() as $key => $label) :
@@ -175,6 +201,12 @@ function nr_save_part_meta($post_id) {
         if (isset($_POST[$key])) {
             update_post_meta($post_id, $key, absint($_POST[$key]));
         }
+    }
+
+    if (isset($_POST['nr_unlock_delay_hours'])) {
+        // Blank is meaningful here — it means "fall back to the default".
+        $delay = trim((string) wp_unslash($_POST['nr_unlock_delay_hours']));
+        update_post_meta($post_id, 'nr_unlock_delay_hours', '' === $delay ? '' : (string) absint($delay));
     }
 
     // Parent book + order are plain post fields (post_parent, menu_order),
