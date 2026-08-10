@@ -1,0 +1,122 @@
+/* NobleRead Core — minimal structural styling for the catalog and single
+   book views. Kept deliberately small: the theme (Kadence) owns overall
+   typography/branding, this file only handles the grid/button/badge
+   structure that's specific to the book/part UI. */
+
+.nr-catalog-header {
+    margin-bottom: 2rem;
+}
+
+.nr-book-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.nr-book-card-cover {
+    display: block;
+}
+
+.nr-book-card-cover img,
+.nr-book-card-cover-placeholder {
+    display: block;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    background: #e9e5dc;
+    border-radius: 4px;
+}
+
+.nr-book-card-title {
+    font-size: 1.05rem;
+    margin: 0.5rem 0 0.25rem;
+}
+
+.nr-book-card-author {
+    color: #666;
+    font-size: 0.9rem;
+    margin: 0 0 0.35rem;
+}
+
+.nr-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: #eef4ee;
+    color: #2e6b2e;
+}
+
+.nr-badge-restricted {
+    background: #f7eee9;
+    color: #8a4b1f;
+}
+
+.nr-book-header {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+}
+
+.nr-book-cover img {
+    max-width: 220px;
+    border-radius: 6px;
+}
+
+.nr-book-parts {
+    margin-top: 2rem;
+}
+
+.nr-part-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+}
+
+.nr-part {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.nr-part-title {
+    font-weight: 600;
+}
+
+.nr-download-btn {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 4px;
+    background: #2e2a24;
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.nr-download-btn:hover {
+    background: #4a4438;
+    color: #fff;
+}
+
+.nr-part-pending {
+    color: #999;
+    font-style: italic;
+    font-size: 0.9rem;
+}
+
+.nr-login-prompt {
+    padding: 1rem;
+    background: #f7f5f0;
+    border-radius: 4px;
+}
+
+.nr-remaining-note {
+    color: #888;
+    font-size: 0.85rem;
+}

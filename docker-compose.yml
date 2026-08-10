@@ -1,0 +1,91 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    # wordpress:cli's bundled MariaDB client can't load MySQL 8's default
+    # caching_sha2_password auth plugin — use the legacy plugin instead.
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-nobleread}
+      MYSQL_USER: ${MYSQL_USER:-nobleread}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nobleread}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-nobleread}
+    volumes:
+      - db_data:/var/lib/mysql
+    # No host port published — only reachable from other services on the
+    # compose network. Reduces attack surface; use `adminer` (below) or
+    # `docker compose exec db mysql ...` for inspection.
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-nobleread}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  wordpress:
+    image: wordpress:php8.3-apache
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8090:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: ${MYSQL_USER:-nobleread}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD:-nobleread}
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE:-nobleread}
+    volumes:
+      - wp_data:/var/www/html
+      # NobleRead's own plugin is developed in-repo and bind-mounted in —
+      # everything else (WP core, Kadence) is installed at provision time
+      # into the wp_data volume, not vendored in the repo.
+      - ./wordpress/plugins/nobleread-core:/var/www/html/wp-content/plugins/nobleread-core
+
+  # One-shot provisioning: installs WordPress, activates the theme and
+  # plugin, and seeds sample content. Runs once per fresh volume and
+  # exits — re-running `docker compose up` is a no-op (see provision.sh
+  # and seed-import.php, both written to be idempotent).
+  provision:
+    image: wordpress:cli-2.10
+    # wordpress:cli's default www-data user can't traverse this repo's
+    # host directories (mode 750) for the bind mounts below; run as root
+    # instead (provision.sh already passes --allow-root to every wp call).
+    user: root
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_started
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE:-nobleread}
+      WORDPRESS_DB_USER: ${MYSQL_USER:-nobleread}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD:-nobleread}
+      WORDPRESS_URL: ${WORDPRESS_URL:-http://localhost:8090}
+      WORDPRESS_TITLE: ${WORDPRESS_TITLE:-NobleRead}
+      WORDPRESS_ADMIN_USER: ${WORDPRESS_ADMIN_USER:-admin}
+      WORDPRESS_ADMIN_PASSWORD: ${WORDPRESS_ADMIN_PASSWORD:-admin}
+      WORDPRESS_ADMIN_EMAIL: ${WORDPRESS_ADMIN_EMAIL:-admin@nobelread.com}
+      NR_DOWNLOAD_LIMIT_PER_DAY: ${NR_DOWNLOAD_LIMIT_PER_DAY:-5}
+    volumes:
+      - wp_data:/var/www/html
+      - ./wordpress/plugins/nobleread-core:/var/www/html/wp-content/plugins/nobleread-core
+      - ./provisioning:/provisioning:ro
+    entrypoint: ["/bin/sh", "/provisioning/provision.sh"]
+    restart: "no"
+
+  # Dev-only DB inspection (e.g. checking wp_nr_downloads directly).
+  # Not part of the production architecture.
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8091:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+
+volumes:
+  db_data:
+  wp_data:
