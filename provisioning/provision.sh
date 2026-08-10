@@ -61,4 +61,7 @@ $WP option update nr_download_limit_per_day "${NR_DOWNLOAD_LIMIT_PER_DAY:-5}"
 echo "-- Seeding sample content"
 $WP eval-file /provisioning/seed-import.php
 
+echo "-- Configuring front page, nav menu, and removing WP sample content"
+$WP eval-file /provisioning/setup-site.php
+
 echo "== Provisioning complete =="

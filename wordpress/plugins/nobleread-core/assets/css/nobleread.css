@@ -7,6 +7,52 @@
     margin-bottom: 2rem;
 }
 
+/* Front-page hero. Deliberately restrained — the mission is reading, so
+   the page should feel like the inside of a book, not a storefront. */
+.nr-hero {
+    text-align: center;
+    padding: 2.5rem 1rem 1rem;
+    max-width: 46rem;
+    margin: 0 auto;
+}
+
+.nr-hero h2 {
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    line-height: 1.25;
+    margin: 0 0 0.75rem;
+}
+
+.nr-hero p {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: #55503f;
+    margin: 0 auto 1rem;
+}
+
+.nr-section-heading {
+    margin: 2.5rem 0 1rem;
+    text-align: center;
+}
+
+.nr-cta-row {
+    text-align: center;
+    margin: 2rem 0 1rem;
+}
+
+.nr-cta {
+    display: inline-block;
+    padding: 0.6rem 1.4rem;
+    border-radius: 4px;
+    background: #2e2a24;
+    color: #fff;
+    text-decoration: none;
+}
+
+.nr-cta:hover {
+    background: #4a4438;
+    color: #fff;
+}
+
 .nr-book-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
