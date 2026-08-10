@@ -74,6 +74,23 @@ docker compose exec provision wp --path=/var/www/html --allow-root post list --p
 run --rm provision wp ...` if the container has already exited, or swap
 in the long-lived `wordpress` service's container instead.)
 
+### Smoke test
+
+```
+./tools/smoke-test.sh                                  # against localhost:8090
+BASE_URL=http://10.0.0.5:8090 ./tools/smoke-test.sh    # or an explicit host
+```
+
+Exercises the paths that actually protect content and readers: rights
+gating, the format allowlist (the DOCX master must never be publicly
+downloadable), authentication, nonce validity, staged-release locking,
+and the distinct-book download limit. Exits non-zero on any failure.
+
+Development only — it creates a subscriber account, clears that
+account's download history, and temporarily changes the download limit
+(restored on exit). It only ever touches its own test user's rows, but
+don't point it at production.
+
 ### Resetting
 
 ```
