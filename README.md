@@ -34,6 +34,26 @@ Then:
 - Adminer (DB inspection, dev only): http://localhost:8091 — server `db`,
   user/password/database from `.env`
 
+### Exposing it beyond localhost
+
+To reach the site from another machine, set `WORDPRESS_URL` in `.env` to
+`http://<host-ip-or-hostname>:8090` *before* first provisioning — WordPress
+bakes this into its `siteurl`/`home` options, and links/assets will point
+at `localhost` (broken for remote visitors) otherwise. If the site is
+already provisioned, fix it after the fact instead of re-provisioning:
+
+```
+docker compose run --rm --entrypoint sh provision -c '
+  wp --path=/var/www/html --allow-root option update siteurl "http://<host-ip>:8090"
+  wp --path=/var/www/html --allow-root option update home    "http://<host-ip>:8090"
+  wp --path=/var/www/html --allow-root rewrite flush --hard
+'
+```
+
+The container already publishes on `0.0.0.0:8090`, so nothing in
+`docker-compose.yml` needs to change — this is purely a WordPress config
+step.
+
 Downloads require a reader account — register via the "create a free
 account" link on a book page, or in wp-admin. This is intentional:
 per-user rate limiting needs a real identity, not just an IP/cookie.
