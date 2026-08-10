@@ -38,6 +38,7 @@ while (have_posts()) :
                     <?php if ($language) : ?>
                         <p class="nr-book-language"><?php echo esc_html($language); ?></p>
                     <?php endif; ?>
+                    <?php echo wp_kses_post(nr_book_collections($book_id)); ?>
                     <?php echo wp_kses_post(nr_rights_badge($book_id)); ?>
                 </div>
             </header>

@@ -13,9 +13,19 @@ get_header();
 ?>
 <main id="nr-catalog" class="nr-catalog">
     <header class="nr-catalog-header">
-        <h1><?php esc_html_e('Books', 'nobleread-core'); ?></h1>
-        <p><?php esc_html_e('Valuable, hard-to-find books — digitized, proofread, and made comfortable to read on any device.', 'nobleread-core'); ?></p>
+        <?php if (is_tax('nr_collection')) : ?>
+            <h1><?php echo esc_html(single_term_title('', false)); ?></h1>
+            <?php $term_description = term_description(); ?>
+            <?php if ($term_description) : ?>
+                <?php echo wp_kses_post($term_description); ?>
+            <?php endif; ?>
+        <?php else : ?>
+            <h1><?php esc_html_e('Books', 'nobleread-core'); ?></h1>
+            <p><?php esc_html_e('Valuable, hard-to-find books — digitized, proofread, and made comfortable to read on any device.', 'nobleread-core'); ?></p>
+        <?php endif; ?>
     </header>
+
+    <?php echo wp_kses_post(nr_collection_filter_bar()); ?>
 
     <?php if (have_posts()) : ?>
         <div class="nr-book-grid">

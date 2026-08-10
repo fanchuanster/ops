@@ -36,6 +36,7 @@ $books = [
         'rights' => 'public_domain',
         'dir' => 'tao-te-ching-ch1',
         'cover' => 'cover.jpg',
+        'collections' => ['Chinese Classics', 'Philosophy & Wisdom'],
         'description' => "One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge's 1891 translation (public domain) alongside the original Chinese text.",
         'parts' => [
             [
@@ -59,6 +60,7 @@ $books = [
         'rights' => 'public_domain',
         'dir' => 'analects',
         'cover' => 'cover.jpg',
+        'collections' => ['Chinese Classics', 'Personal Development'],
         // Multi-part, so it demonstrates staged release out of the box.
         'staged_release' => true,
         'description' => "The recorded sayings of Confucius and his disciples, compiled by later followers — among the most influential works in Chinese thought on learning, character, and how to live well. This edition presents James Legge's 1893 translation (public domain) alongside the original Chinese.",
@@ -152,6 +154,12 @@ foreach ($books as $book) {
     update_post_meta($book_id, 'nr_language', $book['language']);
     update_post_meta($book_id, 'nr_rights_status', $book['rights']);
     update_post_meta($book_id, 'nr_staged_release', empty($book['staged_release']) ? '' : '1');
+
+    if (!empty($book['collections'])) {
+        // Terms are created on demand, so adding a book with a new
+        // collection needs no separate term-seeding step.
+        wp_set_object_terms($book_id, $book['collections'], 'nr_collection', false);
+    }
 
     $book_dir = $seed_root . $book['dir'] . '/';
 

@@ -154,7 +154,20 @@ without waiting out the delay.
 The paid early-unlock half of the feature is not implemented — it needs
 WooCommerce and is tracked in `docs/ROADMAP.md`.
 
-## 8. What's deferred
+## 8. Collections taxonomy
+
+Books are grouped by a hierarchical `nr_collection` taxonomy
+(`/collections/{slug}/`) rather than tags or a meta field. Hierarchical
+because the intended groupings are a curated shelf structure — "Chinese
+Classics", with room for sub-shelves as the library grows — not freeform
+labelling; and a real taxonomy (rather than meta) gets archives,
+queryability, and admin UI from core for free.
+
+Collection archives reuse the catalog template with a filtered query
+instead of a near-duplicate template. The filter bar hides itself below
+two collections, so a small library doesn't display a one-option filter.
+
+## 9. What's deferred
 
 See `docs/ROADMAP.md` for the full list. In short: the OCR/AI conversion
 pipeline, WooCommerce-based paid unlocks and donations, Send-to-Kindle,

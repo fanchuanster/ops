@@ -53,6 +53,52 @@
     color: #fff;
 }
 
+.nr-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0 0 1.75rem;
+}
+
+.nr-filter {
+    display: inline-block;
+    padding: 0.3rem 0.85rem;
+    border: 1px solid #ddd7c8;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    color: #55503f;
+    text-decoration: none;
+}
+
+.nr-filter:hover {
+    border-color: #b3a988;
+    color: #2e2a24;
+}
+
+.nr-filter-active {
+    background: #2e2a24;
+    border-color: #2e2a24;
+    color: #fff;
+}
+
+.nr-filter-active:hover {
+    color: #fff;
+}
+
+.nr-filter-count {
+    opacity: 0.6;
+    font-size: 0.8em;
+}
+
+.nr-book-collections {
+    margin: 0.25rem 0 0.5rem;
+    font-size: 0.9rem;
+}
+
+.nr-collection-link {
+    color: #6b6553;
+}
+
 .nr-book-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

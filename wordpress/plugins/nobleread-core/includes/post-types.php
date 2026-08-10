@@ -69,7 +69,32 @@ function nr_register_post_types() {
         'show_in_rest' => false,
     ]);
 
+    nr_register_taxonomies();
     nr_register_post_meta();
+}
+
+/**
+ * Collections group books by subject so the catalog stays browsable as it
+ * grows. Hierarchical (category-like, not tag-like) because the intended
+ * groupings are a curated shelf structure — "Chinese Classics", with room
+ * for sub-shelves later — rather than freeform labelling.
+ */
+function nr_register_taxonomies() {
+    register_taxonomy('nr_collection', ['nr_book'], [
+        'labels' => [
+            'name' => __('Collections', 'nobleread-core'),
+            'singular_name' => __('Collection', 'nobleread-core'),
+            'add_new_item' => __('Add New Collection', 'nobleread-core'),
+            'edit_item' => __('Edit Collection', 'nobleread-core'),
+            'all_items' => __('Collections', 'nobleread-core'),
+            'search_items' => __('Search Collections', 'nobleread-core'),
+        ],
+        'public' => true,
+        'hierarchical' => true,
+        'show_admin_column' => true,
+        'show_in_rest' => true,
+        'rewrite' => ['slug' => 'collections'],
+    ]);
 }
 
 function nr_register_post_meta() {

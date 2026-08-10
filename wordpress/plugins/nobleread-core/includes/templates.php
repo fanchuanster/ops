@@ -15,7 +15,9 @@ add_filter('template_include', 'nr_template_include');
 add_action('wp_enqueue_scripts', 'nr_enqueue_assets');
 
 function nr_template_include($template) {
-    if (is_post_type_archive('nr_book')) {
+    // Collection archives reuse the catalog layout — same grid, filtered
+    // set — rather than duplicating a near-identical template.
+    if (is_post_type_archive('nr_book') || is_tax('nr_collection')) {
         return nr_locate_template('archive-nr_book.php', $template);
     }
     if (is_singular('nr_book')) {
@@ -34,7 +36,7 @@ function nr_locate_template($name, $fallback) {
 }
 
 function nr_enqueue_assets() {
-    if (is_post_type_archive('nr_book') || is_singular('nr_book')) {
+    if (is_post_type_archive('nr_book') || is_tax('nr_collection') || is_singular('nr_book')) {
         wp_enqueue_style('nobleread-core', NR_PLUGIN_URL . 'assets/css/nobleread.css', [], NR_VERSION);
     }
 }
@@ -64,6 +66,60 @@ function nr_part_available_formats($part_id) {
         }
     }
     return $available;
+}
+
+/**
+ * Collection filter links for the catalog. Returns '' when there is
+ * nothing worth filtering by, so an empty or single-collection library
+ * doesn't show a pointless one-option filter.
+ */
+function nr_collection_filter_bar() {
+    $terms = get_terms([
+        'taxonomy' => 'nr_collection',
+        'hide_empty' => true,
+    ]);
+
+    if (is_wp_error($terms) || count($terms) < 2) {
+        return '';
+    }
+
+    $current = is_tax('nr_collection') ? (int) get_queried_object_id() : 0;
+
+    $links = sprintf(
+        '<a class="nr-filter%s" href="%s">%s</a>',
+        $current ? '' : ' nr-filter-active',
+        esc_url(get_post_type_archive_link('nr_book')),
+        esc_html__('All books', 'nobleread-core')
+    );
+
+    foreach ($terms as $term) {
+        $links .= sprintf(
+            '<a class="nr-filter%s" href="%s">%s <span class="nr-filter-count">%d</span></a>',
+            $current === (int) $term->term_id ? ' nr-filter-active' : '',
+            esc_url(get_term_link($term)),
+            esc_html($term->name),
+            (int) $term->count
+        );
+    }
+
+    return '<nav class="nr-filters" aria-label="' . esc_attr__('Collections', 'nobleread-core') . '">' . $links . '</nav>';
+}
+
+/** Collection links for a single book, or '' if it has none. */
+function nr_book_collections($book_id) {
+    $terms = get_the_terms($book_id, 'nr_collection');
+    if (!$terms || is_wp_error($terms)) {
+        return '';
+    }
+    $links = [];
+    foreach ($terms as $term) {
+        $links[] = sprintf(
+            '<a class="nr-collection-link" href="%s">%s</a>',
+            esc_url(get_term_link($term)),
+            esc_html($term->name)
+        );
+    }
+    return '<p class="nr-book-collections">' . implode(' · ', $links) . '</p>';
 }
 
 function nr_rights_badge($book_id) {
