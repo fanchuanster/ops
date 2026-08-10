@@ -757,7 +757,7 @@ Do not make the HTTP request wait for a long-running OCR/LLM conversion.
 
 # 14. STORAGE
 
-Use S3-compatible object storage.
+Target: S3-compatible object storage.
 
 Production:
 
@@ -766,6 +766,16 @@ AWS S3
 Development:
 
 MinIO is acceptable.
+
+Staged rollout: for now, local on-disk storage (WordPress's native
+uploads directory) is acceptable — this is what the MVP actually runs on
+(see docs/ARCHITECTURE_REVIEW.md section 4). Migrate to S3-compatible
+storage later, once a real consumer needs it (the conversion service, a
+CDN, multi-instance web servers). The download path should stream files
+rather than redirect to a public media URL, so this migration doesn't
+change the public download contract (see
+wordpress/plugins/nobleread-core/includes/downloads.php). Tracked in
+docs/ROADMAP.md.
 
 Suggested structure:
 
