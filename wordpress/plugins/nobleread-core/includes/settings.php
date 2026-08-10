@@ -41,11 +41,11 @@ function nr_render_settings_page() {
             <table class="form-table">
                 <tr>
                     <th scope="row">
-                        <label for="nr_download_limit_per_day"><?php esc_html_e('Downloads per user per day', 'nobleread-core'); ?></label>
+                        <label for="nr_download_limit_per_day"><?php esc_html_e('Books per user per day', 'nobleread-core'); ?></label>
                     </th>
                     <td>
                         <input type="number" min="1" id="nr_download_limit_per_day" name="nr_download_limit_per_day" value="<?php echo esc_attr(get_option('nr_download_limit_per_day', 5)); ?>">
-                        <p class="description"><?php esc_html_e('Limits how many book parts a logged-in reader can download within a rolling 24-hour period. This caps volume of books downloaded, not network bandwidth.', 'nobleread-core'); ?></p>
+                        <p class="description"><?php esc_html_e('How many distinct books a logged-in reader may start within a rolling 24-hour period. Once a book is started, all of its parts and formats are free — the cap is on volume of books, not on files or network bandwidth.', 'nobleread-core'); ?></p>
                     </td>
                 </tr>
             </table>

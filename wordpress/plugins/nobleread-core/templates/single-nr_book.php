@@ -86,11 +86,15 @@ while (have_posts()) :
                     </ul>
                     <p class="nr-remaining-note">
                         <?php
-                        printf(
-                            /* translators: %d: remaining downloads today */
-                            esc_html__('You have %d download(s) remaining today.', 'nobleread-core'),
-                            (int) NR_Download_Limiter::remaining(get_current_user_id())
-                        );
+                        if (!NR_Download_Limiter::counts_against_limit(get_current_user_id(), $book_id)) {
+                            esc_html_e("You've already started this book today — every format and part of it is free to download.", 'nobleread-core');
+                        } else {
+                            printf(
+                                /* translators: %d: number of further books the reader may start today */
+                                esc_html__('You can start %d more book(s) today. Once you start one, all of its parts and formats are free.', 'nobleread-core'),
+                                (int) NR_Download_Limiter::remaining(get_current_user_id())
+                            );
+                        }
                         ?>
                     </p>
                 <?php endif; ?>

@@ -101,11 +101,11 @@ function nr_handle_download_request() {
     }
 
     $user_id = get_current_user_id();
-    if (!NR_Download_Limiter::under_limit($user_id)) {
+    if (!NR_Download_Limiter::under_limit($user_id, $book_id)) {
         nr_download_die(
             sprintf(
-                /* translators: %d: downloads-per-day limit */
-                __("You've reached today's download limit (%d books). Thanks for reading so much — please come back tomorrow for more!", 'nobleread-core'),
+                /* translators: %d: books-per-day limit */
+                __("You've reached today's limit of %d books. Anything you've already started today is still free to download in any format — and there's more waiting tomorrow. Thanks for reading so much!", 'nobleread-core'),
                 NR_Download_Limiter::limit_per_day()
             ),
             429

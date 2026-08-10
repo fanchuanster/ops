@@ -89,13 +89,23 @@ won't change the public download contract. See `docs/ROADMAP.md`.
 ## 5. Download rate limiting: custom table, rolling window
 
 `wp_nr_downloads` (`id, user_id, part_id, book_id, format, created_at`,
-indexed on `(user_id, created_at)`) is created via `dbDelta()` on plugin
-activation. A plain `usermeta` counter can't cleanly express "how many in
-the last rolling 24 hours" or retain an audit trail; a small append-only
-log table answers both with a single indexed `COUNT(*)` query, and gives
-future admin tooling (abuse investigation, most-downloaded books) real
-data to query. This limits *volume of books downloaded per user*, not
-network bandwidth/throughput.
+indexed on `(user_id, created_at)` and `(user_id, book_id, created_at)`)
+is created via `dbDelta()` on plugin activation. A plain `usermeta`
+counter can't cleanly express "how many in the last rolling 24 hours" or
+retain an audit trail; a small append-only log table answers both with a
+single indexed query, and gives future admin tooling (abuse
+investigation, most-downloaded books) real data to query.
+
+The limit is on **distinct books**, not files: the check is
+`COUNT(DISTINCT book_id)` over the window, and a book already drawn from
+during that window never re-charges. So taking one title as EPUB and
+again as PDF — or reading several of its parts — costs one slot, not one
+per file. That matches the stated requirement ("volume of books
+downloaded per user in a period", explicitly *not* network
+bandwidth/throughput) and avoids the perverse incentive of making a
+reader ration formats of something they're already reading. Every
+individual download is still logged, so the audit trail is unaffected by
+how the counting works.
 
 ## 6. Download delivery: authenticated, nonce-protected, rights-gated
 

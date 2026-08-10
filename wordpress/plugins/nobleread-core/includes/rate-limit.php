@@ -36,7 +36,8 @@ class NR_Download_Limiter {
             format VARCHAR(32) NOT NULL,
             created_at DATETIME NOT NULL,
             PRIMARY KEY  (id),
-            KEY user_created (user_id, created_at)
+            KEY user_created (user_id, created_at),
+            KEY user_book_created (user_id, book_id, created_at)
         ) {$charset_collate};";
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -51,22 +52,53 @@ class NR_Download_Limiter {
         return gmdate('Y-m-d H:i:s', time() - DAY_IN_SECONDS);
     }
 
-    public static function count_since($user_id, $since) {
+    /**
+     * Distinct books the user has drawn from during the window. The limit
+     * is on volume of BOOKS (CLAUDE.md section 6 / core feature 6), so
+     * taking one title as EPUB and again as PDF — or reading several parts
+     * of it — costs one unit, not one per file.
+     */
+    public static function count_books_since($user_id, $since) {
         global $wpdb;
         $table = self::table_name();
         return (int) $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$table} WHERE user_id = %d AND created_at >= %s",
+            "SELECT COUNT(DISTINCT book_id) FROM {$table} WHERE user_id = %d AND created_at >= %s",
             $user_id,
             $since
         ));
     }
 
-    public static function under_limit($user_id) {
-        return self::count_since($user_id, self::window_start()) < self::limit_per_day();
+    public static function has_downloaded_book($user_id, $book_id, $since) {
+        global $wpdb;
+        $table = self::table_name();
+        return (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT 1 FROM {$table} WHERE user_id = %d AND book_id = %d AND created_at >= %s LIMIT 1",
+            $user_id,
+            $book_id,
+            $since
+        ));
+    }
+
+    /**
+     * A book already drawn from during this window never re-charges, so
+     * a reader is never punished for wanting a different format or the
+     * next part of something they're already reading.
+     */
+    public static function under_limit($user_id, $book_id = 0) {
+        $since = self::window_start();
+        if ($book_id && self::has_downloaded_book($user_id, $book_id, $since)) {
+            return true;
+        }
+        return self::count_books_since($user_id, $since) < self::limit_per_day();
+    }
+
+    /** Whether starting this book would consume one of the day's slots. */
+    public static function counts_against_limit($user_id, $book_id) {
+        return !self::has_downloaded_book($user_id, $book_id, self::window_start());
     }
 
     public static function remaining($user_id) {
-        return max(0, self::limit_per_day() - self::count_since($user_id, self::window_start()));
+        return max(0, self::limit_per_day() - self::count_books_since($user_id, self::window_start()));
     }
 
     public static function record($user_id, $part_id, $book_id, $format) {
