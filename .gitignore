@@ -138,6 +138,8 @@ celerybeat.pid
 
 # Environments
 .env
+# Jira credentials for task management (.jira.env.example IS committed).
+.jira.env
 .envrc
 .venv
 env/
