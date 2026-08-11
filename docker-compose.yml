@@ -22,7 +22,12 @@ services:
       retries: 20
 
   wordpress:
-    image: wordpress:php8.3-apache
+    # Extends wordpress:php8.3-apache with WP-CLI and the nobleread-core
+    # plugin's Composer deps (aws/aws-sdk-php, for R2 storage) baked in
+    # at build time — see wordpress/Dockerfile.
+    build:
+      context: ./wordpress
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       db:
@@ -34,12 +39,34 @@ services:
       WORDPRESS_DB_USER: ${MYSQL_USER:-nobleread}
       WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD:-nobleread}
       WORDPRESS_DB_NAME: ${MYSQL_DATABASE:-nobleread}
+      # R2 (S3-compatible) storage for book artifacts — see
+      # includes/storage.php. Left unset in local dev without an R2
+      # account: storage.php falls back to local WP uploads whenever
+      # these are blank, so the site keeps working without them.
+      CLOUDFLARE_S3_ENDPOINTS: ${CLOUDFLARE_S3_ENDPOINTS:-}
+      CLOUDFLARE_S3_ACCESS_KEY_ID: ${CLOUDFLARE_S3_ACCESS_KEY_ID:-}
+      CLOUDFLARE_S3_SECRET_ACCESS_KEY: ${CLOUDFLARE_S3_SECRET_ACCESS_KEY:-}
+      NR_R2_BUCKET: ${NR_R2_BUCKET:-nobleread}
+      # Google sign-up (includes/social-login.php). Same fallback
+      # pattern: the "Continue with Google" button only appears once
+      # both are set.
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
     volumes:
       - wp_data:/var/www/html
       # NobleRead's own plugin is developed in-repo and bind-mounted in —
       # everything else (WP core, Kadence) is installed at provision time
       # into the wp_data volume, not vendored in the repo.
       - ./wordpress/plugins/nobleread-core:/var/www/html/wp-content/plugins/nobleread-core
+      # ...except vendor/: a named volume nested inside the bind mount
+      # above, so the Composer deps baked into the image at build time
+      # (see Dockerfile) aren't shadowed by the live-edit mount, without
+      # having to enumerate every plugin subdirectory by hand. Docker
+      # seeds it from the image the first time it's created; if
+      # composer.json/.lock change, `docker compose down` and remove
+      # this volume (or `docker compose build --no-cache wordpress`
+      # then recreate it) to pick up the new deps.
+      - nr_core_vendor:/var/www/html/wp-content/plugins/nobleread-core/vendor
 
   # One-shot provisioning: installs WordPress, activates the theme and
   # plugin, and seeds sample content. Runs once per fresh volume and
@@ -89,3 +116,4 @@ services:
 volumes:
   db_data:
   wp_data:
+  nr_core_vendor:

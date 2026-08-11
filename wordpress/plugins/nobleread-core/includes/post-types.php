@@ -77,7 +77,9 @@ function nr_register_post_types() {
  * Collections group books by subject so the catalog stays browsable as it
  * grows. Hierarchical (category-like, not tag-like) because the intended
  * groupings are a curated shelf structure — "Chinese Classics", with room
- * for sub-shelves later — rather than freeform labelling.
+ * for sub-shelves later — rather than freeform labelling. The actual
+ * shelf structure (Chinese History, Chinese Wisdom, Authors > ..., etc.)
+ * is content, not code — see provisioning/setup-catalogs.php.
  */
 function nr_register_taxonomies() {
     register_taxonomy('nr_collection', ['nr_book'], [
@@ -94,6 +96,13 @@ function nr_register_taxonomies() {
         'show_admin_column' => true,
         'show_in_rest' => true,
         'rewrite' => ['slug' => 'collections'],
+        // Core assigns this automatically to any book published with no
+        // collection checked — the "uploading a book always gets a
+        // catalog" requirement, with no custom save-time code needed.
+        'default_term' => [
+            'name' => __('Others', 'nobleread-core'),
+            'slug' => 'others',
+        ],
     ]);
 }
 
@@ -123,6 +132,7 @@ function nr_register_post_meta() {
         'nr_pdf_large_attachment_id' => 'integer',
         'nr_pdf_xl_attachment_id' => 'integer',
         'nr_unlock_delay_hours' => 'string',
+        'nr_rights_status' => 'string',
     ];
     foreach ($part_meta as $key => $type) {
         register_post_meta('nr_part', $key, [
@@ -154,4 +164,22 @@ function nr_rights_statuses() {
 
 function nr_downloadable_rights_statuses() {
     return ['public_domain', 'licensed', 'permission_granted'];
+}
+
+/**
+ * The rights status that actually governs a part: its own override when
+ * set, otherwise its book's. Anthologies and compilations can carry a
+ * single restricted piece inside an otherwise public-domain volume, so
+ * rights have to be expressible at the part level — but the common case
+ * stays zero-effort by inheriting.
+ */
+function nr_effective_rights_status($part_id) {
+    $override = get_post_meta($part_id, 'nr_rights_status', true);
+    if ($override && array_key_exists($override, nr_rights_statuses())) {
+        return $override;
+    }
+
+    $part = get_post($part_id);
+    $book_id = $part ? (int) $part->post_parent : 0;
+    return $book_id ? (string) get_post_meta($book_id, 'nr_rights_status', true) : '';
 }

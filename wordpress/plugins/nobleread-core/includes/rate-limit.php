@@ -117,6 +117,28 @@ class NR_Download_Limiter {
         return $when ? strtotime($when . ' UTC') : null;
     }
 
+    /**
+     * Record only if this reader has no entry for this part+format in the
+     * current window. Online reading re-requests the same file every time
+     * a page is opened or refreshed; logging each one would bury the
+     * audit trail in noise without changing the limit, which counts
+     * distinct books anyway.
+     */
+    public static function record_once($user_id, $part_id, $book_id, $format) {
+        global $wpdb;
+        $table = self::table_name();
+        $exists = (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT 1 FROM {$table} WHERE user_id = %d AND part_id = %d AND format = %s AND created_at >= %s LIMIT 1",
+            $user_id,
+            $part_id,
+            $format,
+            self::window_start()
+        ));
+        if (!$exists) {
+            self::record($user_id, $part_id, $book_id, $format);
+        }
+    }
+
     public static function record($user_id, $part_id, $book_id, $format) {
         global $wpdb;
         $wpdb->insert(

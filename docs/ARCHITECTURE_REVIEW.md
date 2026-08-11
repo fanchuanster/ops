@@ -71,20 +71,56 @@ No ACF or third-party meta-box plugin is used — native
 field needed, keeping all of this logic inside the mandated custom
 plugin rather than delegated to a third-party data-entry plugin.
 
-## 4. Storage: local WordPress uploads for the MVP, not MinIO/S3 yet
+## 4. Storage: R2 for book artifacts, local WordPress uploads for everything else
 
-`CLAUDE.md`'s target architecture uses S3-compatible storage (MinIO in
-dev). This MVP deliberately stays on WordPress's native local uploads
-instead. Rationale: MinIO's only real payoff shows up once something
-else in the system actually needs S3 semantics — a conversion service
-writing artifacts, a CDN, multi-instance web servers — none of which
-exist yet in this slice. Adding it now would mean also adopting an S3
-offload path (e.g. WP Offload Media) for zero present benefit, which is
-exactly the "premature complexity" `CLAUDE.md` warns against. The
-`nr_stream_file()` download path in `includes/downloads.php` already
-avoids exposing raw file paths (it streams via `readfile()`, never
-redirects to a public media URL), so swapping the storage backend later
-won't change the public download contract. See `docs/ROADMAP.md`.
+`CLAUDE.md`'s target architecture calls for S3-compatible storage
+(MinIO in dev). The MVP originally deferred this — deliberately staying
+on WordPress's native local uploads until something in the system
+actually needed S3 semantics, on the grounds that adding an S3 offload
+path (e.g. WP Offload Media) for zero present benefit would be exactly
+the "premature complexity" `CLAUDE.md` warns against. That consumer
+showed up (storage that survives a container/instance being replaced,
+ahead of the conversion service and a multi-instance web tier), so this
+pass migrates.
+
+Rather than adopt a generic S3-offload plugin for all of WordPress's
+media library, the migration stays scoped to what `CLAUDE.md` section 14
+actually describes: the DOCX/EPUB/PDF part-format files tracked by
+`nr_part_format_fields()` (`includes/meta-boxes.php`). Generic WP media
+(theme images, the book cover/featured image) stays on local disk —
+those aren't part of the conversion-pipeline domain this plugin owns,
+and pulling in a full offload plugin to rewrite every attachment URL
+site-wide would be a much larger, less reversible change for no benefit
+this pass actually needs.
+
+Client: the official `aws/aws-sdk-php` (`Aws\S3\S3Client`, configured
+for R2's S3-compatible endpoint with `region => 'auto'`), not a
+hand-rolled SigV4 signer — mature, battle-tested request signing over
+custom crypto code, per `CLAUDE.md`'s "prefer existing mature
+open-source components." It's built in via Composer at image build time
+(`wordpress/Dockerfile`) so container start stays fast; the plugin
+directory's bind mount for live-editing PHP is layered under a named
+volume at exactly `vendor/`, so the baked-in deps aren't shadowed by it
+(see `docker-compose.yml`).
+
+`includes/storage.php` is the single seam: `nr_storage_sync_to_r2()`
+mirrors a part-format attachment to R2 whenever it's saved
+(`includes/meta-boxes.php`), and `nr_storage_resolve()` decides per
+part+format whether to read from R2 or fall back to the local file —
+the download and online-reader paths (`includes/access.php`) don't know
+or care which. Falling back to local automatically whenever R2 isn't
+configured means local dev keeps working without an R2 account, and a
+part not yet mirrored (or an R2 outage) degrades to local rather than
+failing outright. `nr_stream_file()`'s existing contract — stream the
+bytes via `readfile()`, never redirect to a public media URL, so the
+real storage location is never exposed or bookmarkable — is exactly
+what let this land without changing the public download contract:
+`readfile()` works identically against a local path or an R2
+`s3://bucket/key` stream-wrapper URI once the SDK's stream wrapper is
+registered. Content already attached before R2 was configured is caught
+up with `wp nr backfill-storage` (`includes/cli.php`), a one-time
+command rather than automatic provisioning since it needs real R2
+credentials.
 
 ## 5. Download rate limiting: custom table, rolling window
 
@@ -159,18 +195,95 @@ WooCommerce and is tracked in `docs/ROADMAP.md`.
 Books are grouped by a hierarchical `nr_collection` taxonomy
 (`/collections/{slug}/`) rather than tags or a meta field. Hierarchical
 because the intended groupings are a curated shelf structure — "Chinese
-Classics", with room for sub-shelves as the library grows — not freeform
-labelling; and a real taxonomy (rather than meta) gets archives,
-queryability, and admin UI from core for free.
+Wisdom", "Authors" as a parent of individual author shelves, with room
+for more sub-shelves as the library grows — not freeform labelling; and
+a real taxonomy (rather than meta) gets archives, queryability, term
+hierarchy, and admin UI (the standard WP category checkbox metabox) from
+core for free. A book can carry more than one collection —
+`wp_set_object_terms()` on a non-exclusive taxonomy handles that with no
+extra code. The actual shelf structure is content, not code: set up
+idempotently in `provisioning/setup-catalogs.php`, editable afterward
+like any other terms.
+
+Every book gets a collection. Rather than a custom `save_post` hook,
+`nr_register_taxonomies()` (`includes/post-types.php`) registers
+`nr_collection`'s `default_term` as "Others" — a WP 5.5+ core feature
+that auto-creates the term and assigns it to any book published with
+none checked. One line of config instead of hand-rolled fallback logic.
 
 Collection archives reuse the catalog template with a filtered query
-instead of a near-duplicate template. The filter bar hides itself below
-two collections, so a small library doesn't display a one-option filter.
+instead of a near-duplicate template. Both the archive and the front
+page wrap their content in the same left-hand catalog sidebar
+(`nr_catalog_sidebar()`, built on core's `wp_list_categories()` so
+nesting and current-item highlighting come for free rather than being
+hand-rolled) — clicking a collection there is a normal link to its
+archive, no client-side filtering involved. The front page keeps its own
+hero copy and `[nobleread_books]` grid as ordinary WP-admin-editable page
+content (`templates/front-page.php` just wraps it, doesn't replace it);
+the sidebar is the only thing that page and the book archive share.
 
-## 9. What's deferred
+## 9. Sign-up: custom page + Google, replacing wp-login.php?action=register
+
+WordPress's default registration screen is bare, off-brand, and (with
+`users_can_register` on) sits at a predictable, unstyled URL. It's
+replaced outright: `wp-login.php?action=register` redirects to `/sign-up/`
+(`nr_redirect_default_registration()`), and every core entry point that
+builds a registration link (`wp_registration_url()`, used by the "create
+a free account" prompt on `templates/single-nr_book.php`) already goes
+through the right URL for free via the `register_url` filter — no
+template had to change.
+
+`includes/auth.php` owns the traditional name/email/password path
+(`wp_insert_user()`, immediate login — no separate email-verification
+step; see the file's docblock for why that's an acceptable trust level,
+same as core's own registration and the Google path below).
+`includes/social-login.php` owns "Continue with Google", built on
+`league/oauth2-client` + `league/oauth2-google` (mature libraries, not a
+hand-rolled OAuth/JWT implementation — same reasoning as `storage.php`'s
+choice of `aws-sdk-php`). Both funnel into the same
+`nr_log_in_new_user()`/subscriber-role account creation, so there's one
+answer to "how does someone end up with an account," not two parallel
+systems.
+
+Google sign-up needs real OAuth credentials (`GOOGLE_OAUTH_CLIENT_ID`/
+`_SECRET`, see `.env.example`) that only the site operator can obtain
+from Google Cloud Console — the "Continue with Google" button simply
+doesn't render until they're set (`nr_google_oauth_configured()`), same
+fallback pattern as R2. Apple Sign In is deliberately out of scope for
+this pass: it requires an active paid Apple Developer Program membership
+plus Apple-side setup (Services ID, a Sign In with Apple private key,
+Team ID) before there's anything to configure, not just code — tracked
+in `docs/ROADMAP.md`. `includes/social-login.php` is written so a second
+provider can be added beside `nr_google_oauth_provider()` without
+touching the account-linking logic, which isn't Google-specific.
+
+Security notes worth recording since this is auth surface:
+
+- **CSRF (OAuth `state`)**: round-tripped through a short-lived,
+  httponly cookie, not a WP nonce. A nonce for a logged-out visitor is
+  the same value for every anonymous visitor in a given time window
+  (there's no session to key it to), so it wouldn't actually bind the
+  callback to *this browser's* request — the exact thing `state` exists
+  to guarantee, to prevent a login-CSRF where an attacker completes
+  their own consent flow and hands the victim's browser a callback URL
+  carrying the attacker's code.
+- **Account takeover via email match**: an existing WordPress account is
+  only auto-linked to a Google login by email when Google itself reports
+  that email as verified (`GoogleUser::getEmailVerified()`). Without
+  that check, anyone could type someone else's address into an
+  unverified OAuth identity and take over their NobleRead account.
+- **Open redirect**: the post-login destination (`redirect_to`, used so
+  "log in from a book page" returns you to that book) always passes
+  through `wp_validate_redirect()` before being used.
+
+## 10. What's deferred
 
 See `docs/ROADMAP.md` for the full list. In short: the OCR/AI conversion
 pipeline, WooCommerce-based paid unlocks and donations, Send-to-Kindle,
 per-user blogs, the e-reader affiliate/resale link, the X
-anti-explicit-content worker, the S3/MinIO storage swap, and Kubernetes
-manifests are all out of scope for this pass.
+anti-explicit-content worker, and Kubernetes manifests are all out of
+scope for this pass. (R2 storage for book artifacts and custom sign-up +
+Google login are no longer on this list — see sections 4 and 9. The
+*login* screen — as opposed to sign-up — is still WordPress's default,
+and Apple Sign In is still deferred, pending an Apple Developer Program
+membership.)

@@ -23,6 +23,13 @@ function nr_template_include($template) {
     if (is_singular('nr_book')) {
         return nr_locate_template('single-nr_book.php', $template);
     }
+    // The front page keeps its own WP-admin-editable content (hero copy,
+    // the [nobleread_books] shortcode) — this only wraps it with the same
+    // catalog sidebar the archive uses, so a visitor lands on "/" already
+    // able to browse by collection, not just see the latest few books.
+    if (is_front_page()) {
+        return nr_locate_template('front-page.php', $template);
+    }
     return $template;
 }
 
@@ -36,7 +43,7 @@ function nr_locate_template($name, $fallback) {
 }
 
 function nr_enqueue_assets() {
-    if (is_post_type_archive('nr_book') || is_tax('nr_collection') || is_singular('nr_book')) {
+    if (is_post_type_archive('nr_book') || is_tax('nr_collection') || is_singular('nr_book') || is_front_page() || get_query_var('nr_sign_up')) {
         wp_enqueue_style('nobleread-core', NR_PLUGIN_URL . 'assets/css/nobleread.css', [], NR_VERSION);
     }
 }
@@ -69,40 +76,43 @@ function nr_part_available_formats($part_id) {
 }
 
 /**
- * Collection filter links for the catalog. Returns '' when there is
- * nothing worth filtering by, so an empty or single-collection library
- * doesn't show a pointless one-option filter.
+ * The left-panel catalog navigation: a hierarchical tree of nr_collection
+ * terms (e.g. "Authors" as a parent of "Nan Huaijin"/"Zhang Tianliang" —
+ * the actual shelf structure is content, set up in
+ * provisioning/setup-catalogs.php, not hard-coded here) plus an "All
+ * books" link at the top. A book can carry more than one collection —
+ * that's just wp_set_object_terms() allowing multiple terms, nothing
+ * special on this end.
+ *
+ * Built on wp_list_categories() (works with any hierarchical taxonomy,
+ * not just post categories) rather than hand-rolling tree-building and
+ * current-item highlighting. Returns '' when the taxonomy has no terms
+ * at all, so a brand-new install doesn't show an empty nav.
  */
-function nr_collection_filter_bar() {
-    $terms = get_terms([
+function nr_catalog_sidebar() {
+    $current = is_tax('nr_collection') ? (int) get_queried_object_id() : 0;
+
+    $items = wp_list_categories([
         'taxonomy' => 'nr_collection',
-        'hide_empty' => true,
+        'title_li' => '',
+        'hide_empty' => false,
+        'hierarchical' => true,
+        'current_category' => $current,
+        'echo' => false,
     ]);
 
-    if (is_wp_error($terms) || count($terms) < 2) {
+    if (!$items) {
         return '';
     }
 
-    $current = is_tax('nr_collection') ? (int) get_queried_object_id() : 0;
-
-    $links = sprintf(
-        '<a class="nr-filter%s" href="%s">%s</a>',
-        $current ? '' : ' nr-filter-active',
+    return sprintf(
+        '<nav class="nr-catalog-sidebar" aria-label="%1$s"><h2 class="nr-catalog-sidebar-heading">%1$s</h2><ul><li class="nr-catalog-all%2$s"><a href="%3$s">%4$s</a></li>%5$s</ul></nav>',
+        esc_attr__('Collections', 'nobleread-core'),
+        $current ? '' : ' current-cat',
         esc_url(get_post_type_archive_link('nr_book')),
-        esc_html__('All books', 'nobleread-core')
+        esc_html__('All books', 'nobleread-core'),
+        $items
     );
-
-    foreach ($terms as $term) {
-        $links .= sprintf(
-            '<a class="nr-filter%s" href="%s">%s <span class="nr-filter-count">%d</span></a>',
-            $current === (int) $term->term_id ? ' nr-filter-active' : '',
-            esc_url(get_term_link($term)),
-            esc_html($term->name),
-            (int) $term->count
-        );
-    }
-
-    return '<nav class="nr-filters" aria-label="' . esc_attr__('Collections', 'nobleread-core') . '">' . $links . '</nav>';
 }
 
 /** Collection links for a single book, or '' if it has none. */

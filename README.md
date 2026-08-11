@@ -74,6 +74,55 @@ docker compose exec provision wp --path=/var/www/html --allow-root post list --p
 run --rm provision wp ...` if the container has already exited, or swap
 in the long-lived `wordpress` service's container instead.)
 
+### Storage (R2)
+
+Book-format files (DOCX/EPUB/PDF) live on local WordPress uploads by
+default and need no setup — the plugin falls back to local storage
+whenever R2 isn't configured. To store them in Cloudflare R2 instead,
+set these in `.env` before `docker compose up` (or `docker compose build
+wordpress` if the stack is already running — the SDK is installed at
+image build time, see `wordpress/Dockerfile`):
+
+```
+CLOUDFLARE_S3_ENDPOINTS=https://<account_id>.r2.cloudflarestorage.com
+CLOUDFLARE_S3_ACCESS_KEY_ID=...
+CLOUDFLARE_S3_SECRET_ACCESS_KEY=...
+NR_R2_BUCKET=nobleread
+```
+
+New/edited parts sync to R2 automatically on save. To catch up files
+attached before R2 was configured:
+
+```
+docker compose exec wordpress wp --path=/var/www/html --allow-root nr backfill-storage
+```
+
+See `docs/ARCHITECTURE_REVIEW.md` section 4 for what's in scope (part
+format files only — theme images and book covers stay local) and why.
+
+### Sign-up
+
+`/sign-up/` (`includes/auth.php`) replaces WordPress's default
+`wp-login.php?action=register` — a visit to the old URL now redirects
+there. Name/email/password sign-up needs no setup. "Continue with
+Google" (`includes/social-login.php`) needs real OAuth credentials and
+stays hidden until they're set:
+
+```
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+```
+
+Get these from Google Cloud Console > APIs & Services > Credentials >
+Create OAuth client ID (Web application), and add this exact URL as an
+Authorized redirect URI (must match `WORDPRESS_URL` above):
+
+```
+{WORDPRESS_URL}/auth/google/callback/
+```
+
+Apple Sign In isn't implemented yet — see `docs/ROADMAP.md`.
+
 ### Smoke test
 
 ```
@@ -100,7 +149,8 @@ docker compose down -v   # drops the db_data and wp_data volumes — full reset
 ## Layout
 
 ```
-wordpress/plugins/nobleread-core/   custom plugin: content model, downloads, rate limiting, templates
+wordpress/Dockerfile                 wordpress service image: WP-CLI + plugin's Composer deps (R2 SDK, OAuth client)
+wordpress/plugins/nobleread-core/   custom plugin: content model, downloads, rate limiting, templates, R2 storage, sign-up/Google login
 provisioning/                       first-boot install/activation/seed scripts (idempotent)
 tools/                               dev utilities (seed-content generation)
 docs/                                architecture review + roadmap
@@ -132,5 +182,4 @@ site by re-running it.
 MVP / early runnable system — one full vertical slice working end to end.
 See `docs/ROADMAP.md` for what's deliberately deferred (OCR/AI conversion
 pipeline, WooCommerce paid unlocks + donations, Send-to-Kindle, per-user
-blogs, e-reader resale link, X anti-explicit-content worker, S3/MinIO,
-Kubernetes).
+blogs, e-reader resale link, X anti-explicit-content worker, Kubernetes).

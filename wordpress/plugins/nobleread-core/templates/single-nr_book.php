@@ -80,6 +80,11 @@ while (have_posts()) :
                                     </span>
                                 <?php else : ?>
                                     <span class="nr-part-downloads">
+                                        <?php if (nr_part_is_readable($part->ID)) : ?>
+                                            <a class="nr-read-btn" href="<?php echo esc_url(nr_get_read_url($part->ID)); ?>">
+                                                <?php esc_html_e('Read online', 'nobleread-core'); ?>
+                                            </a>
+                                        <?php endif; ?>
                                         <?php foreach ($formats as $format => $label) : ?>
                                             <a class="nr-download-btn" href="<?php echo esc_url(nr_get_download_url($part->ID, $format)); ?>">
                                                 <?php echo esc_html($label); ?>

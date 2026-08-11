@@ -53,41 +53,78 @@
     color: #fff;
 }
 
-.nr-filters {
+/* Catalog sidebar: the archive and front page both wrap their content
+   in .nr-catalog-layout (sidebar + .nr-catalog-main), so this one block
+   of rules covers both. Stacks above the content on narrow screens
+   rather than squeezing a fixed sidebar column onto a phone. */
+.nr-catalog-layout {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin: 0 0 1.75rem;
+    align-items: flex-start;
+    gap: 2.5rem;
 }
 
-.nr-filter {
-    display: inline-block;
-    padding: 0.3rem 0.85rem;
-    border: 1px solid #ddd7c8;
-    border-radius: 999px;
-    font-size: 0.85rem;
+.nr-catalog-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.nr-catalog-sidebar {
+    flex: 0 0 210px;
+}
+
+.nr-catalog-sidebar-heading {
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a8578;
+    margin: 0 0 0.75rem;
+}
+
+.nr-catalog-sidebar ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.nr-catalog-sidebar li {
+    margin: 0.15rem 0;
+}
+
+.nr-catalog-sidebar a {
+    display: block;
+    padding: 0.3rem 0;
     color: #55503f;
     text-decoration: none;
+    font-size: 0.92rem;
 }
 
-.nr-filter:hover {
-    border-color: #b3a988;
+.nr-catalog-sidebar a:hover {
     color: #2e2a24;
 }
 
-.nr-filter-active {
-    background: #2e2a24;
-    border-color: #2e2a24;
-    color: #fff;
+.nr-catalog-sidebar .current-cat > a {
+    color: #2e2a24;
+    font-weight: 600;
 }
 
-.nr-filter-active:hover {
-    color: #fff;
+/* Nested terms (e.g. Authors > Nan Huaijin) — wp_list_categories()
+   wraps children in a plain <ul class="children">. */
+.nr-catalog-sidebar ul.children {
+    margin-left: 0.9rem;
+    padding-left: 0.75rem;
+    border-left: 1px solid #e5e0d2;
 }
 
-.nr-filter-count {
-    opacity: 0.6;
-    font-size: 0.8em;
+@media (max-width: 52rem) {
+    .nr-catalog-layout {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .nr-catalog-sidebar {
+        flex-basis: auto;
+        width: 100%;
+    }
 }
 
 .nr-book-collections {
@@ -191,6 +228,23 @@
     font-size: 0.85rem;
 }
 
+/* Reading online is the thing we most want to be easy, so it leads. */
+.nr-read-btn {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 4px;
+    background: #7a6a3f;
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.nr-read-btn:hover {
+    background: #93803f;
+    color: #fff;
+}
+
 .nr-download-btn:hover {
     background: #4a4438;
     color: #fff;
@@ -226,4 +280,106 @@
 .nr-remaining-note {
     color: #888;
     font-size: 0.85rem;
+}
+
+/* Sign-up page (templates/sign-up.php). */
+.nr-sign-up {
+    max-width: 26rem;
+    margin: 0 auto;
+    padding: 1rem 0 3rem;
+}
+
+.nr-sign-up-sub {
+    color: #6b6553;
+    margin: 0 0 1.5rem;
+}
+
+.nr-form-error {
+    background: #f7eee9;
+    color: #8a4b1f;
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    margin: 0 0 1.25rem;
+    list-style: none;
+    font-size: 0.9rem;
+}
+
+.nr-form-error li + li {
+    margin-top: 0.35rem;
+}
+
+.nr-google-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.65rem 1rem;
+    border: 1px solid #ddd7c8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2e2a24;
+    text-decoration: none;
+    font-weight: 500;
+    box-sizing: border-box;
+}
+
+.nr-google-btn:hover {
+    border-color: #b3a988;
+    background: #faf8f2;
+}
+
+.nr-sign-up-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #999;
+    font-size: 0.8rem;
+    margin: 1.25rem 0;
+}
+
+.nr-sign-up-divider::before,
+.nr-sign-up-divider::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid #e5e0d2;
+}
+
+.nr-sign-up-divider span {
+    padding: 0 0.75rem;
+}
+
+.nr-sign-up-form p {
+    margin: 0 0 1rem;
+}
+
+.nr-sign-up-form label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    font-size: 0.9rem;
+}
+
+.nr-sign-up-form input[type="text"],
+.nr-sign-up-form input[type="email"],
+.nr-sign-up-form input[type="password"] {
+    width: 100%;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #ddd7c8;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 1rem;
+}
+
+.nr-sign-up-form button {
+    width: 100%;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.nr-sign-up-login {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #6b6553;
+    margin-top: 1.5rem;
 }

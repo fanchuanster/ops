@@ -16,6 +16,9 @@ function nr_activate_plugin() {
     // rewrite rule must be registered explicitly here too, or the
     // flush below would save a rewrite_rules option that's missing it.
     nr_add_download_rewrite();
+    nr_add_reader_rewrites();
+    nr_add_sign_up_rewrite();
+    nr_add_social_login_rewrites();
     NR_Download_Limiter::create_table();
     add_option('nr_download_limit_per_day', 5);
     flush_rewrite_rules();

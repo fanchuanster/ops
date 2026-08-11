@@ -58,6 +58,9 @@ $WP plugin activate nobleread-core
 echo "-- Applying NobleRead settings"
 $WP option update nr_download_limit_per_day "${NR_DOWNLOAD_LIMIT_PER_DAY:-5}"
 
+echo "-- Setting up catalog structure"
+$WP eval-file /provisioning/setup-catalogs.php
+
 echo "-- Seeding sample content"
 $WP eval-file /provisioning/seed-import.php
 

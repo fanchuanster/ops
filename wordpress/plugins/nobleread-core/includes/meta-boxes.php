@@ -147,6 +147,17 @@ function nr_render_part_meta_box($post) {
             ?>
         </span>
     </p>
+    <p>
+        <label for="nr_part_rights_status"><strong><?php esc_html_e('Rights status', 'nobleread-core'); ?></strong></label><br>
+        <?php $part_rights = (string) get_post_meta($post->ID, 'nr_rights_status', true); ?>
+        <select id="nr_part_rights_status" name="nr_part_rights_status">
+            <option value=""><?php esc_html_e('Inherit from book', 'nobleread-core'); ?></option>
+            <?php foreach (nr_rights_statuses() as $value => $label) : ?>
+                <option value="<?php echo esc_attr($value); ?>" <?php selected($part_rights, $value); ?>><?php echo esc_html($label); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <span class="description"><?php esc_html_e('Only set this when a part differs from its book — for example one still-restricted piece inside an otherwise public-domain volume.', 'nobleread-core'); ?></span>
+    </p>
     <hr>
     <?php foreach (nr_part_format_fields() as $key => $label) :
         $attachment_id = (int) get_post_meta($post->ID, $key, true);
@@ -203,6 +214,16 @@ function nr_save_part_meta($post_id) {
         }
     }
 
+    if (isset($_POST['nr_part_rights_status'])) {
+        // Empty is meaningful — it means "inherit from the book".
+        $rights = sanitize_key(wp_unslash($_POST['nr_part_rights_status']));
+        update_post_meta(
+            $post_id,
+            'nr_rights_status',
+            array_key_exists($rights, nr_rights_statuses()) ? $rights : ''
+        );
+    }
+
     if (isset($_POST['nr_unlock_delay_hours'])) {
         // Blank is meaningful here — it means "fall back to the default".
         $delay = trim((string) wp_unslash($_POST['nr_unlock_delay_hours']));
@@ -223,5 +244,12 @@ function nr_save_part_meta($post_id) {
             'menu_order' => $order,
         ]);
         add_action('save_post_nr_part', 'nr_save_part_meta');
+    }
+
+    // Last, so post_parent is already current if this save also changed
+    // the parent book (nr_storage_object_key() needs a book id). No-ops
+    // per field when R2 isn't configured — see includes/storage.php.
+    foreach (array_keys(nr_part_format_fields()) as $key) {
+        nr_storage_sync_to_r2($post_id, $key);
     }
 }

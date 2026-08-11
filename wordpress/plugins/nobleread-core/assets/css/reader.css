@@ -1,0 +1,201 @@
+/* Reading surface. Chrome recedes; the page of text is the interface.
+   Three reading themes, switched on <body data-theme>. */
+
+:root {
+    --nr-bg: #ffffff;
+    --nr-fg: #1b1917;
+    --nr-muted: #6f6a60;
+    --nr-rule: #e8e4da;
+    --nr-chrome: #fbfaf7;
+}
+
+body[data-theme="sepia"] {
+    --nr-bg: #f6efe2;
+    --nr-fg: #3b3227;
+    --nr-muted: #7d7263;
+    --nr-rule: #e3d9c4;
+    --nr-chrome: #f1e8d8;
+}
+
+body[data-theme="dark"] {
+    --nr-bg: #16150f;
+    --nr-fg: #ddd8cf;
+    --nr-muted: #8e887c;
+    --nr-rule: #2c2a22;
+    --nr-chrome: #1d1c15;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--nr-bg);
+    color: var(--nr-fg);
+    font-family: Georgia, 'Droid Serif', serif;
+    -webkit-text-size-adjust: 100%;
+}
+
+.nr-reader {
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- top bar --- */
+
+.nr-reader-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+    background: var(--nr-chrome);
+    border-bottom: 1px solid var(--nr-rule);
+    flex: 0 0 auto;
+}
+
+.nr-reader-back {
+    font-size: 1.25rem;
+    text-decoration: none;
+    color: var(--nr-fg);
+    padding: 0.2rem 0.4rem;
+    line-height: 1;
+}
+
+.nr-reader-titles {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.nr-reader-book,
+.nr-reader-part {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nr-reader-book { font-size: 0.9rem; }
+.nr-reader-part { font-size: 0.75rem; color: var(--nr-muted); }
+
+.nr-reader-tools {
+    display: flex;
+    gap: 0.3rem;
+    flex: 0 0 auto;
+}
+
+.nr-reader-tools button {
+    font: inherit;
+    font-size: 0.8rem;
+    font-family: system-ui, sans-serif;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--nr-rule);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--nr-fg);
+    cursor: pointer;
+}
+
+.nr-reader-tools button:hover { border-color: var(--nr-muted); }
+
+/* --- contents --- */
+
+.nr-toc {
+    position: absolute;
+    top: 3.25rem;
+    left: 0;
+    z-index: 5;
+    max-height: 70vh;
+    width: min(22rem, 85vw);
+    overflow-y: auto;
+    background: var(--nr-chrome);
+    border: 1px solid var(--nr-rule);
+    border-radius: 0 0 6px 0;
+    padding: 0.5rem 0;
+}
+
+.nr-toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.nr-toc a {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: var(--nr-fg);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.nr-toc a:hover { background: var(--nr-rule); }
+
+/* --- stage --- */
+
+.nr-reader-stage {
+    position: relative;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: stretch;
+    min-height: 0;
+}
+
+.nr-viewer {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 0 0.5rem;
+}
+
+.nr-page-arrow {
+    flex: 0 0 auto;
+    width: 3rem;
+    border: none;
+    background: transparent;
+    color: var(--nr-muted);
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.nr-page-arrow:hover { color: var(--nr-fg); }
+
+/* On a phone the arrows would eat the text column; swipe covers paging. */
+@media (max-width: 640px) {
+    .nr-page-arrow { display: none; }
+}
+
+/* --- status --- */
+
+.nr-reader-status {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.4rem 0.9rem;
+    padding-bottom: max(0.4rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--nr-rule);
+    background: var(--nr-chrome);
+    font-family: system-ui, sans-serif;
+    font-size: 0.75rem;
+    color: var(--nr-muted);
+}
+
+.nr-next-part {
+    color: var(--nr-fg);
+    text-decoration: none;
+}
+
+.nr-next-part:hover { text-decoration: underline; }
+
+.nr-reader-error,
+.nr-reader-noscript {
+    padding: 2rem;
+    text-align: center;
+    color: var(--nr-muted);
+}

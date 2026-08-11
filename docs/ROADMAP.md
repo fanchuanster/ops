@@ -48,15 +48,30 @@ foundation rather than reading as an oversight.
 
 ## Infrastructure
 
-- **S3/MinIO storage swap** — replace local WP uploads once a real
-  consumer exists (the conversion service, a CDN, multi-instance web
-  tier). `includes/downloads.php` already streams files rather than
-  redirecting to a public URL, so this swap shouldn't change the public
-  download contract.
+- ~~**S3/MinIO storage swap**~~ — done: book-format artifacts
+  (DOCX/EPUB/PDF) now live in Cloudflare R2, mirrored on save via
+  `includes/storage.php` and resolved transparently by the download/
+  online-reader paths in `includes/access.php`. See
+  `docs/ARCHITECTURE_REVIEW.md` section 4. Generic WordPress media
+  (theme images, book covers) is unaffected and still local — folding
+  that in too is only worth it alongside a CDN/multi-instance web tier,
+  not before.
 - **Redis** — needed once the conversion service's job queue exists; not
   useful to the MVP's simple indexed-SQL rate limiter.
 - **Kubernetes manifests** — Docker Compose is the MVP deployment target;
   move to k8s/EKS once there's more than one service to orchestrate.
-- **Admin/UX polish** — custom login/registration screens, hardened
-  default WP settings, revisit ACF if native meta-box UX outgrows what's
-  reasonable to hand-roll.
+- ~~**Custom sign-up screen + Google sign-up**~~ — done: `/sign-up/`
+  (`includes/auth.php`, `includes/social-login.php`) replaces
+  `wp-login.php?action=register` outright; "Continue with Google" is
+  built on `league/oauth2-client`. See
+  `docs/ARCHITECTURE_REVIEW.md` section 9.
+  - **Apple Sign In** — needs an active paid Apple Developer Program
+    membership and Apple-side setup (Services ID, a Sign In with Apple
+    private key, Team ID) before there's anything to wire up; a second
+    provider can slot in beside `nr_google_oauth_provider()` once that
+    exists.
+  - **Custom login screen** — only sign-up was replaced this pass; the
+    *login* form (existing password-based accounts) is still
+    WordPress's default `wp-login.php`.
+- **Admin/UX polish** — hardened default WP settings, revisit ACF if
+  native meta-box UX outgrows what's reasonable to hand-roll.
