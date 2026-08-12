@@ -1,7 +1,11 @@
 import React from 'react'
 
 import { ThemeToggle } from '../../components/ThemeToggle'
+import { getCurrentUser } from '../../lib/auth'
 import './styles.css'
+
+// The header reflects who is signed in, so the shell is per-request.
+export const dynamic = 'force-dynamic'
 
 export const metadata = {
   title: {
@@ -24,7 +28,9 @@ try {
 } catch (e) {}
 `
 
-export default function FrontendLayout({ children }: { children: React.ReactNode }) {
+export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
+  const user = await getCurrentUser()
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -40,6 +46,11 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
               <a href="/books">Library</a>
               <a href="/collections">Collections</a>
               <a href="/about">About</a>
+              {user ? (
+                <a href="/account">{user.displayName || 'Account'}</a>
+              ) : (
+                <a href="/login">Sign in</a>
+              )}
               <ThemeToggle />
             </nav>
           </div>

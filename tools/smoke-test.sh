@@ -92,7 +92,7 @@ check_contains "later parts are held back" "$WORKDIR/book.html" "Opens after the
 check_not_contains "held-back part offers no download link" "$WORKDIR/book.html" "/download/3/"
 
 # --- access control is server-side ------------------------------------
-echo "access control"
+echo "access control (anonymous)"
 # Anonymous readers must not be able to reach an artifact directly.
 # Anything other than a redirect-to-login or an outright refusal here
 # means the download path is not enforcing authorization.
@@ -103,6 +103,97 @@ case "$DL_STATUS" in
     200) fail "anonymous download is refused" "SERVED THE FILE — authorization is missing" ;;
     *) fail "anonymous download is refused" "unexpected status $DL_STATUS" ;;
 esac
+
+for path in /account /read/analects/1; do
+    STATUS="$(status_of "$BASE_URL$path")"
+    case "$STATUS" in
+        401 | 403 | 302 | 303 | 307) pass "anonymous $path is refused ($STATUS)" ;;
+        *) fail "anonymous $path is refused" "got $STATUS" ;;
+    esac
+done
+
+# --- the authenticated reader -----------------------------------------
+#
+# Payload resolves a session cookie only for requests that look like they
+# came from a browser: a bare cookie with no fetch-metadata headers is
+# treated as unauthenticated. Real browsers always send these on
+# same-origin navigation, so the headers below are what makes this test
+# representative rather than a special case.
+echo "access control (signed in)"
+
+EMAIL="smoke-$(date +%s)-$$@noblesee.test"
+PASSWORD="smoke-test-password"
+
+REGISTER="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/api/users" \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")"
+check_eq "a reader can register" "$REGISTER" 201
+
+# Registering as an admin must not work, whichever door it comes through.
+ESCALATE="$(curl -s -X POST "$BASE_URL/api/users" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"escalate-$(date +%s)-$$@noblesee.test\",\"password\":\"$PASSWORD\",\"roles\":[\"admin\"]}" |
+    grep -o '"roles":\[[^]]*\]' | head -1)"
+check_eq "self-granted admin role is refused" "$ESCALATE" '"roles":["reader"]'
+
+TOKEN="$(curl -s -X POST "$BASE_URL/api/users/login" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" |
+    grep -o '"token":"[^"]*"' | cut -d'"' -f4)"
+
+if [ -z "$TOKEN" ]; then
+    fail "a reader can sign in" "no token returned"
+else
+    pass "a reader can sign in"
+
+    auth() { # path -> status
+        curl -s -o /dev/null -w '%{http_code}' \
+            -H "Cookie: payload-token=$TOKEN" \
+            -H 'Sec-Fetch-Site: same-origin' \
+            -H 'Sec-Fetch-Mode: navigate' \
+            -H 'User-Agent: Mozilla/5.0' \
+            "$BASE_URL$1"
+    }
+
+    check_eq "signed in, the account page opens" "$(auth /account)" 200
+    check_eq "signed in, the reader opens" "$(auth /read/analects/1)" 200
+
+    # Part 1 is open to everyone; the DOCX master is not a reader
+    # download; part 3 is held until part 2 has been started.
+    check_eq "an open part is authorized" "$(auth /download/2/epub)" 303
+    check_eq "the DOCX master is not offered" "$(auth /download/2/docx)" 404
+    check_eq "a held-back part is refused" "$(auth /download/3/epub)" 403
+
+    # The signed URL must lead to the real file, not a 403 from storage.
+    BYTES="$(curl -sL -o "$WORKDIR/part.epub" -w '%{size_download}' \
+        -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
+        -H 'User-Agent: Mozilla/5.0' "$BASE_URL/download/2/epub")"
+    if [ "${BYTES:-0}" -gt 1000 ] && head -c 2 "$WORKDIR/part.epub" | grep -q 'PK'; then
+        pass "the authorized download delivers a real EPUB ($BYTES bytes)"
+    else
+        fail "the authorized download delivers a real EPUB" "got $BYTES bytes"
+    fi
+
+    # The rule most easily got wrong: the limit counts books, not files.
+    for format in pdf_standard pdf_large pdf_xl; do
+        auth "/download/2/$format" >/dev/null
+    done
+    # totalDocs, not a grep for '"format":' — each row expands its
+    # related part, whose artifacts each carry a `format` too, so
+    # counting that string counts artifacts rather than downloads.
+    LEDGER="$(curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
+        -H 'User-Agent: Mozilla/5.0' "$BASE_URL/api/downloads?limit=50&depth=0")"
+    ROWS="$(echo "$LEDGER" | grep -o '"totalDocs":[0-9]*' | cut -d: -f2)"
+    # Five requests were made above for this one book: the EPUB twice
+    # (once for the status check, once to follow through to the bytes)
+    # and the three PDF sizes. Five ledger rows, one slot consumed.
+    if [ "${ROWS:-0}" -eq 5 ]; then
+        pass "every file is logged individually ($ROWS rows)"
+    else
+        fail "every file is logged individually" "expected 5 rows, got ${ROWS:-0}"
+    fi
+    curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
+        -H 'User-Agent: Mozilla/5.0' "$BASE_URL/account" >"$WORKDIR/account.html"
+    check_contains "but they count as one book" "$WORKDIR/account.html" "4 of 5"
+fi
 
 # The admin must never be reachable without authentication.
 ADMIN_BODY="$(curl -s "$BASE_URL/admin")"

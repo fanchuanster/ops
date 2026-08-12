@@ -434,3 +434,258 @@ h3 {
   color: var(--ink-faint);
   font-style: italic;
 }
+
+/* --- auth and account ---------------------------------------------- */
+
+.auth-page {
+  max-width: var(--measure);
+  padding-top: 3.5rem;
+  padding-bottom: 3rem;
+}
+
+.auth-page h1 {
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  margin: 0 0 0.75rem;
+}
+
+.auth-page__lede {
+  color: var(--ink-soft);
+  margin: 0 0 2rem;
+}
+
+.auth-page__alt {
+  margin-top: 1.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  font-family: var(--font-sans);
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.auth-form input {
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink);
+}
+
+.auth-form input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.auth-form button[type='submit'] {
+  font: inherit;
+  font-weight: 600;
+  align-self: flex-start;
+  padding: 0.6rem 1.5rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.auth-form button[type='submit']:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.auth-form__error {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 0.875rem;
+}
+
+.optional,
+.hint {
+  color: var(--ink-faint);
+  font-weight: 400;
+  font-size: 0.8125rem;
+}
+
+.plain-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+}
+
+.plain-list li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* --- reader --------------------------------------------------------- */
+
+/*
+ * The reader takes the whole viewport: the site chrome is a distraction
+ * once you are actually reading, which is the entire point of the page.
+ */
+.reader-page {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.reader-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+.reader-nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  margin-left: 1.25rem;
+}
+
+.reader-nav a:hover {
+  color: var(--ink);
+}
+
+.reader {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.reader__bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.reader__where {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.reader__where strong {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.reader__bar button {
+  margin-left: auto;
+}
+
+.reader__settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1rem 1.5rem;
+  border-block: 1px solid var(--rule);
+  background: var(--paper-raised);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+.reader__setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--ink-faint);
+}
+
+.reader__buttons {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.reader__buttons button {
+  font: inherit;
+  font-size: 0.8125rem;
+  text-transform: capitalize;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.reader__buttons button[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.reader__buttons button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.reader__stage {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.reader__viewer {
+  flex: 1;
+  min-width: 0;
+}
+
+.reader__page {
+  flex: 0 0 3rem;
+  font-size: 1.5rem;
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.reader__page:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+@media (max-width: 40rem) {
+  /* Tap targets get in the way on a small screen; swipe and the arrow
+     keys still work, and the page area is what matters there. */
+  .reader__page {
+    flex-basis: 1.5rem;
+    font-size: 1rem;
+  }
+}
+
+.reader__loading,
+.reader__error {
+  padding: 2rem 1.5rem;
+  color: var(--ink-faint);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}

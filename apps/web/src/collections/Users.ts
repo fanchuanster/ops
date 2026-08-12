@@ -14,6 +14,24 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
     group: 'Administration',
   },
+  access: {
+    // Anyone may register. What they may register *as* is constrained at
+    // the field level below, so the guarantee holds no matter which door
+    // the request came through — the sign-up form, the REST API, or
+    // anything added later.
+    create: () => true,
+    read: ({ req }) => {
+      if (!req.user) return false
+      if (req.user.roles?.includes('admin')) return true
+      return { id: { equals: req.user.id } }
+    },
+    update: ({ req }) => {
+      if (!req.user) return false
+      if (req.user.roles?.includes('admin')) return true
+      return { id: { equals: req.user.id } }
+    },
+    delete: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
+  },
   fields: [
     {
       name: 'displayName',
@@ -31,6 +49,11 @@ export const Users: CollectionConfig = {
       ],
       access: {
         // Readers must not be able to promote themselves — section 34.
+        // Both directions are needed: `update` stops an existing reader
+        // escalating, `create` stops someone registering as an admin in
+        // the first place, which is the hole that opens the moment
+        // public sign-up exists.
+        create: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
         update: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
       },
     },

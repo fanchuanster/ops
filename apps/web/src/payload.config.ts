@@ -8,9 +8,11 @@ import { buildConfig } from 'payload'
 import sharp from 'sharp'
 
 import { BookCollections } from './collections/BookCollections'
+import { Downloads } from './collections/Downloads'
 import { Books } from './collections/Books'
 import { Media } from './collections/Media'
 import { Parts } from './collections/Parts'
+import { ReadingProgress } from './collections/ReadingProgress'
 import { Users } from './collections/Users'
 
 const filename = fileURLToPath(import.meta.url)
@@ -53,7 +55,7 @@ export default buildConfig({
       titleSuffix: '— NobleSee',
     },
   },
-  collections: [Users, Media, Books, Parts, BookCollections],
+  collections: [Users, Media, Books, Parts, BookCollections, Downloads, ReadingProgress],
   editor: lexicalEditor(),
   db: postgresAdapter({
     pool: {
