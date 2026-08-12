@@ -11,9 +11,14 @@ phone, on a Kindle, in the dark, at whatever type size you need.
 ## Stack
 
 Next.js 16 (App Router) + React + TypeScript, with **Payload 3 embedded inside
-the same application** as CMS and admin, on PostgreSQL 18. One deployable
-serves the public site, the JSON API and the editorial admin. Object storage is
-Cloudflare R2 over the S3 API.
+the same application** as CMS and admin. One deployable serves the public site,
+the JSON API and the editorial admin.
+
+It runs as a **Cloudflare Worker**, built by OpenNext, on **D1** for the
+database and **R2** for book artifacts. Both are reached through Worker
+bindings rather than credentials: there is no connection string and no S3 access
+key in the environment, so there is no secret to lift and replay from elsewhere.
+Infrastructure is managed by Terraform in `infra/`.
 
 Business rules live in `apps/web/src/domain` — a framework-independent layer
 that may not import Payload, Next or a database client. That boundary is
@@ -26,50 +31,62 @@ enforced by a check in `npm run verify`, not just documented.
 
 ## Running it
 
-```bash
-cp .env.example .env
-# set PAYLOAD_SECRET — there is no default:  openssl rand -hex 32
-docker compose up -d --build
-```
-
-- Site: http://localhost:8093
-- Admin: http://localhost:8093/admin (create the first user on first visit)
-- Health: http://localhost:8093/health — checks the database, not just the process
-
-Schema migrations run automatically as a one-shot `appmigrate` service before
-the app starts. Payload's Postgres adapter does not auto-create tables outside
-dev, so migrations are explicit and versioned in `apps/web/src/migrations`.
-
-### Seeding the catalog
+Everything goes through `apps/web/cf`, which runs the toolchain in a container.
+That is not a style preference: wrangler ships `workerd`, the real Workers
+runtime, and workerd needs glibc 2.32+. On an older host — this one is Ubuntu
+20.04 on 2.31 — it cannot start, which takes out `wrangler dev`, the Miniflare
+behind `getPlatformProxy`, and every Payload CLI command that needs a binding.
 
 ```bash
-docker compose --profile seed run --rm appseed
+cp .env.example .env                  # CLOUDFLARE_API_TOKEN for Terraform
+cp apps/web/.dev.vars.example apps/web/.dev.vars
+# set PAYLOAD_SECRET in .dev.vars — there is no default:  openssl rand -hex 32
+
+cd apps/web
+./cf npm install
+./cf npm run migrate                  # apply schema to local D1
+./cf npm run seed                     # load the catalog
+../../tools/mirror-r2-local.sh        # copy book artifacts into local R2
+./cf npx wrangler dev --ip 0.0.0.0    # the site, on :8787
 ```
 
-Loads the curatorial collections and two reference books (Tao Te Ching; The
-Analects, in three parts, which exercises staged release). Idempotent — matched
-on slug and updated in place. It is profile-gated rather than automatic
-precisely because it updates in place: running it on every `up` would quietly
-revert an editor's changes to those books.
+- Site: http://localhost:8787
+- Admin: http://localhost:8787/admin (create the first user on first visit)
+- Health: http://localhost:8787/health — checks D1, not just the process
 
-### Other profiles
+Migrations are explicit and versioned in `apps/web/src/migrations`; the adapter
+is configured with `push: false` so nothing alters the schema at boot.
+
+The seed loads the curatorial collections and two reference books (Tao Te Ching;
+The Analects, in three parts, which exercises staged release). It is idempotent
+— matched on slug and updated in place — and deliberately manual rather than
+automatic, because updating in place would quietly revert an editor's changes.
+
+Its `storageKey` values point at artifacts that really exist in the production
+R2 bucket, so the download path has real files behind it. `mirror-r2-local.sh`
+copies those objects into the local bucket; without it the catalog renders but
+downloads and the reader return 502.
+
+### Deploying
 
 ```bash
-docker compose --profile tools up -d     # Adminer on :8091, dev-only DB inspection
-docker compose --profile tunnel up -d    # publish on noblesee.com via Cloudflare Tunnel
+cd apps/web
+./cf npx wrangler secret put PAYLOAD_SECRET   # once, per environment
+./cf npm run deploy
 ```
+
+The bundle is ~5.9 MB gzipped, against a 10 MB limit on Workers Paid. It does
+not fit the 3 MB free tier — Payload's admin UI is most of it.
 
 ## Development
 
 ```bash
 cd apps/web
-npm install
-npm run verify     # generate types, domain-boundary check, typecheck, unit tests
-npm run dev
+./cf npm run verify   # generate types, domain-boundary check, typecheck, unit tests
 ```
 
 ```bash
-./tools/smoke-test.sh                                # HTTP-level checks, localhost:8093
+./tools/smoke-test.sh                                # HTTP-level checks, localhost:8787
 BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # or an explicit host
 ```
 
@@ -101,10 +118,12 @@ apps/web/                    the application — public site, API and admin
   src/app/(payload)/         admin and API routes
   src/migrations/            versioned schema migrations
   src/seed/                  catalog seed
+  cf                         runs the toolchain in a container (see "Running it")
+  wrangler.jsonc             Worker bindings — mirrors `terraform output`
 content/seed/                generated book artifacts (DOCX/EPUB/PDF)
-tools/                       smoke test, seed-content generator
+infra/                       Terraform: R2, D1, DNS, the www redirect
+tools/                       smoke test, seed-content generator, R2 mirror
 docs/                        architecture decisions and roadmap
-docker-compose.yml           appdb, appmigrate, app (+ seed/tools/tunnel profiles)
 ```
 
 ## Domain rules worth knowing

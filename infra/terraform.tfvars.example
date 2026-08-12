@@ -21,6 +21,6 @@ r2_location = "APAC"
 # ordering note at the top of worker.tf.
 worker_deployed = false
 
-# Set false if the token lacks the zone "Dynamic Redirect" permission;
+# Set false if the token lacks the zone "Single Redirect" permission;
 # the rest of the configuration still applies cleanly without it.
 manage_redirect_ruleset = true
