@@ -30,7 +30,23 @@ The token needs:
 | Zone    | DNS — Edit          | the `www` record                         |
 | Zone    | Single Redirect — Edit | the www→apex redirect ruleset            |
 
-Verify a token before using it:
+Editing a Cloudflare token **replaces** its permission list rather than adding
+to it, so granting one permission can silently revoke another. Set all five in
+a single edit.
+
+Verify a token with:
+
+```bash
+./infra/check-token
+```
+
+It probes every API this configuration uses and names the dashboard permission
+to grant for each failure. Terraform, by contrast, surfaces a missing
+permission as a mid-apply failure on whichever resource happened to touch it
+first, which says nothing useful about what to fix.
+
+<details>
+<summary>Equivalent by hand</summary>
 
 ```bash
 set -a; . ./.env; set +a
@@ -45,10 +61,12 @@ for p in "accounts/$ACC/r2/buckets" "accounts/$ACC/d1/database" \
 done
 ```
 
+</details>
+
 `200` is fine; `401`/`403` means that permission is missing. A token short of
-one of these fails partway through an apply rather than up front, leaving some
-resources created and others not — Terraform recovers cleanly on the next run,
-but it is quicker to check first.
+one of these fails partway through an apply, leaving some resources created and
+others not — Terraform recovers cleanly on the next run, but it is quicker to
+check first.
 
 ## Usage
 

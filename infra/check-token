@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+# Probes CLOUDFLARE_API_TOKEN against every API this configuration uses.
+#
+# Worth having as a script rather than a doc snippet for two reasons.
+# Terraform surfaces a missing permission as a mid-apply failure on
+# whichever resource happened to touch it first, which says nothing
+# useful about what to grant. And editing a Cloudflare token REPLACES its
+# permission set rather than adding to it — so granting one permission
+# can silently revoke another, and the only way to know is to check them
+# all at once.
+#
+#   ./infra/check-token
+#
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(dirname "$HERE")"
+
+# shellcheck disable=SC1091
+set -a
+. "$REPO/.env"
+set +a
+
+if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+    echo "CLOUDFLARE_API_TOKEN is empty in .env." >&2
+    exit 1
+fi
+
+ACCOUNT="${1:-$(grep -E '^\s*account_id' "$HERE/terraform.tfvars" 2>/dev/null | cut -d'"' -f2)}"
+ZONE="${2:-$(grep -E '^\s*zone_id' "$HERE/terraform.tfvars" 2>/dev/null | cut -d'"' -f2)}"
+
+if [ -z "$ACCOUNT" ] || [ -z "$ZONE" ]; then
+    echo "usage: ./infra/check-token [account_id] [zone_id]" >&2
+    echo "       (read from infra/terraform.tfvars when omitted)" >&2
+    exit 1
+fi
+
+api() { # path -> status code
+    curl -s -o /dev/null -w '%{http_code}' \
+        -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+        "https://api.cloudflare.com/client/v4/$1"
+}
+
+MISSING=0
+
+check() { # label, dashboard permission, path
+    local code
+    code="$(api "$3")"
+    if [ "$code" = "200" ]; then
+        printf '  \033[32mok\033[0m    %-18s\n' "$1"
+    else
+        MISSING=$((MISSING + 1))
+        printf '  \033[31mMISS\033[0m  %-18s %s — grant: %s\n' "$1" "$code" "$2"
+    fi
+}
+
+echo "Cloudflare token check"
+echo
+
+check "R2"              "Account · Workers R2 Storage · Edit" "accounts/$ACCOUNT/r2/buckets"
+check "D1"              "Account · D1 · Edit"                 "accounts/$ACCOUNT/d1/database"
+check "Workers Scripts" "Account · Workers Scripts · Edit"    "accounts/$ACCOUNT/workers/scripts"
+check "DNS"             "Zone · DNS · Edit"                   "zones/$ZONE/dns_records"
+check "Single Redirect" "Zone · Single Redirect · Edit"       "zones/$ZONE/rulesets"
+
+echo
+if [ "$MISSING" -eq 0 ]; then
+    echo "All permissions present."
+else
+    echo "$MISSING missing."
+    echo
+    echo "Editing a token REPLACES its permission list — granting one can revoke"
+    echo "another. Set all five in a single edit, then re-run this."
+fi
+
+exit $((MISSING > 0))
