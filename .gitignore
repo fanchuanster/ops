@@ -214,3 +214,7 @@ __marimo__/
 # includes/storage.php) — installed by wordpress/Dockerfile at image
 # build time via composer.json/composer.lock, which ARE committed.
 wordpress/plugins/nobleread-core/vendor/
+
+# Local diagnostic scratch files
+.diag
+.diag2

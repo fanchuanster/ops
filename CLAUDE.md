@@ -150,7 +150,7 @@ NobleRead
 
 Domain:
 
-nobelread.com
+noblesee.com
 
 Mission:
 
@@ -207,7 +207,7 @@ The theme should primarily handle presentation.
 
 Target architecture:
 
-                    nobelread.com
+                    noblesee.com
                            |
                     WordPress
                            |

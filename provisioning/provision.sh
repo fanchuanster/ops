@@ -32,7 +32,7 @@ if ! $WP core is-installed >/dev/null 2>&1; then
         --title="${WORDPRESS_TITLE:-NobleRead}" \
         --admin_user="${WORDPRESS_ADMIN_USER:-admin}" \
         --admin_password="${WORDPRESS_ADMIN_PASSWORD:-admin}" \
-        --admin_email="${WORDPRESS_ADMIN_EMAIL:-admin@nobelread.com}" \
+        --admin_email="${WORDPRESS_ADMIN_EMAIL:-admin@noblesee.com}" \
         --skip-email
 else
     echo "-- WordPress core already installed"

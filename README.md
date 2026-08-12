@@ -6,7 +6,7 @@ and made comfortable to read on any device. See `CLAUDE.md` for the full
 project mission and architecture, and `docs/ARCHITECTURE_REVIEW.md` /
 `docs/ROADMAP.md` for the decisions and scope behind this MVP.
 
-Domain: nobelread.com
+Domain: noblesee.com
 
 ## What's here
 

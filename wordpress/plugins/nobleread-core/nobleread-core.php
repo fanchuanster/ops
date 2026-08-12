@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: NobleRead Core
- * Plugin URI:  https://nobelread.com
+ * Plugin URI:  https://noblesee.com
  * Description: Book/Part content model, rights-status gating, per-format
  *              downloads, and per-user download rate limiting for
  *              NobleRead. Business logic only — presentation belongs to
