@@ -176,17 +176,15 @@ The platform should eventually provide:
 
 # 2. IMPORTANT IMPLEMENTATION PRINCIPLES
 
-## 2.1 Django + Astro is the main website platform
+## 2.1 Next.js + Payload is the main website platform
 
-This section previously mandated WordPress. That decision was reversed
-after the NR-31 evaluation — see `docs/ARCHITECTURE_REVIEW.md` section
-11 and `docs/MODERNIZATION.md`. The short version: the WordPress-coupled
-half of the system was the commodity half (editing UI, sessions, OAuth,
-template routing), the NobleSee-specific rules were already nearly
-framework-free, and with no users and no data to preserve, rebuilding
-was the cheapest it would ever be.
+This section previously mandated WordPress, and briefly Django. The
+current direction is set by `docs/MODERNIZATION.md` and assessed in
+`docs/MODERNIZATION_ASSESSMENT.md`: with no users and no data to
+preserve, the platform is being rebuilt greenfield.
 
-Use **Django + PostgreSQL** for:
+Use **Next.js + React + TypeScript with Payload CMS on PostgreSQL 18**
+for:
 
 - User accounts and authentication
 - Book/Part/Format domain model
@@ -196,15 +194,20 @@ Use **Django + PostgreSQL** for:
 - Donations/payment integration (Stripe)
 - The JSON API consumed by the frontend
 
-Use **Astro** for:
+Payload runs *inside* the Next.js application rather than beside it, so
+the admin, the API and the public site are one deployable.
+
+Next.js also covers:
 
 - Public website and book catalog UI
 - Book browsing and metadata display
-- The reading experience
+- The reading experience (a dedicated React + EPUB.js reader)
 - Blog functionality
 
-Business logic belongs in Django, never in the frontend. The frontend is
-responsible for presentation and for calling the API.
+Business logic belongs in the domain layer (`apps/web/src/domain`),
+never in UI components and never buried in Payload hooks. That module
+must not import Payload, Next or a database client — Payload calls into
+it, never the reverse.
 
 The following must remain server-side Django functionality:
 
@@ -217,8 +220,8 @@ The following must remain server-side Django functionality:
 - Kindle delivery
 - AI functionality and API integrations
 
-Do NOT turn the Django app into the conversion pipeline. That stays a
-separate service (`services/converter`, section 13).
+Do NOT turn the web application into the conversion pipeline. That stays
+a separate FastAPI service (`services/converter`).
 
 ---
 
@@ -245,7 +248,7 @@ Target architecture:
         +------------------+------------------+
         |                  |                  |
         v                  v                  v
-   PostgreSQL            Redis                S3/R2
+   PostgreSQL            Redis          Cloudflare R2
         |                  |                  |
         |                  |            Book artifacts
         |                  |            DOCX/EPUB/PDF
@@ -292,13 +295,14 @@ app over HTTP and knows nothing about the frontend.
 
 # FRONTEND
 
-The NobleSee frontend is an Astro application. It was previously
-specified as WordPress + Kadence; see section 2.1 for why that changed.
+The NobleSee frontend is a Next.js (App Router) application in React
+and TypeScript. It was previously specified as WordPress + Kadence, then
+briefly Astro; see section 2.1 and `docs/MODERNIZATION.md` section 14.
 
-Astro is chosen because the catalog and book pages are read-mostly and
-content-first, and Astro ships almost no JavaScript by default — which
-matters directly for the mission, since the reading experience must be
-excellent on phones and e-readers.
+Next.js is required by Payload 3, which is Next-native, and gives
+server-side and static rendering where each page needs it — the catalog
+and book pages are read-mostly and should not ship a client-side app to
+render text.
 
 The frontend must provide:
 
@@ -317,15 +321,9 @@ authorization, rate limiting and staged release are enforced server-side
 in Django; the frontend renders what the API permits and must never be
 the only thing standing between a reader and a restricted file.
 
-Prefer:
-
-Astro
-+
-a small amount of vanilla/island JavaScript
-+
-custom CSS
-
-rather than a heavy SPA framework with large client bundles.
+Prefer server components and static rendering, with client components
+only where interaction genuinely requires them, rather than building the
+whole site as a client-side SPA.
 
 The in-browser EPUB reader is the one place where meaningful client-side
 JavaScript is justified.

@@ -222,3 +222,8 @@ wordpress/plugins/noblesee-core/vendor/
 # Django service build artifacts
 services/web/staticfiles/
 services/web/.pytest_cache/
+
+# Next.js / Payload
+apps/web/node_modules/
+apps/web/.next/
+apps/web/src/payload-types.ts

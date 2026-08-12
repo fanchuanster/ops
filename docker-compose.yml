@@ -127,69 +127,82 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
 
-  # --- The rebuild (docs/MODERNIZATION.md) ------------------------------
-  # Django + PostgreSQL replacing WordPress. Runs alongside the WordPress
-  # stack until Phase 6 lands, so the old implementation stays available
-  # as a behavioural reference; it is not the site any more.
-  #
-  # Its own PostgreSQL deliberately: the `pg` container already on this
-  # host serves open-webui/chromadb, and coupling NobleSee's lifecycle to
-  # an unrelated stack is how a `down -v` takes out both.
-  webdb:
-    image: postgres:17
+  # --- NobleSee application (docs/MODERNIZATION.md) ---------------------
+  # Next.js 16 + React + TypeScript with Payload 3 embedded as the CMS
+  # and admin, on PostgreSQL 18. Payload 3 runs *inside* the Next app
+  # rather than beside it, so this is one service, not two.
+  appdb:
+    image: postgres:18
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-noblesee}
       POSTGRES_USER: ${POSTGRES_USER:-noblesee}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-noblesee}
     volumes:
-      - webdb_data:/var/lib/postgresql/data
-    # No host port: reachable only on the compose network, same posture
-    # as the MySQL service above.
+      # PostgreSQL 18+ changed its data layout: the image now stores the
+      # cluster in a major-version subdirectory and wants the mount one
+      # level up, at /var/lib/postgresql. Mounting the old
+      # /var/lib/postgresql/data path makes it refuse to start.
+      - appdb_data:/var/lib/postgresql
+    # No host port: reachable only on the compose network.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-noblesee} -d ${POSTGRES_DB:-noblesee}"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  web:
+  # One-shot schema migration, run before the app serves traffic.
+  # Payload's Postgres adapter does not auto-create tables outside dev,
+  # so this is explicit and versioned in apps/web/src/migrations. It
+  # targets the builder stage because the runtime image is Next's
+  # standalone output, which deliberately omits the Payload CLI.
+  appmigrate:
     build:
-      context: ./services/web
+      context: ./apps/web
+      dockerfile: Dockerfile
+      target: builder
+    depends_on:
+      appdb:
+        condition: service_healthy
+    environment:
+      DATABASE_URI: postgres://${POSTGRES_USER:-noblesee}:${POSTGRES_PASSWORD:-noblesee}@appdb:5432/${POSTGRES_DB:-noblesee}
+      PAYLOAD_SECRET: ${PAYLOAD_SECRET:-dev-only-insecure-secret}
+      NODE_ENV: production
+    command: ["npx", "payload", "migrate"]
+    restart: "no"
+
+  app:
+    build:
+      context: ./apps/web
       dockerfile: Dockerfile
     restart: unless-stopped
-    # The image runs as a non-root user (see services/web/Dockerfile),
-    # which is the production posture. The dev bind mount below defeats
-    # it: this repo's host directories are mode 750, so an in-image uid
-    # can't traverse them — the same reason the `provision` service above
-    # runs as root. Drop the mount and this override together when
-    # deploying; the image is self-contained without both.
-    user: root
     depends_on:
-      webdb:
+      appdb:
         condition: service_healthy
+      appmigrate:
+        condition: service_completed_successfully
     ports:
-      - "8092:8000"
+      # 3000 on this host is taken by an unrelated container
+      # (open-webui); 8090/8091 are WordPress and Adminer.
+      - "8093:3000"
     environment:
-      POSTGRES_HOST: webdb
-      POSTGRES_DB: ${POSTGRES_DB:-noblesee}
-      POSTGRES_USER: ${POSTGRES_USER:-noblesee}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-noblesee}
-      NOBLESEE_DEBUG: ${NOBLESEE_DEBUG:-true}
-      # Unset in dev (settings.py falls back to a fixed throwaway key);
-      # required once NOBLESEE_DEBUG is off.
-      NOBLESEE_SECRET_KEY: ${NOBLESEE_SECRET_KEY:-}
-      NOBLESEE_ALLOWED_HOSTS: ${NOBLESEE_ALLOWED_HOSTS:-localhost,127.0.0.1,web,10.211.36.155,noblesee.com}
-      NOBLESEE_LOG_LEVEL: ${NOBLESEE_LOG_LEVEL:-INFO}
-    volumes:
-      # Live-edit during the rebuild; the image still contains the code
-      # so the container runs standalone without the mount.
-      - ./services/web:/app
+      DATABASE_URI: postgres://${POSTGRES_USER:-noblesee}:${POSTGRES_PASSWORD:-noblesee}@appdb:5432/${POSTGRES_DB:-noblesee}
+      # Required. Sessions are signed with it, so a value that changes
+      # on restart would silently log everyone out.
+      PAYLOAD_SECRET: ${PAYLOAD_SECRET:-dev-only-insecure-secret}
+      # Object storage is Cloudflare R2 over the S3 API. Left blank,
+      # Payload falls back to local disk so the stack runs with no
+      # cloud account.
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-noblesee}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status==200 else 1)\""]
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 40s
 
   # Dev-only DB inspection (e.g. checking wp_nr_downloads directly).
   # Not part of the production architecture.
@@ -207,4 +220,4 @@ volumes:
   db_data:
   wp_data:
   nr_core_vendor:
-  webdb_data:
+  appdb_data:
