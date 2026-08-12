@@ -16,8 +16,12 @@ tools fighting over one resource.
 
 ## Required token permissions
 
-Terraform authenticates with `CLOUDFLARE_API_TOKEN` from the environment
-(never a `.tfvars` file, so it stays out of state). The token needs:
+NobleSee keeps a **single** Cloudflare token: `CLOUDFLARE_CUSTOM_TOKEN` in
+`.env`. Use the `infra/tf` wrapper, which loads it and exports it under the
+name the provider expects (`CLOUDFLARE_API_TOKEN`). The token is never a
+Terraform variable, so it stays out of `.tfvars` and out of state.
+
+The token needs:
 
 | Scope   | Permission          | Used for                                 |
 | ------- | ------------------- | ---------------------------------------- |
@@ -30,13 +34,14 @@ Terraform authenticates with `CLOUDFLARE_API_TOKEN` from the environment
 Verify a token before using it:
 
 ```bash
+set -a; . ./.env; set +a
 ACC=<account-id>; ZONE=<zone-id>
 for p in "accounts/$ACC/r2/buckets" "accounts/$ACC/d1/database" \
          "accounts/$ACC/workers/scripts" "zones/$ZONE/rulesets" \
          "zones/$ZONE/dns_records"; do
   printf '%-40s %s\n' "$p" \
     "$(curl -s -o /dev/null -w '%{http_code}' \
-        -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+        -H "Authorization: Bearer $CLOUDFLARE_CUSTOM_TOKEN" \
         "https://api.cloudflare.com/client/v4/$p")"
 done
 ```
@@ -50,12 +55,17 @@ but it is quicker to check first.
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # fill in account_id, zone_id
-export CLOUDFLARE_API_TOKEN=...                # scoped as above
+# CLOUDFLARE_CUSTOM_TOKEN in .env, scoped as above
 
-terraform init
-terraform plan
-terraform apply
+./tf init
+./tf plan
+./tf apply
 ```
+
+`infra/tf` is a thin wrapper around `terraform` — same subcommands and flags.
+Bare `terraform` works too, but only if you export `CLOUDFLARE_API_TOKEN`
+yourself; without it the provider fails with an unhelpful authentication
+error.
 
 ### Ordering: the Worker must exist before the domain attaches to it
 
@@ -63,9 +73,9 @@ A custom domain cannot point at a Worker that has not been deployed, so the
 first run is three steps:
 
 ```bash
-terraform apply                                  # 1. bucket, D1, DNS
-cd ../apps/web && npx wrangler deploy            # 2. the Worker itself
-terraform apply -var worker_deployed=true        # 3. attach the domain
+./infra/tf apply                                 # 1. bucket, D1, DNS
+cd apps/web && npx wrangler deploy               # 2. the Worker itself
+./infra/tf apply -var worker_deployed=true       # 3. attach the domain
 ```
 
 Set `worker_deployed = true` in `terraform.tfvars` afterwards; it is only
@@ -74,7 +84,7 @@ false for the initial bootstrap.
 Wire the Worker's bindings from Terraform rather than by hand:
 
 ```bash
-terraform output -json wrangler_bindings
+./infra/tf output -json wrangler_bindings
 ```
 
 ## Decisions worth knowing

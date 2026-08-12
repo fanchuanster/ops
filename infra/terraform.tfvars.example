@@ -3,9 +3,9 @@
 #   cp terraform.tfvars.example terraform.tfvars
 #
 # Find these with:
-#   curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+#   curl -s -H "Authorization: Bearer $CLOUDFLARE_CUSTOM_TOKEN" \
 #     https://api.cloudflare.com/client/v4/accounts
-#   curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+#   curl -s -H "Authorization: Bearer $CLOUDFLARE_CUSTOM_TOKEN" \
 #     https://api.cloudflare.com/client/v4/zones
 
 account_id = ""

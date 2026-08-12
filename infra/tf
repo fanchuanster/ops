@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Terraform wrapper.
+#
+# NobleSee keeps ONE Cloudflare token, CLOUDFLARE_CUSTOM_TOKEN. The
+# Terraform provider reads CLOUDFLARE_API_TOKEN, so something has to
+# bridge the two names — doing it here rather than in .env means there
+# is still only one token to rotate, and no second copy of it on disk.
+#
+# Running bare `terraform` with no token set fails with an unhelpful
+# authentication error, so this also exists to make the right thing the
+# easy thing.
+#
+#   ./infra/tf plan
+#   ./infra/tf apply
+#
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(dirname "$HERE")"
+
+if [ ! -f "$REPO/.env" ]; then
+    echo "infra/tf: $REPO/.env not found — copy .env.example and fill it in." >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1091
+set -a
+. "$REPO/.env"
+set +a
+
+if [ -z "${CLOUDFLARE_CUSTOM_TOKEN:-}" ]; then
+    echo "infra/tf: CLOUDFLARE_CUSTOM_TOKEN is empty in .env." >&2
+    echo "          Create a token with the scopes listed in infra/README.md." >&2
+    exit 1
+fi
+
+export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_CUSTOM_TOKEN"
+
+exec terraform -chdir="$HERE" "$@"
