@@ -32,7 +32,21 @@ const r2Configured = Boolean(
   process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY,
 )
 
+/**
+ * The site's own public origin.
+ *
+ * Behind the Cloudflare Tunnel the container only ever sees plain HTTP
+ * on its own port, so it cannot infer the public name. Payload needs it
+ * to build absolute URLs and — more importantly — to scope CSRF and
+ * CORS: leaving those open would let any origin drive an authenticated
+ * session. Listed explicitly rather than wildcarded for that reason.
+ */
+const serverURL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8093'
+
 export default buildConfig({
+  serverURL,
+  cors: [serverURL],
+  csrf: [serverURL],
   admin: {
     user: Users.slug,
     meta: {

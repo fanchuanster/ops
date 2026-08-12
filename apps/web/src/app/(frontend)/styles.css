@@ -1,0 +1,436 @@
+/*
+ * NobleSee — reading-first design tokens.
+ *
+ * The whole product thesis is that these books are currently unpleasant
+ * to read, so typography is not decoration here; it is the feature. Two
+ * consequences run through this file:
+ *
+ *   1. Serif by default, with a Traditional Chinese face named FIRST in
+ *      the stack. A Latin-first stack makes the browser fall back to a
+ *      system CJK font chosen for UI, not for prose, and the result is
+ *      the cramped rendering NobleSee exists to fix.
+ *   2. Generous line-height and a measure capped in `ch`, so a line
+ *      never runs longer than the eye can track back from.
+ *
+ * Colour is defined light-first on bare :root, redefined under
+ * prefers-color-scheme for system-dark, and again under [data-theme] so
+ * an explicit toggle wins in both directions.
+ */
+
+:root {
+  --paper: #fbf9f4;
+  --paper-raised: #ffffff;
+  --ink: #23201b;
+  --ink-soft: #5c564c;
+  --ink-faint: #8b8477;
+  --rule: #e3ddd0;
+  --accent: #7a5c2e;
+  --accent-soft: #f0e7d6;
+
+  --font-serif: "Noto Serif TC", "Source Han Serif TC", "Songti TC", Songti SC,
+    "SimSun", Georgia, "Times New Roman", serif;
+  --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --measure: 34rem;
+  --page: 68rem;
+  --radius: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14120f;
+    --paper-raised: #1c1a16;
+    --ink: #e8e3d9;
+    --ink-soft: #a8a196;
+    --ink-faint: #77716a;
+    --rule: #2e2a24;
+    --accent: #c9a227;
+    --accent-soft: #2a2519;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #14120f;
+  --paper-raised: #1c1a16;
+  --ink: #e8e3d9;
+  --ink-soft: #a8a196;
+  --ink-faint: #77716a;
+  --rule: #2e2a24;
+  --accent: #c9a227;
+  --accent-soft: #2a2519;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration-color: var(--accent);
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* CJK titles want no negative tracking — it closes up the glyphs. */
+:lang(zh) h1,
+:lang(zh) h2,
+.cjk {
+  letter-spacing: 0;
+}
+
+/* --- shell ------------------------------------------------------- */
+
+.page {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.site-header {
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.site-header__inner {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+}
+
+.wordmark {
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+
+.wordmark span {
+  color: var(--accent);
+}
+
+.site-nav {
+  display: flex;
+  gap: 1.25rem;
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+
+.site-nav a {
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+
+.site-nav a:hover {
+  color: var(--ink);
+}
+
+.site-footer {
+  border-top: 1px solid var(--rule);
+  margin-top: 5rem;
+  padding: 2.5rem 0 4rem;
+  color: var(--ink-faint);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+.theme-toggle {
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  padding: 0.15rem 0.6rem;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+/* --- home -------------------------------------------------------- */
+
+.hero {
+  padding: 4.5rem 0 3rem;
+  max-width: var(--measure);
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  margin: 0 0 1rem;
+}
+
+.hero p {
+  color: var(--ink-soft);
+  font-size: 1.125rem;
+  margin: 0 0 1.5rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.5rem;
+  margin: 3rem 0 1.75rem;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.section-head a {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* --- catalog ----------------------------------------------------- */
+
+.book-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 2.5rem 1.75rem;
+}
+
+.book-card a {
+  text-decoration: none;
+  display: block;
+}
+
+.book-card__cover {
+  aspect-ratio: 2 / 3;
+  background: var(--accent-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.85rem;
+}
+
+.book-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Fallback when a book has no cover: set the title, don't show a gap. */
+.book-card__cover--empty {
+  padding: 1rem;
+  font-size: 1.5rem;
+  text-align: center;
+  color: var(--accent);
+  line-height: 1.4;
+}
+
+.book-card h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.book-card p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+
+.filters a {
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.25rem 0.85rem;
+  color: var(--ink-soft);
+}
+
+.filters a[aria-current="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+/* --- book detail ------------------------------------------------- */
+
+.book-head {
+  display: grid;
+  grid-template-columns: 14rem 1fr;
+  gap: 3rem;
+  padding: 3.5rem 0 2.5rem;
+  align-items: start;
+}
+
+@media (max-width: 40rem) {
+  .book-head {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+.book-head h1 {
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  margin: 0 0 0.35rem;
+}
+
+.book-head .original-title {
+  font-size: 1.375rem;
+  color: var(--ink-soft);
+  margin: 0 0 0.75rem;
+}
+
+.byline {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+  margin: 0 0 1.5rem;
+}
+
+.book-head .description {
+  max-width: var(--measure);
+  color: var(--ink-soft);
+}
+
+.meta {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+
+.parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.part {
+  border-bottom: 1px solid var(--rule);
+  padding: 1.25rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.part__title {
+  font-size: 1.0625rem;
+  margin: 0;
+  flex: 1 1 16rem;
+}
+
+.part__order {
+  color: var(--ink-faint);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  min-width: 3.5rem;
+}
+
+.formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+.formats a,
+.formats span {
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.6rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.formats a:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.formats .read {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.locked {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.notice {
+  background: var(--accent-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.empty {
+  color: var(--ink-faint);
+  font-style: italic;
+}

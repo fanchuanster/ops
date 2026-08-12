@@ -10,12 +10,13 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "payload": "payload",
+    "seed": "payload run src/seed/seed.ts",
     "generate:types": "payload generate:types",
     "generate:importmap": "payload generate:importmap",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:boundary": "sh scripts/check-domain-boundary.sh",
-    "verify": "npm run check:boundary && npm run typecheck && npm run test"
+    "verify": "npm run generate:types && npm run check:boundary && npm run typecheck && npm run test"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.88.0",

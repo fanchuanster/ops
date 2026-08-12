@@ -1,6 +1,6 @@
 import type { Access, CollectionConfig, Where } from 'payload'
 
-import { RIGHTS_STATUSES } from '../domain/rights'
+import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 
 /**
  * Anonymous visitors see only cleared, public, published books.
@@ -14,7 +14,7 @@ const readBooks: Access = ({ req }) => {
     and: [
       { visibility: { equals: 'public' } },
       { status: { equals: 'published' } },
-      { rightsStatus: { in: ['public_domain', 'licensed', 'permission_granted'] } },
+      { rightsStatus: { in: [...DISTRIBUTABLE_STATUSES] } },
     ],
   }
 
@@ -43,6 +43,14 @@ export const Books: CollectionConfig = {
   },
   fields: [
     { name: 'title', type: 'text', required: true, index: true },
+    {
+      name: 'slug',
+      type: 'text',
+      required: true,
+      unique: true,
+      index: true,
+      admin: { description: 'URL segment, e.g. "analects" for /books/analects.' },
+    },
     { name: 'subtitle', type: 'text' },
     { name: 'originalTitle', type: 'text', admin: { description: 'Title in the original script, e.g. 道德經.' } },
     { name: 'author', type: 'text', index: true },

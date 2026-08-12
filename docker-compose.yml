@@ -1,6 +1,17 @@
+# NobleSee.
+#
+#   docker compose up -d                  the site (Next.js + Payload + Postgres)
+#   docker compose --profile tunnel up -d ...published on noblesee.com
+#   docker compose --profile tools up -d  ...plus Adminer for DB inspection
+#   docker compose --profile legacy up -d ...plus the old WordPress stack
+#
+# The WordPress services are retained only as the behavioural reference
+# for the rebuild (docs/MODERNIZATION_ASSESSMENT.md) and are gated behind
+# the `legacy` profile so they no longer start by default.
 services:
   db:
     image: mysql:8.0
+    profiles: ["legacy"]
     restart: unless-stopped
     # wordpress:cli's bundled MariaDB client can't load MySQL 8's default
     # caching_sha2_password auth plugin — use the legacy plugin instead.
@@ -28,6 +39,7 @@ services:
     build:
       context: ./wordpress
       dockerfile: Dockerfile
+    profiles: ["legacy"]
     restart: unless-stopped
     depends_on:
       db:
@@ -78,6 +90,7 @@ services:
   # and seed-import.php, both written to be idempotent).
   provision:
     image: wordpress:cli-2.10
+    profiles: ["legacy"]
     # wordpress:cli's default www-data user can't traverse this repo's
     # host directories (mode 750) for the bind mounts below; run as root
     # instead (provision.sh already passes --allow-root to every wp call).
@@ -113,16 +126,22 @@ services:
   #
   # This is a REMOTELY-MANAGED tunnel: the token below is issued by
   # Cloudflare Zero Trust > Networks > Tunnels, and the public hostname
-  # -> service mapping (noblesee.com -> http://wordpress:80) is
-  # configured there rather than in a local config file. Leave
-  # CLOUDFLARE_TUNNEL_TOKEN unset and this service simply won't start,
-  # so local-only development is unaffected.
+  # -> service mapping is configured THERE rather than in a local config
+  # file. Repointing the site at the new stack therefore takes two
+  # changes, not one: `depends_on` below, and the tunnel's ingress rule
+  # in the dashboard, which must now read
+  #
+  #     noblesee.com -> http://app:3000        (was http://wordpress:80)
+  #
+  # Leave CLOUDFLARE_TUNNEL_TOKEN unset and this service simply won't
+  # start, so local-only development is unaffected.
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     profiles: ["tunnel"]
     depends_on:
-      - wordpress
+      app:
+        condition: service_healthy
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
@@ -166,9 +185,33 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URI: postgres://${POSTGRES_USER:-noblesee}:${POSTGRES_PASSWORD:-noblesee}@appdb:5432/${POSTGRES_DB:-noblesee}
-      PAYLOAD_SECRET: ${PAYLOAD_SECRET:-dev-only-insecure-secret}
+      PAYLOAD_SECRET: "${PAYLOAD_SECRET:?set PAYLOAD_SECRET in .env - generate one with openssl rand -hex 32}"
       NODE_ENV: production
     command: ["npx", "payload", "migrate"]
+    restart: "no"
+
+  # One-shot catalog seed: the two reference books and the curatorial
+  # collections. Profile-gated rather than automatic — it is idempotent,
+  # but it updates in place, so running it on every `up` would quietly
+  # revert an editor's changes to those two books.
+  #
+  #   docker compose --profile seed run --rm appseed
+  appseed:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      target: builder
+    profiles: ["seed"]
+    depends_on:
+      appdb:
+        condition: service_healthy
+      appmigrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URI: postgres://${POSTGRES_USER:-noblesee}:${POSTGRES_PASSWORD:-noblesee}@appdb:5432/${POSTGRES_DB:-noblesee}
+      PAYLOAD_SECRET: "${PAYLOAD_SECRET:?set PAYLOAD_SECRET in .env - generate one with openssl rand -hex 32}"
+      NODE_ENV: production
+    command: ["npm", "run", "seed"]
     restart: "no"
 
   app:
@@ -187,15 +230,24 @@ services:
       - "8093:3000"
     environment:
       DATABASE_URI: postgres://${POSTGRES_USER:-noblesee}:${POSTGRES_PASSWORD:-noblesee}@appdb:5432/${POSTGRES_DB:-noblesee}
-      # Required. Sessions are signed with it, so a value that changes
-      # on restart would silently log everyone out.
-      PAYLOAD_SECRET: ${PAYLOAD_SECRET:-dev-only-insecure-secret}
-      # Object storage is Cloudflare R2 over the S3 API. Left blank,
-      # Payload falls back to local disk so the stack runs with no
-      # cloud account.
-      R2_ENDPOINT: ${R2_ENDPOINT:-}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      # Required, and deliberately has no default: sessions are signed
+      # with it, so a value that changes on restart would silently log
+      # everyone out — and a shared default committed to the repo would
+      # let anyone forge a session on a public deployment.
+      PAYLOAD_SECRET: "${PAYLOAD_SECRET:?set PAYLOAD_SECRET in .env - generate one with openssl rand -hex 32}"
+      # The site's own public origin. Payload uses it to build absolute
+      # URLs and to scope CSRF/CORS, so behind the tunnel it must be the
+      # public name rather than the container's own host:port.
+      NEXT_PUBLIC_SERVER_URL: ${PUBLIC_SITE_URL:-http://localhost:8093}
+      # Object storage is Cloudflare R2 over the S3 API. The
+      # CLOUDFLARE_S3_* fallbacks are the names the previous
+      # implementation already used in .env, so one set of credentials
+      # serves both stacks during the changeover. Left blank, Payload
+      # falls back to local disk and the stack still runs with no cloud
+      # account.
+      R2_ENDPOINT: ${R2_ENDPOINT:-${CLOUDFLARE_S3_ENDPOINTS:-}}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-${CLOUDFLARE_S3_ACCESS_KEY_ID:-}}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-${CLOUDFLARE_S3_SECRET_ACCESS_KEY:-}}
       R2_BUCKET: ${R2_BUCKET:-noblesee}
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
@@ -204,17 +256,18 @@ services:
       retries: 10
       start_period: 40s
 
-  # Dev-only DB inspection (e.g. checking wp_nr_downloads directly).
-  # Not part of the production architecture.
+  # Dev-only DB inspection. Not part of the production architecture, so
+  # it stays off unless asked for: `--profile tools`. Defaults to the
+  # application's Postgres; the legacy MySQL is reachable from the same
+  # UI by typing `db` as the server.
   adminer:
     image: adminer:latest
+    profiles: ["tools"]
     restart: unless-stopped
-    depends_on:
-      - db
     ports:
       - "8091:8080"
     environment:
-      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DEFAULT_SERVER: appdb
 
 volumes:
   db_data:

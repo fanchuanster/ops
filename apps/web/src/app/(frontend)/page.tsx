@@ -1,36 +1,39 @@
-import config from '@payload-config'
-import { getPayload } from 'payload'
+import React from 'react'
 
-/**
- * Placeholder catalog. The real reading experience arrives with the
- * frontend phase; this exists so the stack is verifiably wired
- * end-to-end — Next renders, Payload queries, PostgreSQL answers.
- */
-// Rendered per-request: it queries the database, which is not
-// reachable during `next build`.
+import { BookCard } from '../../components/BookCard'
+import { getCatalog } from '../../lib/catalog'
+
+// Rendered per-request: it queries the database, which is deliberately
+// not reachable during `next build`.
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const payload = await getPayload({ config })
-  const books = await payload.find({
-    collection: 'books',
-    limit: 10,
-    overrideAccess: false,
-  })
+  const { books } = await getCatalog({ limit: 8 })
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', maxWidth: '40rem', margin: '4rem auto', padding: '0 1rem' }}>
-      <h1>NobleSee</h1>
-      <p>Books worth reading, made comfortable to read.</p>
-      <h2>From the library</h2>
-      {books.docs.length === 0 ? (
+    <main className="page">
+      <section className="hero">
+        <h1>Books worth reading, made comfortable to read.</h1>
         <p>
+          Many valuable books — traditional Chinese classics, history, works on wisdom and living
+          well — survive online only as scanned pages. NobleSee rebuilds them as clean, reflowable
+          editions you can actually read: on a phone, on a Kindle, in the dark.
+        </p>
+      </section>
+
+      <div className="section-head">
+        <h2>From the library</h2>
+        <a href="/books">All books →</a>
+      </div>
+
+      {books.length === 0 ? (
+        <p className="empty">
           No books published yet. Add one in the <a href="/admin">admin</a>.
         </p>
       ) : (
-        <ul>
-          {books.docs.map((book) => (
-            <li key={book.id}>{book.title}</li>
+        <ul className="book-grid">
+          {books.map((book) => (
+            <BookCard key={book.id} book={book} />
           ))}
         </ul>
       )}

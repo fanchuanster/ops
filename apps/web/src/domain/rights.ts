@@ -32,6 +32,18 @@ const PUBLICLY_DISTRIBUTABLE: ReadonlySet<RightsStatus> = new Set<RightsStatus>(
   'permission_granted',
 ])
 
+/**
+ * The same set in array form, for database queries.
+ *
+ * Derived rather than restated: a collection that filters on a
+ * hand-written list would silently disagree with `isPubliclyDistributable`
+ * the first time this vocabulary changes, and disagreement here means
+ * publishing something we should not have.
+ */
+export const DISTRIBUTABLE_STATUSES: readonly RightsStatus[] = RIGHTS_STATUSES.filter((status) =>
+  PUBLICLY_DISTRIBUTABLE.has(status),
+)
+
 export type Visibility = 'public' | 'private'
 
 export interface RightsBearing {

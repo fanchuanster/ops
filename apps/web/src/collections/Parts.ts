@@ -1,6 +1,31 @@
-import type { CollectionConfig } from 'payload'
+import type { Access, CollectionConfig, Where } from 'payload'
 
-import { RIGHTS_STATUSES } from '../domain/rights'
+import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
+
+/**
+ * A Part inherits its visibility from its Book.
+ *
+ * Without this, Parts would fall back to Payload's authenticated-only
+ * default and the public catalog could list a book whose contents
+ * 403 — but the more important direction is the other one: a Part must
+ * never be readable when its Book is not. The conditions therefore
+ * describe the *book*, queried through the relationship, rather than
+ * trusting anything denormalised onto the part.
+ */
+const readParts: Access = ({ req }) => {
+  if (req.user) return true
+
+  const publiclyVisible: Where = {
+    and: [
+      { status: { equals: 'published' } },
+      { 'book.visibility': { equals: 'public' } },
+      { 'book.status': { equals: 'published' } },
+      { 'book.rightsStatus': { in: [...DISTRIBUTABLE_STATUSES] } },
+    ],
+  }
+
+  return publiclyVisible
+}
 
 /**
  * A Part is the readable/downloadable unit. Artifacts (EPUB/PDF/DOCX)
@@ -14,6 +39,9 @@ export const Parts: CollectionConfig = {
     useAsTitle: 'title',
     defaultColumns: ['title', 'book', 'order', 'status'],
     group: 'Library',
+  },
+  access: {
+    read: readParts,
   },
   fields: [
     { name: 'title', type: 'text', required: true },

@@ -19,6 +19,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # placeholders that are overridden at runtime.
 ENV DATABASE_URI=postgres://build:build@127.0.0.1:5432/build \
     PAYLOAD_SECRET=build-time-placeholder
+# Collection types are derived from the Payload config rather than
+# committed, so they can never drift from it. Generated here (no
+# database needed) so the type check that follows actually knows what a
+# Book is instead of seeing an untyped record.
+RUN npx payload generate:types
+# The admin UI resolves plugin-provided React components through this
+# map at runtime; without it the R2 upload handler is missing and media
+# uploads fall back to a broken control.
+RUN npx payload generate:importmap
 RUN npm run build
 
 FROM node:22-slim AS runner
