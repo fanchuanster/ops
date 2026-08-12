@@ -33,12 +33,22 @@ if [ -f "$REPO/.env" ]; then
     set +a
 fi
 
-# Interactive only when there is a terminal to be interactive with, so
-# the same script works from a shell and from CI or a script.
-TTY=()
+# Always keep stdin attached (-i) so piping a script in works; add a
+# pseudo-terminal (-t) only when there is a real one, so the same script
+# works from a shell and from CI or a heredoc.
+TTY=(-i)
 [ -t 0 ] && TTY=(-it)
 
-exec docker run --rm "${TTY[@]}" \
+# Publish the dev-server port only if nothing already holds it.
+# `wrangler dev` needs it; a one-off `wrangler r2 object get` does not,
+# and unconditionally claiming it would make every such command fail
+# while a dev server is running.
+PORT=()
+if ! (exec 3<>/dev/tcp/127.0.0.1/8787) 2>/dev/null; then
+    PORT=(-p 8787:8787)
+fi
+
+exec docker run --rm "${TTY[@]}" "${PORT[@]}" \
     -v "$REPO:/repo" \
     -v "$HERE/.cf-home:/home/node" \
     -w /repo/apps/web \
@@ -48,5 +58,4 @@ exec docker run --rm "${TTY[@]}" \
     -e NEXT_PUBLIC_SERVER_URL \
     -e PAYLOAD_SECRET \
     -u "$(id -u):$(id -g)" \
-    -p 8787:8787 \
     "$IMAGE" "$@"

@@ -3,17 +3,17 @@
 # End-to-end smoke test for the NobleSee site.
 #
 # Checks the things that are only true when the whole stack is wired up
-# — Next renders, Payload queries, PostgreSQL answers, and the access
-# rules do what they claim. The domain rules themselves are unit-tested
+# — Next renders, Payload queries, D1 answers, R2 hands back real bytes,
+# and the access rules do what they claim. The domain rules are unit-tested
 # in apps/web/src/domain/domain.test.ts; this is the HTTP-level pass
 # that catches the wiring between them.
 #
-#   ./tools/smoke-test.sh                                # localhost:8093
+#   ./tools/smoke-test.sh                                # the local Worker (wrangler dev)
 #   BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # or an explicit host
 #
 set -uo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:8093}"
+BASE_URL="${BASE_URL:-http://localhost:8787}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -158,11 +158,15 @@ else
 
     # Part 1 is open to everyone; the DOCX master is not a reader
     # download; part 3 is held until part 2 has been started.
-    check_eq "an open part is authorized" "$(auth /download/2/epub)" 303
+    # 200, not a redirect: the artifact is streamed from R2 through the
+    # Worker. The R2 binding has no presigned URLs, so there is no
+    # third-party URL to be sent to — which is the point, since such a
+    # URL would outlive the authorization decision that produced it.
+    check_eq "an open part is authorized" "$(auth /download/2/epub)" 200
     check_eq "the DOCX master is not offered" "$(auth /download/2/docx)" 404
     check_eq "a held-back part is refused" "$(auth /download/3/epub)" 403
 
-    # The signed URL must lead to the real file, not a 403 from storage.
+    # ...and the bytes are the real file, not an error page.
     BYTES="$(curl -sL -o "$WORKDIR/part.epub" -w '%{size_download}' \
         -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
         -H 'User-Agent: Mozilla/5.0' "$BASE_URL/download/2/epub")"

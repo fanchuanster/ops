@@ -1,0 +1,19 @@
+# Secrets for the local Worker (`./cf npx wrangler dev`).
+#
+#   cp .dev.vars.example .dev.vars
+#
+# .dev.vars is git-ignored. Everything here is a SECRET — non-secret
+# configuration belongs in the `vars` block of wrangler.jsonc, which is
+# committed. In production these are set with:
+#
+#   ./cf npx wrangler secret put PAYLOAD_SECRET
+#
+# so the value reaches Cloudflare without passing through the
+# repository or a deploy log.
+
+# Signs sessions. There is deliberately no default: a value that changes
+# on restart silently logs everyone out, and a shared value committed
+# anywhere would let someone forge a session. Generate your own:
+#
+#   openssl rand -hex 32
+PAYLOAD_SECRET=
