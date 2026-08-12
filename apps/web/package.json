@@ -6,40 +6,44 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "payload": "payload",
-    "seed": "payload run src/seed/seed.ts",
-    "generate:types": "payload generate:types",
-    "generate:importmap": "payload generate:importmap",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "//payload": "NEXT_RUNTIME=nodejs lets the Payload CLI resolve the D1 and R2 bindings through wrangler's local Miniflare, the same way next dev does.",
+    "payload": "NEXT_RUNTIME=nodejs payload",
+    "seed": "NEXT_RUNTIME=nodejs payload run src/seed/seed.ts",
+    "generate:types": "NEXT_RUNTIME=nodejs payload generate:types",
+    "generate:importmap": "NEXT_RUNTIME=nodejs payload generate:importmap",
+    "migrate:create": "NEXT_RUNTIME=nodejs payload migrate:create",
+    "migrate": "NEXT_RUNTIME=nodejs payload migrate",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:boundary": "sh scripts/check-domain-boundary.sh",
     "verify": "npm run generate:types && npm run check:boundary && npm run typecheck && npm run test"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1108.0",
-    "@aws-sdk/s3-request-presigner": "^3.1108.0",
-    "@payloadcms/db-postgres": "3.88.0",
+    "@opennextjs/cloudflare": "^1.20.2",
+    "@payloadcms/db-d1-sqlite": "^3.88.0",
     "@payloadcms/email-nodemailer": "^3.88.0",
     "@payloadcms/next": "3.88.0",
     "@payloadcms/richtext-lexical": "3.88.0",
-    "@payloadcms/storage-s3": "3.88.0",
+    "@payloadcms/storage-r2": "^3.88.0",
     "epubjs": "^0.3.93",
     "graphql": "^16.8.1",
     "next": "16.3.0",
     "payload": "3.88.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "sharp": "^0.34.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "typescript": "^5.7.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.122.0"
   },
   "engines": {
     "node": ">=20.9.0"

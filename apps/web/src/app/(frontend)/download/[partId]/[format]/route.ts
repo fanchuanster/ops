@@ -7,9 +7,8 @@ import {
   recordDownload,
 } from '../../../../../lib/authorizeDownload'
 import {
-  isObjectStorageConfigured,
+  artifactStream,
   localArtifactPath,
-  signedArtifactUrl,
   streamLocalArtifact,
 } from '../../../../../lib/storage'
 
@@ -17,11 +16,12 @@ import {
  * The authorized download path.
  *
  * Every refusal is decided server-side before a single byte is
- * reachable. The response is a redirect to a 60-second signed URL, or
- * — when object storage is not configured — a stream through this
- * process. In neither case is the object publicly addressable.
+ * reachable. The response streams the object from R2 through this
+ * Worker — or from local disk when there is no R2 binding — so the
+ * object is never publicly addressable and there is no URL that
+ * outlives the authorization decision behind it.
  *
- * The ledger row is written *before* the redirect is issued. Writing it
+ * The ledger row is written *before* the body is returned. Writing it
  * after would let a reader spend a slot without it being counted if the
  * response were abandoned, which is the direction that breaks the limit.
  */
@@ -114,20 +114,20 @@ export async function GET(
     partOrder: part.order,
   })
 
-  if (isObjectStorageConfigured()) {
-    const url = await signedArtifactUrl(decision.storageKey, decision.filename)
-    return Response.redirect(url, 303)
+  const headers = {
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': `attachment; filename="${decision.filename}"`,
+    // Private: this response is scoped to one authenticated reader and
+    // must never be held in a shared cache.
+    'Cache-Control': 'private, no-store',
   }
+
+  const stream = await artifactStream(decision.storageKey)
+  if (stream) return new Response(stream, { headers })
 
   const filePath = localArtifactPath(decision.storageKey)
   if (!filePath) {
     return Response.json({ error: 'Artifact is missing from storage.' }, { status: 502 })
   }
-  return new Response(streamLocalArtifact(filePath), {
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="${decision.filename}"`,
-      'Cache-Control': 'private, no-store',
-    },
-  })
+  return new Response(streamLocalArtifact(filePath), { headers })
 }

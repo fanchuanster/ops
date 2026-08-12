@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# Runs the Cloudflare toolchain in a container.
+#
+# Not a preference — a requirement on this host. wrangler ships
+# `workerd`, the real Workers runtime, and workerd is built against
+# glibc 2.32+ while this machine is Ubuntu 20.04 on glibc 2.31. It
+# cannot start here, which takes out `wrangler dev`, the local Miniflare
+# that backs `getPlatformProxy`, and therefore every Payload CLI command
+# that needs a D1 binding. Anything touching wrangler goes through here.
+#
+#   ./cf npm run build            build the Next output
+#   ./cf npm run deploy           build the Worker and ship it
+#   ./cf npm run generate:types   Payload types, against local D1
+#   ./cf npx wrangler d1 ...      any wrangler command
+#
+# Runs as the invoking uid so generated files — payload-types.ts, the
+# migrations, .open-next — belong to you and not to root.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
+
+IMAGE="node:22-bookworm"
+
+# The API token is needed for deploys and for any command that talks to
+# the Cloudflare API. Passed through rather than baked in, and absent
+# from the command line so it never lands in shell history or ps output.
+if [ -f "$REPO/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$REPO/.env"
+    set +a
+fi
+
+# Interactive only when there is a terminal to be interactive with, so
+# the same script works from a shell and from CI or a script.
+TTY=()
+[ -t 0 ] && TTY=(-it)
+
+exec docker run --rm "${TTY[@]}" \
+    -v "$REPO:/repo" \
+    -v "$HERE/.cf-home:/home/node" \
+    -w /repo/apps/web \
+    -e HOME=/home/node \
+    -e CLOUDFLARE_API_TOKEN \
+    -e CLOUDFLARE_ACCOUNT_ID \
+    -e NEXT_PUBLIC_SERVER_URL \
+    -e PAYLOAD_SECRET \
+    -u "$(id -u):$(id -g)" \
+    -p 8787:8787 \
+    "$IMAGE" "$@"

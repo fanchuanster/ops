@@ -1,0 +1,56 @@
+/**
+ * Worker configuration for the NobleSee web application.
+ *
+ * The bindings here must match `terraform output wrangler_bindings` —
+ * Terraform owns the D1 database and the R2 bucket, this file only
+ * attaches them. If the two disagree the deploy succeeds and the app
+ * fails at runtime, so treat the Terraform output as the source of
+ * truth and copy from it rather than editing values here by hand.
+ *
+ * Deliberately absent: any secret. PAYLOAD_SECRET signs sessions and is
+ * set with `wrangler secret put PAYLOAD_SECRET`, which keeps it out of
+ * the repository and out of the deploy log. R2 and D1 need no
+ * credentials at all — a binding is a capability handed to this Worker
+ * alone, which is why the port drops the long-lived S3 access keys the
+ * container needed.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "noblesee",
+  "main": ".open-next/worker.js",
+
+  // Recent enough for the Node compatibility surface Payload and the
+  // Next server rely on.
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "noblesee",
+      "database_id": "23b37124-5024-4c1b-a23a-082cfa11cd03"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "ARTIFACTS",
+      "bucket_name": "noblesee"
+    }
+  ],
+
+  "vars": {
+    // Payload scopes CSRF and CORS to this origin and builds absolute
+    // URLs from it, so it must be the real public name, not a guess.
+    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com"
+  }
+}

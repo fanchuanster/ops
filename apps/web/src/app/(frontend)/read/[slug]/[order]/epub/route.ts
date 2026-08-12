@@ -5,7 +5,6 @@ import { authorizeDownload } from '../../../../../../lib/authorizeDownload'
 import { getBookBySlug, getPartsForBook } from '../../../../../../lib/catalog'
 import {
   artifactStream,
-  isObjectStorageConfigured,
   localArtifactPath,
   streamLocalArtifact,
 } from '../../../../../../lib/storage'
@@ -57,11 +56,8 @@ export async function GET(
     'Cache-Control': 'private, no-store',
   }
 
-  if (isObjectStorageConfigured()) {
-    const stream = await artifactStream(decision.storageKey)
-    if (!stream) return Response.json({ error: 'Artifact missing' }, { status: 502 })
-    return new Response(stream, { headers })
-  }
+  const stream = await artifactStream(decision.storageKey)
+  if (stream) return new Response(stream, { headers })
 
   const filePath = localArtifactPath(decision.storageKey)
   if (!filePath) return Response.json({ error: 'Artifact missing' }, { status: 502 })
