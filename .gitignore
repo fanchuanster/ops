@@ -210,18 +210,9 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# NobleSee plugin PHP dependencies (aws/aws-sdk-php for R2 storage,
-# includes/storage.php) — installed by wordpress/Dockerfile at image
-# build time via composer.json/composer.lock, which ARE committed.
-wordpress/plugins/noblesee-core/vendor/
-
 # Local diagnostic scratch files
 .diag
 .diag2
-
-# Django service build artifacts
-services/web/staticfiles/
-services/web/.pytest_cache/
 
 # Next.js / Payload
 apps/web/node_modules/

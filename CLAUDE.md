@@ -209,7 +209,8 @@ never in UI components and never buried in Payload hooks. That module
 must not import Payload, Next or a database client — Payload calls into
 it, never the reverse.
 
-The following must remain server-side Django functionality:
+The following must remain server-side application functionality
+(Next.js route handlers and Payload, never the browser):
 
 - book management and book parts
 - release scheduling
@@ -238,11 +239,12 @@ Target architecture:
         +------------------+------------------+
         |                                     |
         v                                     v
-  Astro frontend                     Django + PostgreSQL
-  catalog, book pages,               accounts, rights, limits,
-  reader, blog                       staged release, downloads,
-        |                            admin/editorial UI, API
-        |                                     |
+        Next.js + Payload application
+        catalog, book pages, reader, blog,
+        accounts, rights, limits, staged
+        release, downloads, admin/editorial
+        UI, JSON API
+                           |
         +------------------+------------------+
                            |
         +------------------+------------------+
@@ -269,8 +271,8 @@ Target architecture:
 
 Separate services:
 
-- NobleSee Web (Django + PostgreSQL)
-- NobleSee Frontend (Astro)
+- NobleSee Web (Next.js + Payload + PostgreSQL) — one deployable
+  serving the public site, the API and the admin
 - NobleSee Converter
 - NobleSee Conversion Worker
 - NobleSee X Worker
@@ -288,16 +290,17 @@ Do not prematurely introduce Kubernetes-specific complexity into the MVP.
 
 PaddleOCR is the OCR engine feeding the conversion services (see section
 8, OCR, for the fuller evaluation). The conversion service is
-deliberately standalone and platform-agnostic — it talks to the Django
-app over HTTP and knows nothing about the frontend.
+deliberately standalone and platform-agnostic — it talks to the web
+application over HTTP and knows nothing about the frontend.
 
 ---
 
 # FRONTEND
 
 The NobleSee frontend is a Next.js (App Router) application in React
-and TypeScript. It was previously specified as WordPress + Kadence, then
-briefly Astro; see section 2.1 and `docs/MODERNIZATION.md` section 14.
+and TypeScript, with Payload embedded in the same application. It was
+previously specified as WordPress + Kadence, then briefly Django +
+Astro; see section 2.1 and `docs/MODERNIZATION.md` section 14.
 
 Next.js is required by Payload 3, which is Next-native, and gives
 server-side and static rendering where each page needs it — the catalog
@@ -318,7 +321,7 @@ The frontend must provide:
 
 Do NOT put business logic in the frontend. Rights checks, download
 authorization, rate limiting and staged release are enforced server-side
-in Django; the frontend renders what the API permits and must never be
+server-side; the frontend renders what the API permits and must never be
 the only thing standing between a reader and a restricted file.
 
 Prefer server components and static rendering, with client components
@@ -347,7 +350,7 @@ Use OpenAI-compatible HTTP APIs when possible.
 IMPORTANT:
 
 - Do not expose this endpoint directly to public browsers.
-- WordPress should not directly depend on the vLLM endpoint.
+- The web application should not directly depend on the vLLM endpoint.
 - The conversion/AI service should communicate with vLLM.
 - Make the LLM endpoint configurable through environment variables.
 - Never hard-code the endpoint in application source code.
@@ -699,21 +702,21 @@ Target: S3-compatible object storage.
 
 Production:
 
-AWS S3
+Cloudflare R2, over the S3 API. Chosen over AWS S3 because the domain,
+DNS and tunnel already live on Cloudflare and R2 has no egress fees.
+Because it is S3-compatible, moving to S3 later is a configuration
+change rather than a rewrite.
 
 Development:
 
-MinIO is acceptable.
+Leaving the R2 credentials unset is acceptable — Payload falls back to
+local disk, so the stack runs with no cloud account. MinIO is also
+fine.
 
-Staged rollout: for now, local on-disk storage (WordPress's native
-uploads directory) is acceptable — this is what the MVP actually runs on
-(see docs/ARCHITECTURE_REVIEW.md section 4). Migrate to S3-compatible
-storage later, once a real consumer needs it (the conversion service, a
-CDN, multi-instance web servers). The download path should stream files
-rather than redirect to a public media URL, so this migration doesn't
-change the public download contract (see
-wordpress/plugins/noblesee-core/includes/downloads.php). Tracked in
-docs/ROADMAP.md.
+The download path must stream files or issue short-lived signed URLs,
+never redirect to a public object URL: protected artifacts must not be
+reachable without passing the server-side rights, limit and staged
+release checks.
 
 Suggested structure:
 

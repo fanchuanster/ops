@@ -1,185 +1,128 @@
 # NobleSee
 
-A WordPress-based site for hosting and sharing essential and noble books —
-especially traditional Chinese culture and history — digitized, proofread,
-and made comfortable to read on any device. See `CLAUDE.md` for the full
-project mission and architecture, and `docs/ARCHITECTURE_REVIEW.md` /
-`docs/ROADMAP.md` for the decisions and scope behind this MVP.
+A digital preservation and e-reader accessibility project: valuable books —
+traditional Chinese classics, history, and works on wisdom and living well —
+rebuilt from scans into clean, reflowable editions that are genuinely pleasant
+to read.
 
-Domain: noblesee.com
+The point is not to host PDFs. The point is to make these books readable: on a
+phone, on a Kindle, in the dark, at whatever type size you need.
 
-## What's here
+## Stack
 
-This is the first runnable slice: a Dockerized WordPress site with a
-custom `noblesee-core` plugin implementing the Book/Part content model,
-rights-status gating, per-format downloads (EPUB / PDF in three font-size
-variants), and per-user download rate limiting — seeded with one real
-public-domain book (*Tao Te Ching*, ch. 1, Legge's 1891 translation) so
-the whole catalog → book → download flow works out of the box.
+Next.js 16 (App Router) + React + TypeScript, with **Payload 3 embedded inside
+the same application** as CMS and admin, on PostgreSQL 18. One deployable
+serves the public site, the JSON API and the editorial admin. Object storage is
+Cloudflare R2 over the S3 API.
 
-## Quickstart
+Business rules live in `apps/web/src/domain` — a framework-independent layer
+that may not import Payload, Next or a database client. That boundary is
+enforced by a check in `npm run verify`, not just documented.
 
-```
+> This replaced a WordPress implementation in August 2026. The reasoning is in
+> `docs/MODERNIZATION_ASSESSMENT.md`; the deciding factor was that there were no
+> users and no data to preserve. The old code is in git history — nothing was
+> migrated.
+
+## Running it
+
+```bash
 cp .env.example .env
-docker compose up -d
-docker compose logs -f provision   # first boot: installs WP, theme, plugin, seed content — exits when done
+# set PAYLOAD_SECRET — there is no default:  openssl rand -hex 32
+docker compose up -d --build
 ```
 
-Then:
+- Site: http://localhost:8093
+- Admin: http://localhost:8093/admin (create the first user on first visit)
+- Health: http://localhost:8093/health — checks the database, not just the process
 
-- Site: http://localhost:8090
-- Book catalog: http://localhost:8090/books/
-- wp-admin: http://localhost:8090/wp-admin (`WORDPRESS_ADMIN_USER` /
-  `WORDPRESS_ADMIN_PASSWORD` from `.env`, defaults `admin` / `admin`)
-- Adminer (DB inspection, dev only): http://localhost:8091 — server `db`,
-  user/password/database from `.env`
+Schema migrations run automatically as a one-shot `appmigrate` service before
+the app starts. Payload's Postgres adapter does not auto-create tables outside
+dev, so migrations are explicit and versioned in `apps/web/src/migrations`.
 
-### Exposing it beyond localhost
+### Seeding the catalog
 
-To reach the site from another machine, set `WORDPRESS_URL` in `.env` to
-`http://<host-ip-or-hostname>:8090` *before* first provisioning — WordPress
-bakes this into its `siteurl`/`home` options, and links/assets will point
-at `localhost` (broken for remote visitors) otherwise. If the site is
-already provisioned, fix it after the fact instead of re-provisioning:
-
-```
-docker compose run --rm --entrypoint sh provision -c '
-  wp --path=/var/www/html --allow-root option update siteurl "http://<host-ip>:8090"
-  wp --path=/var/www/html --allow-root option update home    "http://<host-ip>:8090"
-  wp --path=/var/www/html --allow-root rewrite flush --hard
-'
+```bash
+docker compose --profile seed run --rm appseed
 ```
 
-The container already publishes on `0.0.0.0:8090`, so nothing in
-`docker-compose.yml` needs to change — this is purely a WordPress config
-step.
+Loads the curatorial collections and two reference books (Tao Te Ching; The
+Analects, in three parts, which exercises staged release). Idempotent — matched
+on slug and updated in place. It is profile-gated rather than automatic
+precisely because it updates in place: running it on every `up` would quietly
+revert an editor's changes to those books.
 
-Downloads require a reader account — register via the "create a free
-account" link on a book page, or in wp-admin. This is intentional:
-per-user rate limiting needs a real identity, not just an IP/cookie.
+### Other profiles
 
-Re-running `docker compose up` is safe — provisioning and seeding are
-idempotent and won't duplicate content or reinstall WordPress.
-
-### Useful WP-CLI commands
-
-```
-docker compose exec provision wp --path=/var/www/html --allow-root plugin list
-docker compose exec provision wp --path=/var/www/html --allow-root theme list
-docker compose exec provision wp --path=/var/www/html --allow-root post list --post_type=nr_book
-docker compose exec provision wp --path=/var/www/html --allow-root post list --post_type=nr_part
+```bash
+docker compose --profile tools up -d     # Adminer on :8091, dev-only DB inspection
+docker compose --profile tunnel up -d    # publish on noblesee.com via Cloudflare Tunnel
 ```
 
-(`provision` exits after seeding on its first run — use `docker compose
-run --rm provision wp ...` if the container has already exited, or swap
-in the long-lived `wordpress` service's container instead.)
+## Development
 
-### Storage (R2)
-
-Book-format files (DOCX/EPUB/PDF) live on local WordPress uploads by
-default and need no setup — the plugin falls back to local storage
-whenever R2 isn't configured. To store them in Cloudflare R2 instead,
-set these in `.env` before `docker compose up` (or `docker compose build
-wordpress` if the stack is already running — the SDK is installed at
-image build time, see `wordpress/Dockerfile`):
-
-```
-CLOUDFLARE_S3_ENDPOINTS=https://<account_id>.r2.cloudflarestorage.com
-CLOUDFLARE_S3_ACCESS_KEY_ID=...
-CLOUDFLARE_S3_SECRET_ACCESS_KEY=...
-NR_R2_BUCKET=noblesee
+```bash
+cd apps/web
+npm install
+npm run verify     # generate types, domain-boundary check, typecheck, unit tests
+npm run dev
 ```
 
-New/edited parts sync to R2 automatically on save. To catch up files
-attached before R2 was configured:
-
-```
-docker compose exec wordpress wp --path=/var/www/html --allow-root nr backfill-storage
+```bash
+./tools/smoke-test.sh                                # HTTP-level checks, localhost:8093
+BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # or an explicit host
 ```
 
-See `docs/ARCHITECTURE_REVIEW.md` section 4 for what's in scope (part
-format files only — theme images and book covers stay local) and why.
+`npm run verify` covers the domain rules in isolation; the smoke test covers the
+wiring between them — that the catalog only lists cleared books, that a
+held-back part offers no download link, that the DOCX master is never offered to
+readers, and that anonymous downloads are refused.
 
-### Sign-up
+### Generating book artifacts
 
-`/sign-up/` (`includes/auth.php`) replaces WordPress's default
-`wp-login.php?action=register` — a visit to the old URL now redirects
-there. Name/email/password sign-up needs no setup. "Continue with
-Google" (`includes/social-login.php`) needs real OAuth credentials and
-stays hidden until they're set:
-
-```
-GOOGLE_OAUTH_CLIENT_ID=...
-GOOGLE_OAUTH_CLIENT_SECRET=...
+```bash
+pip install python-docx ebooklib weasyprint pillow
+python3 tools/generate-seed-content.py
 ```
 
-Get these from Google Cloud Console > APIs & Services > Credentials >
-Create OAuth client ID (Web application), and add this exact URL as an
-Authorized redirect URI (must match `WORDPRESS_URL` above):
-
-```
-{WORDPRESS_URL}/auth/google/callback/
-```
-
-Apple Sign In isn't implemented yet — see `docs/ROADMAP.md`.
-
-### Smoke test
-
-```
-./tools/smoke-test.sh                                  # against localhost:8090
-BASE_URL=http://10.0.0.5:8090 ./tools/smoke-test.sh    # or an explicit host
-```
-
-Exercises the paths that actually protect content and readers: rights
-gating, the format allowlist (the DOCX master must never be publicly
-downloadable), authentication, nonce validity, staged-release locking,
-and the distinct-book download limit. Exits non-zero on any failure.
-
-Development only — it creates a subscriber account, clears that
-account's download history, and temporarily changes the download limit
-(restored on exit). It only ever touches its own test user's rows, but
-don't point it at production.
-
-### Resetting
-
-```
-docker compose down -v   # drops the db_data and wp_data volumes — full reset
-```
+Writes DOCX, EPUB and three PDF sizes into `content/seed/`. This stands in for
+the real OCR/AI conversion pipeline (`services/converter`, not yet built) so the
+seed content is reproducible rather than a pile of committed binaries nobody can
+regenerate.
 
 ## Layout
 
 ```
-wordpress/Dockerfile                 wordpress service image: WP-CLI + plugin's Composer deps (R2 SDK, OAuth client)
-wordpress/plugins/noblesee-core/   custom plugin: content model, downloads, rate limiting, templates, R2 storage, sign-up/Google login
-provisioning/                       first-boot install/activation/seed scripts (idempotent)
-tools/                               dev utilities (seed-content generation)
-docs/                                architecture review + roadmap
-docker-compose.yml                   db, wordpress, provision, adminer
+apps/web/                    the application — public site, API and admin
+  src/domain/                business rules; imports no framework (enforced)
+  src/collections/           Payload collections: Users, Media, Books, Parts, Collections
+  src/lib/                   Payload-aware query helpers for the site
+  src/app/(frontend)/        public pages
+  src/app/(payload)/         admin and API routes
+  src/migrations/            versioned schema migrations
+  src/seed/                  catalog seed
+content/seed/                generated book artifacts (DOCX/EPUB/PDF)
+tools/                       smoke test, seed-content generator
+docs/                        architecture decisions and roadmap
+docker-compose.yml           appdb, appmigrate, app (+ seed/tools/tunnel profiles)
 ```
 
-### Seed content
+## Domain rules worth knowing
 
-Two public-domain books ship as seed data: *Tao Te Ching* ch. 1 and *The
-Analects* Books I–III (three parts, to exercise multi-part behaviour).
-Their DOCX/EPUB/PDF files are generated by
-`tools/generate-seed-content.py` — a dev utility standing in for the real
-conversion pipeline (see `docs/ROADMAP.md`), kept in the repo so the
-committed files are reproducible rather than opaque binaries:
+**Rights fail closed.** Every book carries an explicit rights status; only
+`public_domain`, `licensed` and `permission_granted` may be distributed
+publicly. `unknown` is deliberately not distributable — an unreviewed book is
+never published by default. A Part may be *more* restricted than its Book, never
+less.
 
-```
-pip install python-docx ebooklib weasyprint pillow
-python3 tools/generate-seed-content.py          # writes only missing files
-python3 tools/generate-seed-content.py --force  # regenerate everything
-```
+**Download limits count books, not files.** A reader who takes EPUB, DOCX and
+three PDF variants of one book has consumed one slot, because they read one
+book. This is an application-level fairness policy, not a bandwidth control.
 
-Adding a book is a matter of adding one entry to the spec in that script
-and one to `$books` in `provisioning/seed-import.php`; the importer is
-idempotent per book, so new books can be seeded into an already-running
-site by re-running it.
+**Staged release is a per-reader clock.** Part N+1 opens a fixed delay after
+*that reader* reached part N — so someone who discovers a book a year late gets
+the same paced experience as an early reader. It is a reading rhythm, not
+scarcity: nothing expires, and starting late costs nothing.
 
-## Status
-
-MVP / early runnable system — one full vertical slice working end to end.
-See `docs/ROADMAP.md` for what's deliberately deferred (OCR/AI conversion
-pipeline, WooCommerce paid unlocks + donations, Send-to-Kindle, per-user
-blogs, e-reader resale link, X anti-explicit-content worker, Kubernetes).
+All three are enforced server-side. The frontend renders what the API permits
+and is never the only thing between a reader and a restricted file.

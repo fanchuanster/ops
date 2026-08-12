@@ -7,6 +7,10 @@ sections 7-11 (see docs/ROADMAP.md), using the same tooling that pipeline
 is expected to use, so the seed content is reproducible instead of being
 a pile of committed binaries nobody can regenerate.
 
+Output lands in content/seed/. Those files are also mirrored into the R2
+bucket, which is where apps/web/src/seed/seed.ts points the catalog's
+artifact keys.
+
 For each part it produces the DOCX master plus the reader-facing formats
 generated *from* that same content: EPUB, and PDF in three font sizes.
 
@@ -34,9 +38,7 @@ from weasyprint import HTML
 from PIL import Image, ImageDraw, ImageFont
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SEED_ROOT = os.path.join(
-    REPO_ROOT, "wordpress", "plugins", "noblesee-core", "seed-content"
-)
+SEED_ROOT = os.path.join(REPO_ROOT, "content", "seed")
 
 CJK_FONT = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"
 LATIN_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"

@@ -1,82 +1,91 @@
 # NobleSee — Roadmap
 
-The MVP (see `docs/ARCHITECTURE_REVIEW.md`) delivers one working vertical
-slice: browse a book catalog, open a book, download a part in a chosen
-format, under rights and per-user rate-limit gates. Everything below is
-deliberately deferred — named here so the MVP's scope stays legible as a
-foundation rather than reading as an oversight.
+The platform was rebuilt on Next.js + Payload + PostgreSQL in August 2026
+(NR-31; see `docs/MODERNIZATION_ASSESSMENT.md`). What exists today is the
+site: a catalog, book pages, and the three domain rules — rights, download
+limits, staged release — implemented and unit-tested in a
+framework-independent layer.
 
-## Content production
+Everything below is deliberately deferred, named here so the current scope
+stays legible as a foundation rather than reading as an oversight.
 
-- **OCR + AI conversion pipeline** — standalone `services/converter`
-  (FastAPI, async job API per `CLAUDE.md` section 13), PaddleOCR for
-  Chinese/English/mixed scans, the self-hosted vLLM/Gemma endpoint for
-  OCR-correction assistance (never silent rewriting — original + AI
-  suggestion + human approval, per `CLAUDE.md` section 7), Celery/Redis
-  for the job queue, DOCX generation (python-docx/LibreOffice/Pandoc,
-  evaluate before committing), EPUB 3 generation and validation, and the
-  standalone public conversion portal.
-- **Part-level rights overrides** — currently rights status lives only on
-  the Book; a Part inheriting a different status isn't supported yet.
-- **Staged release: paid early unlock** — the time-delay half is built
-  (see `ARCHITECTURE_REVIEW.md` section 7); the "pay a small amount to
-  open the next part early" half still needs WooCommerce, and should stay
-  a seriousness gate rather than a revenue mechanism per `CLAUDE.md`.
+## Built
 
-## Monetization (secondary to the reading mission — see CLAUDE.md's
-## Business Model section; no dark patterns)
-
-- **WooCommerce + Stripe** — paid early unlocks and donations.
-- **E-reader affiliate/resale link** — discounted, dedicated product link.
+- **Rights model** — six statuses, failing closed on `unknown`; part-level
+  overrides that may restrict but never relax the parent book (NR-9, NR-10).
+- **Download limits** — distinct books in a rolling window, not files.
+- **Staged release** — a per-reader clock, not a global publication date.
+- **Site** — catalog with collection filtering, book pages, reading-first
+  typography with Traditional Chinese first in the font stack, light/dark/auto.
 
 ## Reader experience
 
-- **In-browser reflowable EPUB reading** (e.g. epub.js) — MVP ships PDF
-  inline-view + EPUB download only; a real in-app reader is a distinct
-  future feature.
-- **Send-to-Kindle** — SMTP-based delivery service.
-- **Dark/light reading modes, adjustable in-page settings** beyond the
-  three fixed PDF variants.
+- **Authorized download route** — wires the three domain rules to short-lived
+  signed R2 URLs. The book pages already link to it; it is the next thing to
+  build, and the smoke test fails on it deliberately until it exists.
+- **In-browser reflowable EPUB reading** (epub.js) — existed in the WordPress
+  implementation, not yet rebuilt (NR-16).
+- **In-reader typography controls** — font size, line spacing, margins; depends
+  on the reader existing (NR-18).
+- **Reader accounts** — sign-up, log-in and account pages against Payload auth,
+  front-of-site rather than through the admin. Google sign-in (NR-30) and Apple
+  Sign In (NR-25) hang off this; the Google OAuth client itself carries over
+  unchanged.
+- **Send-to-Kindle** — SMTP-based delivery service (NR-17).
+
+## Content production
+
+- **OCR + AI conversion pipeline** — standalone `services/converter` (FastAPI,
+  async job API per `CLAUDE.md` section 13), PaddleOCR for Chinese/English/mixed
+  scans, the self-hosted vLLM/Gemma endpoint for OCR-correction assistance
+  (never silent rewriting — original + AI suggestion + human approval, per
+  `CLAUDE.md` section 7), Celery/Redis for the job queue, DOCX generation
+  (python-docx/LibreOffice/Pandoc, evaluate before committing), EPUB 3
+  generation and validation, and the public conversion portal (NR-1 … NR-8).
+
+  Unaffected by the platform rebuild: this was always a standalone service
+  talking HTTP, deliberately knowing nothing about the frontend.
+
+  Until it exists, `tools/generate-seed-content.py` stands in for it, writing
+  reproducible artifacts into `content/seed/`.
+
+## Monetization
+
+Secondary to the reading mission — see `CLAUDE.md`'s Business Model section.
+No dark patterns.
+
+- **Stripe** — donations and paid unlocks, integrated directly from the
+  application (NR-12). WooCommerce is gone with WordPress and is not being
+  replaced.
+- **Paid early unlock** — the time-delay half of staged release is built; the
+  "pay a small amount to open the next part early" half should stay a
+  seriousness gate rather than a revenue mechanism.
+- **E-reader affiliate/resale link** — discounted, dedicated product link
+  (NR-14).
 
 ## Platform
 
-- **Per-user blogs** — each user's own blog (WP Multisite or BuddyPress).
-- **Automated X anti-explicit-content worker** — secondary to the core
-  mission per `CLAUDE.md`'s Core Mission section; posts an anti-yellow
-  reply to X threads containing explicit content. Standalone service, not
-  a WordPress plugin.
+- **Per-user blogs** (NR-20) — re-scoped by the rebuild. This was nearly free
+  on WordPress; on the new stack it is a Payload collection plus author-scoped
+  access rules, routes and moderation. Re-estimate before scheduling.
+- **Automated X anti-explicit-content worker** (NR-21) — secondary to the core
+  mission per `CLAUDE.md`'s Core Mission section. Standalone service.
+- **Chinese full-text search** — Postgres needs `pg_jieba` or `zhparser` to
+  segment Chinese text; the default configuration will not tokenise it usefully.
 
 ## Infrastructure
 
-- ~~**S3/MinIO storage swap**~~ — done: book-format artifacts
-  (DOCX/EPUB/PDF) now live in Cloudflare R2, mirrored on save via
-  `includes/storage.php` and resolved transparently by the download/
-  online-reader paths in `includes/access.php`. See
-  `docs/ARCHITECTURE_REVIEW.md` section 4. Generic WordPress media
-  (theme images, book covers) is unaffected and still local — folding
-  that in too is only worth it alongside a CDN/multi-instance web tier,
-  not before.
-- **Redis** — needed once the conversion service's job queue exists; not
-  useful to the MVP's simple indexed-SQL rate limiter.
-- **Kubernetes manifests** — Docker Compose is the MVP deployment target;
-  move to k8s/EKS once there's more than one service to orchestrate.
-- ~~**Custom sign-up screen + Google sign-up**~~ — done: `/sign-up/`
-  (`includes/auth.php`, `includes/social-login.php`) replaces
-  `wp-login.php?action=register` outright; "Continue with Google" is
-  built on `league/oauth2-client`. See
-  `docs/ARCHITECTURE_REVIEW.md` section 9.
-  - **Apple Sign In** — needs an active paid Apple Developer Program
-    membership and Apple-side setup (Services ID, a Sign In with Apple
-    private key, Team ID) before there's anything to wire up; a second
-    provider can slot in beside `nr_google_oauth_provider()` once that
-    exists.
-  - **Custom login screen** — only sign-up was replaced this pass; the
-    *login* form (existing password-based accounts) is still
-    WordPress's default `wp-login.php`.
-- **Admin/UX polish** — hardened default WP settings, revisit ACF if
-  native meta-box UX outgrows what's reasonable to hand-roll.
-- **Platform re-evaluation (NR-31)** — whether to stay on WordPress at
-  all. Answered for this phase: stay, but the decision has explicit
-  expiry conditions, and Django + PostgreSQL is the target if it flips.
-  See `docs/ARCHITECTURE_REVIEW.md` section 11. The staged plan for
-  executing that move, if a trigger fires, is `docs/MODERNIZATION.md`.
+- **Hosting target** (NR-28) and **public HTTPS** (NR-29) — blocked on the same
+  thing: outbound TCP/UDP 7844 is filtered upstream of this host, so the
+  Cloudflare Tunnel cannot connect and the site returns error 1033. The 443
+  fallback is unusable — the tunnel edge IPs serve an expired non-tunnel
+  certificate there. Whichever host is chosen must permit that egress or make
+  the tunnel unnecessary.
+- **Tunnel ingress** — remotely managed, so the rule must be repointed to
+  `http://app:3000` in the Zero Trust dashboard.
+- **Redis** (NR-23) — needed once the conversion service's job queue exists.
+- **Kubernetes manifests** (NR-24) — Compose is the current deployment target;
+  move to k8s/EKS once there is more than one service to orchestrate.
+- **Covers and editorial media in R2** — book artifacts already live there;
+  Payload media uploads now route there too when credentials are set. Folding in
+  a CDN is only worth it alongside a multi-instance web tier.
