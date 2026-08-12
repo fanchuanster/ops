@@ -28,7 +28,7 @@ The token needs:
 | Account | D1 — Edit           | the application database                 |
 | Account | Workers Scripts — Edit | `wrangler deploy`, custom domain       |
 | Zone    | DNS — Edit          | the `www` record                         |
-| Zone    | Zone Settings / Config — Edit | the www→apex redirect ruleset  |
+| Zone    | Single Redirect — Edit | the www→apex redirect ruleset            |
 
 Verify a token before using it:
 

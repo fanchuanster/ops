@@ -35,8 +35,12 @@ variable "manage_redirect_ruleset" {
   description = <<-EOT
     Whether Terraform manages the www→apex redirect ruleset.
 
-    The Rulesets API needs a zone permission beyond DNS and Zone Settings —
-    in the token UI it is the "Dynamic Redirect" permission (Zone scope).
+    The Rulesets API needs a zone permission beyond DNS and Zone Settings.
+    In the token UI it is called "Single Redirect" — Cloudflare's Single
+    Redirects feature IS the http_request_dynamic_redirect phase this
+    ruleset targets; "dynamic redirect" is the API's name for it, not the
+    dashboard's, and there is no permission by that name.
+
     Set false while the token lacks it, so the rest of the configuration
     still applies cleanly, and true once it is granted.
   EOT
