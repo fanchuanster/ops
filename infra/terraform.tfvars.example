@@ -1,0 +1,22 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# Find these with:
+#   curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+#     https://api.cloudflare.com/client/v4/accounts
+#   curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+#     https://api.cloudflare.com/client/v4/zones
+
+account_id = ""
+zone_id    = ""
+
+domain      = "noblesee.com"
+environment = "production"
+
+# Location hint for R2 and D1. A hint, not a guarantee.
+r2_location = "APAC"
+
+# Leave false until `wrangler deploy` has created the Worker; see the
+# ordering note at the top of worker.tf.
+worker_deployed = false

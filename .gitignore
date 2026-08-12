@@ -219,3 +219,11 @@ apps/web/node_modules/
 apps/web/.next/
 apps/web/src/payload-types.ts
 apps/web/tsconfig.tsbuildinfo
+
+# Terraform — state holds resource ids and secret material; .tfvars holds
+# account/zone identifiers. The provider lock file IS committed.
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/terraform.tfvars
+infra/*.tfplan
