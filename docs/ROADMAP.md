@@ -1,4 +1,4 @@
-# NobleRead — Roadmap
+# NobleSee — Roadmap
 
 The MVP (see `docs/ARCHITECTURE_REVIEW.md`) delivers one working vertical
 slice: browse a book catalog, open a book, download a part in a chosen
@@ -75,3 +75,8 @@ foundation rather than reading as an oversight.
     WordPress's default `wp-login.php`.
 - **Admin/UX polish** — hardened default WP settings, revisit ACF if
   native meta-box UX outgrows what's reasonable to hand-roll.
+- **Platform re-evaluation (NR-31)** — whether to stay on WordPress at
+  all. Answered for this phase: stay, but the decision has explicit
+  expiry conditions, and Django + PostgreSQL is the target if it flips.
+  See `docs/ARCHITECTURE_REVIEW.md` section 11. The staged plan for
+  executing that move, if a trigger fires, is `docs/MODERNIZATION.md`.

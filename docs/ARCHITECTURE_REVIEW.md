@@ -1,7 +1,7 @@
-# NobleRead — Architecture Review (MVP)
+# NobleSee — Architecture Review (MVP)
 
 This document records the architecture decisions made for the first
-runnable slice of NobleRead, as required by `CLAUDE.md` ("Before
+runnable slice of NobleSee, as required by `CLAUDE.md` ("Before
 implementation, compare Kadence, Blocksy and Astra and document the
 decision"). It covers the theme comparison plus the other load-bearing
 decisions made while building the MVP.
@@ -36,7 +36,7 @@ e-reader resale, X worker, S3/Kubernetes) is deferred; see
 **Decision: Kadence.** It is the only one of the three that gives free-tier,
 Gutenberg-native header/footer building and full WooCommerce styling
 depth — directly matching `CLAUDE.md`'s explicit mandate ("WordPress
-Gutenberg + Kadence/Blocksy/Astra + custom NobleRead blocks... rather than
+Gutenberg + Kadence/Blocksy/Astra + custom NobleSee blocks... rather than
 WordPress + Elementor + many visual-builder plugins"). Astra gates the
 equivalent depth behind Astra Pro, which would either cost money or leave
 gaps; Blocksy is comparable to Kadence but more Customizer-centric than
@@ -59,7 +59,7 @@ UI just to avoid a second post type.
 
 One consequence worth noting: WordPress's built-in "Page Attributes"
 meta box only offers same-post-type parents in its dropdown, which
-doesn't work for a Part-to-Book relationship. `nobleread-core` renders
+doesn't work for a Part-to-Book relationship. `noblesee-core` renders
 its own "Parent book" + "Order" fields in the Part Details meta box
 instead (see `includes/meta-boxes.php`) and sets `post_parent`/
 `menu_order` directly — this keeps the *storage* native (real
@@ -145,7 +145,7 @@ how the counting works.
 
 ## 6. Download delivery: authenticated, nonce-protected, rights-gated
 
-The route `/nobleread-download/{part_id}/{format}/` requires: a logged-in
+The route `/noblesee-download/{part_id}/{format}/` requires: a logged-in
 user (rate limiting needs a real per-user identity, not an IP/cookie
 guess — this also means the catalog only shows live download buttons to
 logged-in visitors, with a login/register prompt otherwise), a valid
@@ -218,7 +218,7 @@ page wrap their content in the same left-hand catalog sidebar
 nesting and current-item highlighting come for free rather than being
 hand-rolled) — clicking a collection there is a normal link to its
 archive, no client-side filtering involved. The front page keeps its own
-hero copy and `[nobleread_books]` grid as ordinary WP-admin-editable page
+hero copy and `[noblesee_books]` grid as ordinary WP-admin-editable page
 content (`templates/front-page.php` just wraps it, doesn't replace it);
 the sidebar is the only thing that page and the book archive share.
 
@@ -271,7 +271,7 @@ Security notes worth recording since this is auth surface:
   only auto-linked to a Google login by email when Google itself reports
   that email as verified (`GoogleUser::getEmailVerified()`). Without
   that check, anyone could type someone else's address into an
-  unverified OAuth identity and take over their NobleRead account.
+  unverified OAuth identity and take over their NobleSee account.
 - **Open redirect**: the post-login destination (`redirect_to`, used so
   "log in from a book page" returns you to that book) always passes
   through `wp_validate_redirect()` before being used.
@@ -287,3 +287,146 @@ Google login are no longer on this list — see sections 4 and 9. The
 *login* screen — as opposed to sign-up — is still WordPress's default,
 and Apple Sign In is still deferred, pending an Apple Developer Program
 membership.)
+
+## 11. Platform: stay on WordPress for now (NR-31)
+
+`CLAUDE.md` section 2.1 mandates WordPress, but it was chosen up front
+rather than after comparing options, and nothing in the MVP validated
+that choice. NR-31 asks the question properly. This section records the
+answer and, more usefully, the conditions under which it should change.
+
+**Recommendation: stay on WordPress for this phase.** Not because it is
+the best platform for NobleSee in the abstract — it probably isn't — but
+because migrating now would spend the project's scarcest resource on the
+part of the system that is not blocking readers, and because the cost of
+migrating *later* is already low and stays low.
+
+### 11.1 What is actually coupled to WordPress
+
+The intuition "the business logic is isolated in a plugin, so a port is
+cheap" is half right, and the wrong half is the expensive one. Counting
+WordPress API calls per file in `noblesee-core` (2,431 lines of PHP):
+
+| File | LOC | WP API calls | What it is |
+|---|---|---|---|
+| `meta-boxes.php` | 255 | 37 | Book/Part editing UI |
+| `auth.php` | 178 | 30 | Sign-up, sessions |
+| `social-login.php` | 214 | 17 | Google OAuth |
+| `templates.php` | 145 | 11 | Template routing |
+| `post-types.php` | 185 | 10 | Domain model |
+| `rate-limit.php` | 156 | 1 | Rolling-window limiter |
+| `staged-release.php` | 139 | 3 | Per-reader release clock |
+| `access.php` | 109 | 5 | Rights/nonce gate |
+| `downloads.php` | 93 | 3 | Streamed delivery |
+
+The NobleSee-specific rules — rate limiting, staged release, rights
+gating, download delivery, roughly 500 lines — are nearly
+WordPress-free already and would port almost verbatim to any stack. What
+is densely coupled is the *generic* half: an editing UI, sessions,
+OAuth, template routing. That is precisely the half a platform is
+supposed to give you for free, and precisely what a migration makes you
+rebuild. A port is not "move the isolated logic"; it is "rewrite the
+commodity infrastructure and carry the logic across unchanged".
+
+The corollary is the reason to defer with a clear conscience: because
+the custom rules are already decoupled, they will still be decoupled in
+six months. Waiting costs almost nothing in future migration effort,
+while migrating now costs weeks that the reading mission needs
+elsewhere.
+
+### 11.2 The candidates
+
+**Stay on WordPress (baseline).** Zero switching cost. Gives auth,
+password reset, media handling, an editorial UI for proofreaders, i18n,
+and a WooCommerce path for the deferred donations/unlocks. Costs: a
+large plugin/theme CVE surface, MySQL as a hard requirement, and a
+frontend whose performance depends on discipline rather than on the
+architecture.
+
+**Static site generator (Astro/Hugo) + small API.** Genuinely excellent
+for the catalog and book pages, which are read-mostly and would benefit
+from being static. But every gated behaviour NobleSee has — per-user
+download limits, staged release, rights checks, Send-to-Kindle — is
+per-user and dynamic, so it lands in the API regardless. This is really
+"custom app with a static front end", and should be evaluated as such,
+not as a lighter option.
+
+**Django (or Rails).** The strongest technical fit. The book → part →
+format → rights model maps onto an ORM far more naturally than onto
+posts and meta rows, the admin is generated rather than hand-rolled
+(replacing all 255 lines of `meta-boxes.php`), auth and social login are
+mature libraries, and PostgreSQL becomes available. This is the
+recommended target *if* a migration happens.
+
+**Headless CMS (Payload/Strapi/Directus).** Solves the editorial UI, but
+reintroduces a second system to operate and still leaves the gated
+download logic to be written by hand. Weakest cost/benefit of the four.
+
+### 11.3 On the Calibre-based blueprint in NR-31
+
+The blueprint attached to the ticket is sound about the frontend and the
+tunnel, but it rests on a factual error worth recording so it is not
+rediscovered later: **Calibre does not do OCR.** Its conversion pipeline
+is format-to-format (EPUB ↔ MOBI ↔ AZW3 ↔ PDF-with-a-text-layer). It
+cannot turn a scanned page image of a traditional Chinese book into
+text, which is the *entire* first stage of NobleSee's mission per
+`CLAUDE.md` section 7. Calibre-Web Automated is likewise a personal
+library manager for an already-digitised collection — it has no concept
+of rights status, per-user download limits, staged part releases, or
+paid unlocks.
+
+Calibre is still useful, but as a *format-conversion step near the end*
+of the pipeline (approved DOCX → EPUB → AZW3), sitting downstream of
+PaddleOCR and the vLLM correction stage — not as the library engine.
+Note also that Calibre is GPL v3: shelling out to its binaries as
+separate processes is fine, but importing its Python modules would pull
+NobleSee's own source under the GPL, which matters given the project has
+a revenue model.
+
+### 11.4 Migration sketch, if the answer changes
+
+Target: Django + PostgreSQL, keeping `services/converter` untouched
+(it is already a standalone FastAPI service by design, and is
+platform-agnostic).
+
+1. **Model** — `Book`, `Part`, `Format`, `Collection`, `RightsStatus` as
+   ORM models; Django admin replaces `post-types.php` + `meta-boxes.php`.
+2. **Auth** — `django-allauth` replaces `auth.php` + `social-login.php`,
+   including the Google provider.
+3. **Rules** — port `rate-limit.php`, `staged-release.php`, `access.php`,
+   `downloads.php` largely 1:1; the rolling-window limiter is plain
+   indexed SQL and moves unchanged.
+4. **Storage** — `storage.php` is already an S3/R2 abstraction; swap
+   `aws/aws-sdk-php` for `boto3`.
+5. **Frontend** — the largest unknown. Kadence disappears, so the
+   catalog, book, sign-up and reader pages are rebuilt. The EPUB reader
+   itself is already custom JS and carries over.
+6. **Payments** — Stripe directly instead of WooCommerce.
+7. **Data** — a one-off export/import script; the corpus is small and
+   the DOCX masters are the source of truth, so this is low-risk.
+
+**Rough estimate: 3–6 focused weeks** to reach current parity, of which
+the frontend rebuild and payments are the bulk. Steps 1–4 are perhaps a
+week. This is a parity exercise — it delivers no new reader value, which
+is the core argument against doing it now.
+
+### 11.5 What would change the answer
+
+Revisit this decision if any of the following becomes true:
+
+- A WordPress plugin/theme CVE causes a real incident, or patching
+  becomes a recurring tax.
+- The editorial/proofreading workflow outgrows the meta-box UI badly
+  enough that ACF or a rebuild is on the table anyway (already flagged
+  in `docs/ROADMAP.md`).
+- Measured reader-facing performance on mobile fails the mission's bar —
+  this has *not* been measured yet, and should be before it is used as
+  an argument in either direction.
+- Per-user blogs go ahead via Multisite, which would substantially
+  deepen the WordPress commitment. Deciding to migrate is much cheaper
+  before that than after.
+- The conversion pipeline lands and WordPress proves awkward as its
+  editorial front end.
+
+Until one of those fires, the platform is not the bottleneck: the
+content production pipeline (`docs/ROADMAP.md`, "Content production") is.
