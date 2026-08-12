@@ -113,7 +113,7 @@ services:
         condition: service_completed_successfully
     ports:
       # 3000 on this host is taken by an unrelated container
-      # (open-webui); 8090/8091 are WordPress and Adminer.
+      # (open-webui), and 8091 is Adminer.
       - "8093:3000"
     environment:
       DATABASE_URI: postgres://${POSTGRES_USER:-noblesee}:${POSTGRES_PASSWORD:-noblesee}@appdb:5432/${POSTGRES_DB:-noblesee}
