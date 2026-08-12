@@ -1,0 +1,11 @@
+# NobleSee web service (Django + PostgreSQL).
+# Pinned to minor ranges: this is an application, not a library, so
+# reproducibility matters more than resolver flexibility.
+Django>=5.1,<5.3
+psycopg[binary]>=3.2,<4
+gunicorn>=23.0,<24
+
+# Dev/test only, kept here rather than in a second file while the
+# service is small enough that the split would cost more than it saves.
+pytest>=8.3,<9
+pytest-django>=4.9,<5

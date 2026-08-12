@@ -127,6 +127,70 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
 
+  # --- The rebuild (docs/MODERNIZATION.md) ------------------------------
+  # Django + PostgreSQL replacing WordPress. Runs alongside the WordPress
+  # stack until Phase 6 lands, so the old implementation stays available
+  # as a behavioural reference; it is not the site any more.
+  #
+  # Its own PostgreSQL deliberately: the `pg` container already on this
+  # host serves open-webui/chromadb, and coupling NobleSee's lifecycle to
+  # an unrelated stack is how a `down -v` takes out both.
+  webdb:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-noblesee}
+      POSTGRES_USER: ${POSTGRES_USER:-noblesee}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-noblesee}
+    volumes:
+      - webdb_data:/var/lib/postgresql/data
+    # No host port: reachable only on the compose network, same posture
+    # as the MySQL service above.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-noblesee} -d ${POSTGRES_DB:-noblesee}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ./services/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # The image runs as a non-root user (see services/web/Dockerfile),
+    # which is the production posture. The dev bind mount below defeats
+    # it: this repo's host directories are mode 750, so an in-image uid
+    # can't traverse them — the same reason the `provision` service above
+    # runs as root. Drop the mount and this override together when
+    # deploying; the image is self-contained without both.
+    user: root
+    depends_on:
+      webdb:
+        condition: service_healthy
+    ports:
+      - "8092:8000"
+    environment:
+      POSTGRES_HOST: webdb
+      POSTGRES_DB: ${POSTGRES_DB:-noblesee}
+      POSTGRES_USER: ${POSTGRES_USER:-noblesee}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-noblesee}
+      NOBLESEE_DEBUG: ${NOBLESEE_DEBUG:-true}
+      # Unset in dev (settings.py falls back to a fixed throwaway key);
+      # required once NOBLESEE_DEBUG is off.
+      NOBLESEE_SECRET_KEY: ${NOBLESEE_SECRET_KEY:-}
+      NOBLESEE_ALLOWED_HOSTS: ${NOBLESEE_ALLOWED_HOSTS:-localhost,127.0.0.1,web,10.211.36.155,noblesee.com}
+      NOBLESEE_LOG_LEVEL: ${NOBLESEE_LOG_LEVEL:-INFO}
+    volumes:
+      # Live-edit during the rebuild; the image still contains the code
+      # so the container runs standalone without the mount.
+      - ./services/web:/app
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # Dev-only DB inspection (e.g. checking wp_nr_downloads directly).
   # Not part of the production architecture.
   adminer:
@@ -143,3 +207,4 @@ volumes:
   db_data:
   wp_data:
   nr_core_vendor:
+  webdb_data:

@@ -288,7 +288,27 @@ Google login are no longer on this list — see sections 4 and 9. The
 and Apple Sign In is still deferred, pending an Apple Developer Program
 membership.)
 
-## 11. Platform: stay on WordPress for now (NR-31)
+## 11. Platform: rebuild on Django + Astro (NR-31)
+
+> **Reversed 2026-08-12.** This section originally concluded "stay on
+> WordPress for now". That held while the project was assumed to have
+> something to preserve. It does not: there are no users and no data.
+> Almost all of the caution below — cutover, account migration, URL
+> preservation, dual-running, a baseline to hold — was protecting
+> against risks that do not exist, and the realistic estimate drops from
+> 3–6 weeks to 1.5–3.
+>
+> The argument that flipped it: the expensive part is the frontend
+> rebuild, which costs the same whenever it happens, while every
+> further week of WordPress-specific work adds to what gets thrown
+> away. Now is the cheapest this move will ever be.
+>
+> The analysis below is left intact because its *findings* still hold
+> and still shape the rebuild — particularly 11.1 (what is actually
+> coupled) and 11.3 (Calibre does not do OCR). Only the recommendation
+> changed. Execution plan: `docs/MODERNIZATION.md`.
+
+### 11.0 Original recommendation (superseded)
 
 `CLAUDE.md` section 2.1 mandates WordPress, but it was chosen up front
 rather than after comparing options, and nothing in the MVP validated

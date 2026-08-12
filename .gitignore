@@ -218,3 +218,7 @@ wordpress/plugins/noblesee-core/vendor/
 # Local diagnostic scratch files
 .diag
 .diag2
+
+# Django service build artifacts
+services/web/staticfiles/
+services/web/.pytest_cache/

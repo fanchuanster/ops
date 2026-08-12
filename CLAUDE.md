@@ -176,30 +176,49 @@ The platform should eventually provide:
 
 # 2. IMPORTANT IMPLEMENTATION PRINCIPLES
 
-## 2.1 WordPress is the main website platform
+## 2.1 Django + Astro is the main website platform
 
-Use WordPress for:
+This section previously mandated WordPress. That decision was reversed
+after the NR-31 evaluation — see `docs/ARCHITECTURE_REVIEW.md` section
+11 and `docs/MODERNIZATION.md`. The short version: the WordPress-coupled
+half of the system was the commodity half (editing UI, sessions, OAuth,
+template routing), the NobleSee-specific rules were already nearly
+framework-free, and with no users and no data to preserve, rebuilding
+was the cheapest it would ever be.
 
-- Public website
-- User accounts
-- Book catalog UI
+Use **Django + PostgreSQL** for:
+
+- User accounts and authentication
+- Book/Part/Format domain model
+- Administration and the editorial/proofreading workflow
+- Rights status and access control
+- Download authorization, rate limiting, staged release
+- Donations/payment integration (Stripe)
+- The JSON API consumed by the frontend
+
+Use **Astro** for:
+
+- Public website and book catalog UI
+- Book browsing and metadata display
+- The reading experience
 - Blog functionality
-- User profiles
-- Administration
-- Donations/payment integration
-- Book browsing
-- Book metadata
-- Release/access UI
 
-Do NOT turn WordPress into the entire backend system.
+Business logic belongs in Django, never in the frontend. The frontend is
+responsible for presentation and for calling the API.
 
-Create a custom WordPress plugin for NobleSee-specific business logic.
+The following must remain server-side Django functionality:
 
-Suggested plugin:
+- book management and book parts
+- release scheduling
+- download authorization and rate limiting
+- payment/unlock state
+- rights status enforcement
+- conversion job orchestration
+- Kindle delivery
+- AI functionality and API integrations
 
-noblesee-core
-
-The theme should primarily handle presentation.
+Do NOT turn the Django app into the conversion pipeline. That stays a
+separate service (`services/converter`, section 13).
 
 ---
 
@@ -209,18 +228,27 @@ Target architecture:
 
                     noblesee.com
                            |
-                    WordPress
+                    Cloudflare (TLS, CDN)
                            |
-                NobleSee Custom Plugin
+                   Cloudflare Tunnel
+                           |
+        +------------------+------------------+
+        |                                     |
+        v                                     v
+  Astro frontend                     Django + PostgreSQL
+  catalog, book pages,               accounts, rights, limits,
+  reader, blog                       staged release, downloads,
+        |                            admin/editorial UI, API
+        |                                     |
+        +------------------+------------------+
                            |
         +------------------+------------------+
         |                  |                  |
         v                  v                  v
-      MySQL              Redis                S3
+   PostgreSQL            Redis                S3/R2
         |                  |                  |
         |                  |            Book artifacts
         |                  |            DOCX/EPUB/PDF
-        |                  |
         |              Job queues
         |                  |
         |                  v
@@ -234,12 +262,12 @@ Target architecture:
         |                  |
         |           Gemma 4 31B
         |
-        +------------ WooCommerce
-                         |
-                    Stripe/etc.
+        +------------ Stripe
 
 Separate services:
 
+- NobleSee Web (Django + PostgreSQL)
+- NobleSee Frontend (Astro)
 - NobleSee Converter
 - NobleSee Conversion Worker
 - NobleSee X Worker
@@ -255,140 +283,52 @@ Kubernetes / AWS EKS
 
 Do not prematurely introduce Kubernetes-specific complexity into the MVP.
 
-Simplified reference view of the same architecture:
-
-┌─────────────────────────────────────────┐
-│              NobleSee UI               │
-│                                         │
-│  Kadence + Gutenberg + Custom Blocks    │
-└────────────────────┬────────────────────┘
-                     │
-┌────────────────────▼────────────────────┐
-│         NobleSee WordPress Plugin      │
-│                                         │
-│ Books / Parts / Access / Downloads      │
-│ Unlocks / Kindle / Conversion API       │
-└───────────────┬───────────────┬─────────┘
-                │               │
-             WooCommerce       S3
-                │
-              Stripe
-
-                    ↓
-
-          Python Conversion Services
-                    ↓
-             PaddleOCR + Gemma
-                    ↓
-                  vLLM
-
-This view calls out PaddleOCR explicitly as the OCR engine feeding the
-conversion services (see section 8, OCR, for the fuller evaluation) and
-ties the WordPress theme choice (section WORDPRESS THEME) into the same
-picture as the plugin and conversion backend.
+PaddleOCR is the OCR engine feeding the conversion services (see section
+8, OCR, for the fuller evaluation). The conversion service is
+deliberately standalone and platform-agnostic — it talks to the Django
+app over HTTP and knows nothing about the frontend.
 
 ---
 
-# WORDPRESS THEME
+# FRONTEND
 
-The NobleSee website should use an established, lightweight WordPress
-theme rather than creating a WordPress theme completely from scratch.
+The NobleSee frontend is an Astro application. It was previously
+specified as WordPress + Kadence; see section 2.1 for why that changed.
 
-Evaluate these themes first:
+Astro is chosen because the catalog and book pages are read-mostly and
+content-first, and Astro ships almost no JavaScript by default — which
+matters directly for the mission, since the reading experience must be
+excellent on phones and e-readers.
 
-1. Kadence
-2. Blocksy
-3. Astra
+The frontend must provide:
 
-The initial recommendation is Kadence, but this must be validated against
-the actual project requirements before implementation.
-
-The theme must support:
-
-- WordPress Gutenberg/block editor
 - responsive/mobile-first design
-- WooCommerce
-- custom header/footer
-- custom typography
+- clean typography, including Chinese typography
 - book/library layouts
 - blog layouts
 - archive/category layouts
-- custom page templates
 - accessibility
 - performance optimization
-- custom CSS
-- child-theme or equivalent customization
-- compatibility with the NobleSee custom plugin
+- dark/light reading modes
+- an excellent reflowable reading experience
 
-IMPORTANT:
-
-Do not use Elementor or another heavy page builder unless there is a
-specific requirement that cannot reasonably be implemented with Gutenberg
-and the selected theme.
+Do NOT put business logic in the frontend. Rights checks, download
+authorization, rate limiting and staged release are enforced server-side
+in Django; the frontend renders what the API permits and must never be
+the only thing standing between a reader and a restricted file.
 
 Prefer:
 
-WordPress Gutenberg
+Astro
 +
-Kadence/Blocksy/Astra
-+
-custom NobleSee blocks/components
+a small amount of vanilla/island JavaScript
 +
 custom CSS
 
-rather than:
+rather than a heavy SPA framework with large client bundles.
 
-WordPress
-+
-Elementor
-+
-many visual-builder plugins
-+
-large amounts of generated frontend markup.
-
-The theme should provide the visual foundation, while NobleSee-specific
-functionality should remain inside the NobleSee custom plugin.
-
-Do not put business logic into the theme.
-
-The following must remain plugin functionality:
-
-- book management
-- book parts
-- release scheduling
-- download authorization
-- download rate limiting
-- payment/unlock state
-- conversion jobs
-- Kindle delivery
-- AI functionality
-- API integrations
-- X automation
-
-The theme should only be responsible for presentation and UI.
-
-Before implementation, compare Kadence, Blocksy and Astra and document
-the decision in:
-
-docs/ARCHITECTURE_REVIEW.md
-
-Include:
-
-- performance
-- Gutenberg compatibility
-- WooCommerce compatibility
-- mobile support
-- accessibility
-- typography
-- header/footer customization
-- custom templates
-- developer experience
-- child theme/customization strategy
-- long-term maintainability
-- plugin compatibility
-
-If Kadence is selected, use it as the foundation unless repository
-constraints provide a compelling reason otherwise.
+The in-browser EPUB reader is the one place where meaningful client-side
+JavaScript is justified.
 
 ---
 
