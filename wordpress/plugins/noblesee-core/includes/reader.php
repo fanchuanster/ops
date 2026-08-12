@@ -2,8 +2,8 @@
 /**
  * In-browser reading.
  *
- *   /nobleread-read/{part_id}/          the reader itself
- *   /nobleread-read-content/{part_id}/  the EPUB bytes it loads
+ *   /noblesee-read/{part_id}/          the reader itself
+ *   /noblesee-read-content/{part_id}/  the EPUB bytes it loads
  *
  * CLAUDE.md's core mission asks for reflowable text, adjustable type,
  * chapter navigation and light/dark reading — things a PDF can't give and
@@ -26,8 +26,8 @@ add_filter('query_vars', 'nr_add_reader_query_vars');
 add_action('template_redirect', 'nr_handle_reader_request');
 
 function nr_add_reader_rewrites() {
-    add_rewrite_rule('^nobleread-read/([0-9]+)/?$', 'index.php?nr_read_part=$matches[1]', 'top');
-    add_rewrite_rule('^nobleread-read-content/([0-9]+)/?$', 'index.php?nr_read_content_part=$matches[1]', 'top');
+    add_rewrite_rule('^noblesee-read/([0-9]+)/?$', 'index.php?nr_read_part=$matches[1]', 'top');
+    add_rewrite_rule('^noblesee-read-content/([0-9]+)/?$', 'index.php?nr_read_content_part=$matches[1]', 'top');
 }
 
 function nr_add_reader_query_vars($vars) {
@@ -43,14 +43,14 @@ function nr_part_is_readable($part_id) {
 
 function nr_get_read_url($part_id) {
     return wp_nonce_url(
-        home_url('/nobleread-read/' . $part_id . '/'),
+        home_url('/noblesee-read/' . $part_id . '/'),
         'nr_read_' . $part_id
     );
 }
 
 function nr_get_read_content_url($part_id) {
     return wp_nonce_url(
-        home_url('/nobleread-read-content/' . $part_id . '/'),
+        home_url('/noblesee-read-content/' . $part_id . '/'),
         'nr_read_' . $part_id
     );
 }
@@ -70,7 +70,7 @@ function nr_handle_reader_request() {
     $access = nr_guard_part_access($part_id, 'nr_read_');
 
     if (!nr_part_is_readable($part_id)) {
-        nr_access_die(__('This part is not available to read online yet.', 'nobleread-core'), 404);
+        nr_access_die(__('This part is not available to read online yet.', 'noblesee-core'), 404);
     }
 
     // Reading online is the same act of access as downloading, so it
@@ -89,7 +89,7 @@ function nr_serve_reader_content($part_id) {
 
     $file = nr_part_file_path($part_id, 'nr_epub_attachment_id');
     if (!$file) {
-        nr_access_die(__('This part is not available to read online yet.', 'nobleread-core'), 404);
+        nr_access_die(__('This part is not available to read online yet.', 'noblesee-core'), 404);
     }
 
     nr_stream_file($file, 'inline');

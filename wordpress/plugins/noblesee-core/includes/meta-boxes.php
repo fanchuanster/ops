@@ -14,8 +14,8 @@ add_action('save_post_nr_book', 'nr_save_book_meta');
 add_action('save_post_nr_part', 'nr_save_part_meta');
 
 function nr_add_meta_boxes() {
-    add_meta_box('nr_book_details', __('Book Details', 'nobleread-core'), 'nr_render_book_meta_box', 'nr_book', 'normal', 'high');
-    add_meta_box('nr_part_details', __('Part Details', 'nobleread-core'), 'nr_render_part_meta_box', 'nr_part', 'normal', 'high');
+    add_meta_box('nr_book_details', __('Book Details', 'noblesee-core'), 'nr_render_book_meta_box', 'nr_book', 'normal', 'high');
+    add_meta_box('nr_part_details', __('Part Details', 'noblesee-core'), 'nr_render_part_meta_box', 'nr_part', 'normal', 'high');
 }
 
 function nr_render_book_meta_box($post) {
@@ -26,26 +26,26 @@ function nr_render_book_meta_box($post) {
     $rights = get_post_meta($post->ID, 'nr_rights_status', true) ?: 'unknown';
     ?>
     <p>
-        <label for="nr_author"><strong><?php esc_html_e('Author', 'nobleread-core'); ?></strong></label><br>
+        <label for="nr_author"><strong><?php esc_html_e('Author', 'noblesee-core'); ?></strong></label><br>
         <input type="text" class="widefat" id="nr_author" name="nr_author" value="<?php echo esc_attr($author); ?>">
     </p>
     <p>
-        <label for="nr_translator"><strong><?php esc_html_e('Translator', 'nobleread-core'); ?></strong></label><br>
+        <label for="nr_translator"><strong><?php esc_html_e('Translator', 'noblesee-core'); ?></strong></label><br>
         <input type="text" class="widefat" id="nr_translator" name="nr_translator" value="<?php echo esc_attr($translator); ?>">
     </p>
     <p>
-        <label for="nr_language"><strong><?php esc_html_e('Language', 'nobleread-core'); ?></strong></label><br>
-        <input type="text" class="widefat" id="nr_language" name="nr_language" value="<?php echo esc_attr($language); ?>" placeholder="<?php esc_attr_e('e.g. Chinese / English', 'nobleread-core'); ?>">
+        <label for="nr_language"><strong><?php esc_html_e('Language', 'noblesee-core'); ?></strong></label><br>
+        <input type="text" class="widefat" id="nr_language" name="nr_language" value="<?php echo esc_attr($language); ?>" placeholder="<?php esc_attr_e('e.g. Chinese / English', 'noblesee-core'); ?>">
     </p>
     <p>
-        <label for="nr_rights_status"><strong><?php esc_html_e('Rights status', 'nobleread-core'); ?></strong></label><br>
+        <label for="nr_rights_status"><strong><?php esc_html_e('Rights status', 'noblesee-core'); ?></strong></label><br>
         <select id="nr_rights_status" name="nr_rights_status">
             <?php foreach (nr_rights_statuses() as $value => $label) : ?>
                 <option value="<?php echo esc_attr($value); ?>" <?php selected($rights, $value); ?>><?php echo esc_html($label); ?></option>
             <?php endforeach; ?>
         </select>
         <p class="description">
-            <?php esc_html_e('Only Public domain, Licensed, or Permission granted books offer public downloads. Every other status is blocked at the download endpoint, regardless of which files are attached to its parts.', 'nobleread-core'); ?>
+            <?php esc_html_e('Only Public domain, Licensed, or Permission granted books offer public downloads. Every other status is blocked at the download endpoint, regardless of which files are attached to its parts.', 'noblesee-core'); ?>
         </p>
     </p>
     <hr>
@@ -53,11 +53,11 @@ function nr_render_book_meta_box($post) {
     <p>
         <label>
             <input type="checkbox" name="nr_staged_release" value="1" <?php checked($staged); ?>>
-            <strong><?php esc_html_e('Release this book in stages', 'nobleread-core'); ?></strong>
+            <strong><?php esc_html_e('Release this book in stages', 'noblesee-core'); ?></strong>
         </label>
     </p>
     <p class="description">
-        <?php esc_html_e('The first part is always available. Each later part opens once the reader has started the part before it, plus a delay set under Settings > NobleRead (or overridden on the part itself). Leave off for single-part books or anything that should simply be available.', 'nobleread-core'); ?>
+        <?php esc_html_e('The first part is always available. Each later part opens once the reader has started the part before it, plus a delay set under Settings > NobleSee (or overridden on the part itself). Leave off for single-part books or anything that should simply be available.', 'noblesee-core'); ?>
     </p>
     <?php
 }
@@ -98,11 +98,11 @@ function nr_save_book_meta($post_id) {
  */
 function nr_part_format_fields() {
     return [
-        'nr_docx_attachment_id' => __('DOCX master (private — never publicly downloadable)', 'nobleread-core'),
-        'nr_epub_attachment_id' => __('EPUB', 'nobleread-core'),
-        'nr_pdf_standard_attachment_id' => __('PDF — Standard', 'nobleread-core'),
-        'nr_pdf_large_attachment_id' => __('PDF — Large', 'nobleread-core'),
-        'nr_pdf_xl_attachment_id' => __('PDF — Extra Large', 'nobleread-core'),
+        'nr_docx_attachment_id' => __('DOCX master (private — never publicly downloadable)', 'noblesee-core'),
+        'nr_epub_attachment_id' => __('EPUB', 'noblesee-core'),
+        'nr_pdf_standard_attachment_id' => __('PDF — Standard', 'noblesee-core'),
+        'nr_pdf_large_attachment_id' => __('PDF — Large', 'noblesee-core'),
+        'nr_pdf_xl_attachment_id' => __('PDF — Extra Large', 'noblesee-core'),
     ];
 }
 
@@ -119,9 +119,9 @@ function nr_render_part_meta_box($post) {
     ]);
     ?>
     <p>
-        <label for="nr_part_book_id"><strong><?php esc_html_e('Parent book', 'nobleread-core'); ?></strong></label><br>
+        <label for="nr_part_book_id"><strong><?php esc_html_e('Parent book', 'noblesee-core'); ?></strong></label><br>
         <select id="nr_part_book_id" name="nr_part_book_id">
-            <option value="0"><?php esc_html_e('— Select a book —', 'nobleread-core'); ?></option>
+            <option value="0"><?php esc_html_e('— Select a book —', 'noblesee-core'); ?></option>
             <?php foreach ($books as $book) : ?>
                 <option value="<?php echo esc_attr($book->ID); ?>" <?php selected((int) $post->post_parent, $book->ID); ?>>
                     <?php echo esc_html(get_the_title($book)); ?>
@@ -130,33 +130,33 @@ function nr_render_part_meta_box($post) {
         </select>
     </p>
     <p>
-        <label for="nr_part_order"><strong><?php esc_html_e('Order', 'nobleread-core'); ?></strong></label><br>
+        <label for="nr_part_order"><strong><?php esc_html_e('Order', 'noblesee-core'); ?></strong></label><br>
         <input type="number" id="nr_part_order" name="nr_part_order" value="<?php echo esc_attr($post->menu_order); ?>" style="width:6em;">
-        <span class="description"><?php esc_html_e('Lower numbers appear first (Part 1, Part 2, …).', 'nobleread-core'); ?></span>
+        <span class="description"><?php esc_html_e('Lower numbers appear first (Part 1, Part 2, …).', 'noblesee-core'); ?></span>
     </p>
     <p>
-        <label for="nr_unlock_delay_hours"><strong><?php esc_html_e('Unlock delay (hours)', 'nobleread-core'); ?></strong></label><br>
+        <label for="nr_unlock_delay_hours"><strong><?php esc_html_e('Unlock delay (hours)', 'noblesee-core'); ?></strong></label><br>
         <input type="number" min="0" id="nr_unlock_delay_hours" name="nr_unlock_delay_hours" value="<?php echo esc_attr(get_post_meta($post->ID, 'nr_unlock_delay_hours', true)); ?>" style="width:8em;">
         <span class="description">
             <?php
             printf(
                 /* translators: %d: site-wide default delay in hours */
-                esc_html__('How long after starting the previous part this one opens. Leave blank to use the site default (%d hours). Only applies when the parent book releases in stages.', 'nobleread-core'),
+                esc_html__('How long after starting the previous part this one opens. Leave blank to use the site default (%d hours). Only applies when the parent book releases in stages.', 'noblesee-core'),
                 (int) NR_Staged_Release::default_delay_hours()
             );
             ?>
         </span>
     </p>
     <p>
-        <label for="nr_part_rights_status"><strong><?php esc_html_e('Rights status', 'nobleread-core'); ?></strong></label><br>
+        <label for="nr_part_rights_status"><strong><?php esc_html_e('Rights status', 'noblesee-core'); ?></strong></label><br>
         <?php $part_rights = (string) get_post_meta($post->ID, 'nr_rights_status', true); ?>
         <select id="nr_part_rights_status" name="nr_part_rights_status">
-            <option value=""><?php esc_html_e('Inherit from book', 'nobleread-core'); ?></option>
+            <option value=""><?php esc_html_e('Inherit from book', 'noblesee-core'); ?></option>
             <?php foreach (nr_rights_statuses() as $value => $label) : ?>
                 <option value="<?php echo esc_attr($value); ?>" <?php selected($part_rights, $value); ?>><?php echo esc_html($label); ?></option>
             <?php endforeach; ?>
         </select>
-        <span class="description"><?php esc_html_e('Only set this when a part differs from its book — for example one still-restricted piece inside an otherwise public-domain volume.', 'nobleread-core'); ?></span>
+        <span class="description"><?php esc_html_e('Only set this when a part differs from its book — for example one still-restricted piece inside an otherwise public-domain volume.', 'noblesee-core'); ?></span>
     </p>
     <hr>
     <?php foreach (nr_part_format_fields() as $key => $label) :
@@ -166,9 +166,9 @@ function nr_render_part_meta_box($post) {
         <p class="nr-file-field" data-field="<?php echo esc_attr($key); ?>">
             <strong><?php echo esc_html($label); ?></strong><br>
             <input type="hidden" name="<?php echo esc_attr($key); ?>" value="<?php echo esc_attr($attachment_id); ?>" class="nr-attachment-id">
-            <span class="nr-file-name"><?php echo $url ? esc_html(basename($url)) : esc_html__('No file selected', 'nobleread-core'); ?></span>
-            <button type="button" class="button nr-select-file"><?php esc_html_e('Select file', 'nobleread-core'); ?></button>
-            <button type="button" class="button nr-clear-file" <?php echo $attachment_id ? '' : 'style="display:none;"'; ?>><?php esc_html_e('Clear', 'nobleread-core'); ?></button>
+            <span class="nr-file-name"><?php echo $url ? esc_html(basename($url)) : esc_html__('No file selected', 'noblesee-core'); ?></span>
+            <button type="button" class="button nr-select-file"><?php esc_html_e('Select file', 'noblesee-core'); ?></button>
+            <button type="button" class="button nr-clear-file" <?php echo $attachment_id ? '' : 'style="display:none;"'; ?>><?php esc_html_e('Clear', 'noblesee-core'); ?></button>
         </p>
     <?php endforeach; ?>
     <script>
@@ -176,7 +176,7 @@ function nr_render_part_meta_box($post) {
         $('.nr-select-file').on('click', function (e) {
             e.preventDefault();
             var $field = $(this).closest('.nr-file-field');
-            var frame = wp.media({ title: '<?php echo esc_js(__('Select file', 'nobleread-core')); ?>', multiple: false });
+            var frame = wp.media({ title: '<?php echo esc_js(__('Select file', 'noblesee-core')); ?>', multiple: false });
             frame.on('select', function () {
                 var attachment = frame.state().get('selection').first().toJSON();
                 $field.find('.nr-attachment-id').val(attachment.id);
@@ -189,7 +189,7 @@ function nr_render_part_meta_box($post) {
             e.preventDefault();
             var $field = $(this).closest('.nr-file-field');
             $field.find('.nr-attachment-id').val('');
-            $field.find('.nr-file-name').text('<?php echo esc_js(__('No file selected', 'nobleread-core')); ?>');
+            $field.find('.nr-file-name').text('<?php echo esc_js(__('No file selected', 'noblesee-core')); ?>');
             $(this).hide();
         });
     });

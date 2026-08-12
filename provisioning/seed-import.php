@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-$seed_root = WP_PLUGIN_DIR . '/nobleread-core/seed-content/';
+$seed_root = WP_PLUGIN_DIR . '/noblesee-core/seed-content/';
 
 /** Download-format key => Part meta key. */
 $format_meta = [

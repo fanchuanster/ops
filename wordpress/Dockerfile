@@ -2,7 +2,7 @@
 #   - WP-CLI, so this container can run one-off plugin commands (e.g. the
 #     `wp nr backfill-storage` R2 migration in includes/cli.php) without
 #     needing the separate wordpress:cli provisioning image.
-#   - The nobleread-core plugin's Composer dependencies (aws/aws-sdk-php,
+#   - The noblesee-core plugin's Composer dependencies (aws/aws-sdk-php,
 #     for includes/storage.php's R2 client), installed at build time so
 #     container start stays fast and deterministic — not run on every
 #     boot.
@@ -18,13 +18,13 @@ RUN curl -o /usr/local/bin/wp -sSL https://raw.githubusercontent.com/wp-cli/buil
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-COPY plugins/nobleread-core/composer.json plugins/nobleread-core/composer.lock /tmp/nobleread-core/
+COPY plugins/noblesee-core/composer.json plugins/noblesee-core/composer.lock /tmp/noblesee-core/
 RUN composer install \
         --no-interaction \
         --no-dev \
         --no-progress \
         --optimize-autoloader \
-        --working-dir=/tmp/nobleread-core \
-    && mkdir -p /var/www/html/wp-content/plugins/nobleread-core \
-    && mv /tmp/nobleread-core/vendor /var/www/html/wp-content/plugins/nobleread-core/vendor \
-    && rm -rf /tmp/nobleread-core
+        --working-dir=/tmp/noblesee-core \
+    && mkdir -p /var/www/html/wp-content/plugins/noblesee-core \
+    && mv /tmp/noblesee-core/vendor /var/www/html/wp-content/plugins/noblesee-core/vendor \
+    && rm -rf /tmp/noblesee-core

@@ -1,6 +1,6 @@
-# NobleRead — Architecture Review, Planning & Implementation Prompt
+# NobleSee — Architecture Review, Planning & Implementation Prompt
 
-You are the lead software architect and implementation engineer for a new project called **NobleRead**.
+You are the lead software architect and implementation engineer for a new project called **NobleSee**.
 
 Your job is to:
 
@@ -17,9 +17,9 @@ Your job is to:
 
 ---
 
-# NOBLEREAD — CORE MISSION AND PRODUCT VISION
+# NOBLESEE — CORE MISSION AND PRODUCT VISION
 
-NobleRead is fundamentally a digital preservation and e-reader accessibility
+NobleSee is fundamentally a digital preservation and e-reader accessibility
 project.
 
 Many valuable older and traditional books, especially traditional Chinese
@@ -29,7 +29,7 @@ are available online only as scanned PDFs or scanned page images.
 These formats are often difficult to read comfortably on modern devices,
 especially e-readers such as Kindle.
 
-NobleRead's primary mission is therefore:
+NobleSee's primary mission is therefore:
 
     Find valuable books that are difficult to access in e-reader-friendly
     form → digitize/OCR them → carefully reconstruct and proofread them →
@@ -54,7 +54,7 @@ a high-quality Kindle book:
 - dark/light reading modes where appropriate
 - preservation of the original meaning and structure
 
-NobleRead should particularly focus on books that currently have poor
+NobleSee should particularly focus on books that currently have poor
 e-reader accessibility.
 
 Examples:
@@ -68,7 +68,7 @@ Examples:
 
 The project also has a positive social mission.
 
-NobleRead aims to encourage reading, wisdom, healthy living, moral
+NobleSee aims to encourage reading, wisdom, healthy living, moral
 development, and constructive use of time, including providing positive
 alternatives to harmful or explicit online content.
 
@@ -96,7 +96,7 @@ the main book-preservation and reading mission.
 
 # BUSINESS MODEL
 
-NobleRead is mission-first, but it needs sustainable revenue.
+NobleSee is mission-first, but it needs sustainable revenue.
 
 Revenue should support:
 
@@ -130,7 +130,7 @@ Read it comfortably
         ↓
 Become interested in reading more
         ↓
-Optionally support NobleRead
+Optionally support NobleSee
         ↓
 Optionally purchase an e-reader
         ↓
@@ -146,7 +146,7 @@ as a library.
 
 Project name:
 
-NobleRead
+NobleSee
 
 Domain:
 
@@ -154,7 +154,7 @@ noblesee.com
 
 Mission:
 
-NobleRead is a website for hosting and sharing essential and noble books, especially traditional Chinese culture and history, that can bring wisdom, life change, and upliftment to readers.
+NobleSee is a website for hosting and sharing essential and noble books, especially traditional Chinese culture and history, that can bring wisdom, life change, and upliftment to readers.
 
 The platform should eventually provide:
 
@@ -193,11 +193,11 @@ Use WordPress for:
 
 Do NOT turn WordPress into the entire backend system.
 
-Create a custom WordPress plugin for NobleRead-specific business logic.
+Create a custom WordPress plugin for NobleSee-specific business logic.
 
 Suggested plugin:
 
-nobleread-core
+noblesee-core
 
 The theme should primarily handle presentation.
 
@@ -211,7 +211,7 @@ Target architecture:
                            |
                     WordPress
                            |
-                NobleRead Custom Plugin
+                NobleSee Custom Plugin
                            |
         +------------------+------------------+
         |                  |                  |
@@ -240,9 +240,9 @@ Target architecture:
 
 Separate services:
 
-- NobleRead Converter
-- NobleRead Conversion Worker
-- NobleRead X Worker
+- NobleSee Converter
+- NobleSee Conversion Worker
+- NobleSee X Worker
 - Future Kindle Delivery Service
 
 Initial deployment:
@@ -258,13 +258,13 @@ Do not prematurely introduce Kubernetes-specific complexity into the MVP.
 Simplified reference view of the same architecture:
 
 ┌─────────────────────────────────────────┐
-│              NobleRead UI               │
+│              NobleSee UI               │
 │                                         │
 │  Kadence + Gutenberg + Custom Blocks    │
 └────────────────────┬────────────────────┘
                      │
 ┌────────────────────▼────────────────────┐
-│         NobleRead WordPress Plugin      │
+│         NobleSee WordPress Plugin      │
 │                                         │
 │ Books / Parts / Access / Downloads      │
 │ Unlocks / Kindle / Conversion API       │
@@ -291,7 +291,7 @@ picture as the plugin and conversion backend.
 
 # WORDPRESS THEME
 
-The NobleRead website should use an established, lightweight WordPress
+The NobleSee website should use an established, lightweight WordPress
 theme rather than creating a WordPress theme completely from scratch.
 
 Evaluate these themes first:
@@ -318,7 +318,7 @@ The theme must support:
 - performance optimization
 - custom CSS
 - child-theme or equivalent customization
-- compatibility with the NobleRead custom plugin
+- compatibility with the NobleSee custom plugin
 
 IMPORTANT:
 
@@ -332,7 +332,7 @@ WordPress Gutenberg
 +
 Kadence/Blocksy/Astra
 +
-custom NobleRead blocks/components
+custom NobleSee blocks/components
 +
 custom CSS
 
@@ -346,8 +346,8 @@ many visual-builder plugins
 +
 large amounts of generated frontend markup.
 
-The theme should provide the visual foundation, while NobleRead-specific
-functionality should remain inside the NobleRead custom plugin.
+The theme should provide the visual foundation, while NobleSee-specific
+functionality should remain inside the NobleSee custom plugin.
 
 Do not put business logic into the theme.
 
@@ -491,7 +491,7 @@ For books distributed publicly, require an appropriate rights status.
 
 For the conversion portal, distinguish:
 
-1. Public NobleRead library content
+1. Public NobleSee library content
 2. User-owned/private conversion content
 
 Private user uploads should not automatically become publicly accessible.
@@ -774,7 +774,7 @@ storage later, once a real consumer needs it (the conversion service, a
 CDN, multi-instance web servers). The download path should stream files
 rather than redirect to a public media URL, so this migration doesn't
 change the public download contract (see
-wordpress/plugins/nobleread-core/includes/downloads.php). Tracked in
+wordpress/plugins/noblesee-core/includes/downloads.php). Tracked in
 docs/ROADMAP.md.
 
 Suggested structure:

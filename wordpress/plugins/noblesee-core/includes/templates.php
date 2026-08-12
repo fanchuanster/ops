@@ -4,7 +4,7 @@
  * helpers. Presentation only — the theme supplies CSS/typography, this
  * plugin supplies structure and data, matching WooCommerce's own
  * template_include convention so a theme can override by dropping a
- * `nobleread/{name}.php` file in its own directory.
+ * `noblesee/{name}.php` file in its own directory.
  */
 
 if (!defined('ABSPATH')) {
@@ -24,7 +24,7 @@ function nr_template_include($template) {
         return nr_locate_template('single-nr_book.php', $template);
     }
     // The front page keeps its own WP-admin-editable content (hero copy,
-    // the [nobleread_books] shortcode) — this only wraps it with the same
+    // the [noblesee_books] shortcode) — this only wraps it with the same
     // catalog sidebar the archive uses, so a visitor lands on "/" already
     // able to browse by collection, not just see the latest few books.
     if (is_front_page()) {
@@ -34,7 +34,7 @@ function nr_template_include($template) {
 }
 
 function nr_locate_template($name, $fallback) {
-    $theme_override = locate_template(['nobleread/' . $name]);
+    $theme_override = locate_template(['noblesee/' . $name]);
     if ($theme_override) {
         return $theme_override;
     }
@@ -44,7 +44,7 @@ function nr_locate_template($name, $fallback) {
 
 function nr_enqueue_assets() {
     if (is_post_type_archive('nr_book') || is_tax('nr_collection') || is_singular('nr_book') || is_front_page() || get_query_var('nr_sign_up')) {
-        wp_enqueue_style('nobleread-core', NR_PLUGIN_URL . 'assets/css/nobleread.css', [], NR_VERSION);
+        wp_enqueue_style('noblesee-core', NR_PLUGIN_URL . 'assets/css/noblesee.css', [], NR_VERSION);
     }
 }
 
@@ -60,7 +60,7 @@ function nr_get_book_parts($book_id) {
 }
 
 function nr_get_download_url($part_id, $format) {
-    $url = home_url('/nobleread-download/' . $part_id . '/' . $format . '/');
+    $url = home_url('/noblesee-download/' . $part_id . '/' . $format . '/');
     return wp_nonce_url($url, 'nr_download_' . $part_id);
 }
 
@@ -107,10 +107,10 @@ function nr_catalog_sidebar() {
 
     return sprintf(
         '<nav class="nr-catalog-sidebar" aria-label="%1$s"><h2 class="nr-catalog-sidebar-heading">%1$s</h2><ul><li class="nr-catalog-all%2$s"><a href="%3$s">%4$s</a></li>%5$s</ul></nav>',
-        esc_attr__('Collections', 'nobleread-core'),
+        esc_attr__('Collections', 'noblesee-core'),
         $current ? '' : ' current-cat',
         esc_url(get_post_type_archive_link('nr_book')),
-        esc_html__('All books', 'nobleread-core'),
+        esc_html__('All books', 'noblesee-core'),
         $items
     );
 }

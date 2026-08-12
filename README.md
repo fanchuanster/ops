@@ -1,4 +1,4 @@
-# NobleRead
+# NobleSee
 
 A WordPress-based site for hosting and sharing essential and noble books —
 especially traditional Chinese culture and history — digitized, proofread,
@@ -11,7 +11,7 @@ Domain: noblesee.com
 ## What's here
 
 This is the first runnable slice: a Dockerized WordPress site with a
-custom `nobleread-core` plugin implementing the Book/Part content model,
+custom `noblesee-core` plugin implementing the Book/Part content model,
 rights-status gating, per-format downloads (EPUB / PDF in three font-size
 variants), and per-user download rate limiting — seeded with one real
 public-domain book (*Tao Te Ching*, ch. 1, Legge's 1891 translation) so
@@ -87,7 +87,7 @@ image build time, see `wordpress/Dockerfile`):
 CLOUDFLARE_S3_ENDPOINTS=https://<account_id>.r2.cloudflarestorage.com
 CLOUDFLARE_S3_ACCESS_KEY_ID=...
 CLOUDFLARE_S3_SECRET_ACCESS_KEY=...
-NR_R2_BUCKET=nobleread
+NR_R2_BUCKET=noblesee
 ```
 
 New/edited parts sync to R2 automatically on save. To catch up files
@@ -150,7 +150,7 @@ docker compose down -v   # drops the db_data and wp_data volumes — full reset
 
 ```
 wordpress/Dockerfile                 wordpress service image: WP-CLI + plugin's Composer deps (R2 SDK, OAuth client)
-wordpress/plugins/nobleread-core/   custom plugin: content model, downloads, rate limiting, templates, R2 storage, sign-up/Google login
+wordpress/plugins/noblesee-core/   custom plugin: content model, downloads, rate limiting, templates, R2 storage, sign-up/Google login
 provisioning/                       first-boot install/activation/seed scripts (idempotent)
 tools/                               dev utilities (seed-content generation)
 docs/                                architecture review + roadmap

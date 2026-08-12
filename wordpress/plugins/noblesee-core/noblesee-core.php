@@ -1,15 +1,15 @@
 <?php
 /**
- * Plugin Name: NobleRead Core
+ * Plugin Name: NobleSee Core
  * Plugin URI:  https://noblesee.com
  * Description: Book/Part content model, rights-status gating, per-format
  *              downloads, and per-user download rate limiting for
- *              NobleRead. Business logic only — presentation belongs to
+ *              NobleSee. Business logic only — presentation belongs to
  *              the active theme. See CLAUDE.md and docs/ROADMAP.md.
  * Version:     0.1.0
- * Author:      NobleRead
+ * Author:      NobleSee
  * License:     GPL-2.0-or-later
- * Text Domain: nobleread-core
+ * Text Domain: noblesee-core
  */
 
 if (!defined('ABSPATH')) {

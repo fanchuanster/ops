@@ -1,4 +1,4 @@
-/* NobleRead in-browser reader.
+/* NobleSee in-browser reader.
  *
  * Thin layer over epub.js: paging, type size, reading themes, contents,
  * and remembering where the reader got to. Preferences are per-device

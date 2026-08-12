@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the reader-facing files for NobleRead's seed books.
+"""Generate the reader-facing files for NobleSee's seed books.
 
 This is a one-off developer utility, NOT part of the runtime stack. It
 stands in for the real AI/OCR conversion pipeline described in CLAUDE.md
@@ -16,7 +16,7 @@ generated *from* that same content: EPUB, and PDF in three font sizes.
     python3 tools/generate-seed-content.py --book analects
 
 NOTE ON TEXT FIDELITY: the passages below are transcribed for
-demonstration purposes. NobleRead's whole point is faithful
+demonstration purposes. NobleSee's whole point is faithful
 reproduction, so any text destined for real publication must be
 proofread against an authoritative source first — see the human-review
 step in CLAUDE.md section 7.
@@ -35,7 +35,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED_ROOT = os.path.join(
-    REPO_ROOT, "wordpress", "plugins", "nobleread-core", "seed-content"
+    REPO_ROOT, "wordpress", "plugins", "noblesee-core", "seed-content"
 )
 
 CJK_FONT = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"
@@ -211,7 +211,7 @@ def write_docx(book, part, path):
 
 def write_epub(book, part, path):
     epub_book = epub.EpubBook()
-    epub_book.set_identifier(f"nobleread-{book['slug']}-{part['slug']}")
+    epub_book.set_identifier(f"noblesee-{book['slug']}-{part['slug']}")
     epub_book.set_title(f"{book['title']} — {part['title']}")
     epub_book.set_language("en")
     epub_book.add_author(f"{book['author']} (trans. {book['translator']})")
@@ -227,7 +227,7 @@ def write_epub(book, part, path):
 
     style = epub.EpubItem(
         uid="style",
-        file_name="style/nobleread.css",
+        file_name="style/noblesee.css",
         media_type="text/css",
         content=(
             "body{font-family:Georgia,serif;line-height:1.6;margin:1em;}"
@@ -285,7 +285,7 @@ def write_cover(book, path):
 
     center(420, book["cover_zh"], font_cjk, (212, 175, 105))
     center(520, book["cover_en"], font_small, (230, 225, 215))
-    center(1080, "NobleRead", font_small, (120, 116, 108))
+    center(1080, "NobleSee", font_small, (120, 116, 108))
     img.save(path, quality=90)
 
 

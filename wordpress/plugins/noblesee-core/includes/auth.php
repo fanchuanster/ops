@@ -118,26 +118,26 @@ function nr_handle_sign_up_request() {
 function nr_process_sign_up_submission($name, $email) {
     $nonce = isset($_POST['nr_sign_up_nonce']) ? sanitize_text_field(wp_unslash($_POST['nr_sign_up_nonce'])) : '';
     if (!wp_verify_nonce($nonce, 'nr_sign_up')) {
-        return [__('Your session expired — please try again.', 'nobleread-core')];
+        return [__('Your session expired — please try again.', 'noblesee-core')];
     }
 
     $password = isset($_POST['nr_password']) ? (string) wp_unslash($_POST['nr_password']) : '';
 
     $errors = [];
     if ('' === $name) {
-        $errors[] = __('Please enter your name.', 'nobleread-core');
+        $errors[] = __('Please enter your name.', 'noblesee-core');
     }
     if ('' === $email || !is_email($email)) {
-        $errors[] = __('Please enter a valid email address.', 'nobleread-core');
+        $errors[] = __('Please enter a valid email address.', 'noblesee-core');
     } elseif (email_exists($email)) {
         $errors[] = sprintf(
             /* translators: %s: login URL */
-            wp_kses(__('An account with that email already exists. <a href="%s">Log in instead</a>.', 'nobleread-core'), ['a' => ['href' => []]]),
+            wp_kses(__('An account with that email already exists. <a href="%s">Log in instead</a>.', 'noblesee-core'), ['a' => ['href' => []]]),
             esc_url(wp_login_url(nr_post_login_redirect()))
         );
     }
     if (strlen($password) < 8) {
-        $errors[] = __('Please choose a password of at least 8 characters.', 'nobleread-core');
+        $errors[] = __('Please choose a password of at least 8 characters.', 'noblesee-core');
     }
 
     if (!empty($errors)) {

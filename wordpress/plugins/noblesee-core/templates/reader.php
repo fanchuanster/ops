@@ -45,7 +45,7 @@ foreach ($parts as $sibling) {
 <body class="nr-reader" data-theme="light">
 
 <header class="nr-reader-bar" id="nr-bar">
-    <a class="nr-reader-back" href="<?php echo esc_url(get_permalink($book_id)); ?>" title="<?php esc_attr_e('Back to the book', 'nobleread-core'); ?>">&larr;</a>
+    <a class="nr-reader-back" href="<?php echo esc_url(get_permalink($book_id)); ?>" title="<?php esc_attr_e('Back to the book', 'noblesee-core'); ?>">&larr;</a>
 
     <div class="nr-reader-titles">
         <span class="nr-reader-book"><?php echo esc_html($book_title); ?></span>
@@ -53,21 +53,21 @@ foreach ($parts as $sibling) {
     </div>
 
     <div class="nr-reader-tools">
-        <button type="button" id="nr-toc-toggle" aria-expanded="false" title="<?php esc_attr_e('Contents', 'nobleread-core'); ?>"><?php esc_html_e('Contents', 'nobleread-core'); ?></button>
-        <button type="button" id="nr-font-smaller" title="<?php esc_attr_e('Smaller text', 'nobleread-core'); ?>">A&minus;</button>
-        <button type="button" id="nr-font-larger" title="<?php esc_attr_e('Larger text', 'nobleread-core'); ?>">A+</button>
-        <button type="button" id="nr-theme-toggle" title="<?php esc_attr_e('Reading theme', 'nobleread-core'); ?>"><?php esc_html_e('Theme', 'nobleread-core'); ?></button>
+        <button type="button" id="nr-toc-toggle" aria-expanded="false" title="<?php esc_attr_e('Contents', 'noblesee-core'); ?>"><?php esc_html_e('Contents', 'noblesee-core'); ?></button>
+        <button type="button" id="nr-font-smaller" title="<?php esc_attr_e('Smaller text', 'noblesee-core'); ?>">A&minus;</button>
+        <button type="button" id="nr-font-larger" title="<?php esc_attr_e('Larger text', 'noblesee-core'); ?>">A+</button>
+        <button type="button" id="nr-theme-toggle" title="<?php esc_attr_e('Reading theme', 'noblesee-core'); ?>"><?php esc_html_e('Theme', 'noblesee-core'); ?></button>
     </div>
 </header>
 
-<nav class="nr-toc" id="nr-toc" hidden aria-label="<?php esc_attr_e('Contents', 'nobleread-core'); ?>">
+<nav class="nr-toc" id="nr-toc" hidden aria-label="<?php esc_attr_e('Contents', 'noblesee-core'); ?>">
     <ol id="nr-toc-list"></ol>
 </nav>
 
 <main class="nr-reader-stage">
-    <button type="button" class="nr-page-arrow nr-prev" id="nr-prev" aria-label="<?php esc_attr_e('Previous page', 'nobleread-core'); ?>">&lsaquo;</button>
+    <button type="button" class="nr-page-arrow nr-prev" id="nr-prev" aria-label="<?php esc_attr_e('Previous page', 'noblesee-core'); ?>">&lsaquo;</button>
     <div id="nr-viewer" class="nr-viewer"></div>
-    <button type="button" class="nr-page-arrow nr-next" id="nr-next" aria-label="<?php esc_attr_e('Next page', 'nobleread-core'); ?>">&rsaquo;</button>
+    <button type="button" class="nr-page-arrow nr-next" id="nr-next" aria-label="<?php esc_attr_e('Next page', 'noblesee-core'); ?>">&rsaquo;</button>
 </main>
 
 <div class="nr-reader-status" id="nr-status">
@@ -77,7 +77,7 @@ foreach ($parts as $sibling) {
             <?php
             printf(
                 /* translators: %s: title of the next part */
-                esc_html__('Next: %s', 'nobleread-core'),
+                esc_html__('Next: %s', 'noblesee-core'),
                 esc_html(get_the_title($next_part))
             );
             ?>
@@ -87,7 +87,7 @@ foreach ($parts as $sibling) {
 
 <noscript>
     <p class="nr-reader-noscript">
-        <?php esc_html_e('Reading in the browser needs JavaScript. You can download this part in EPUB or PDF from the book page instead.', 'nobleread-core'); ?>
+        <?php esc_html_e('Reading in the browser needs JavaScript. You can download this part in EPUB or PDF from the book page instead.', 'noblesee-core'); ?>
     </p>
 </noscript>
 
@@ -98,7 +98,7 @@ window.NR_READER = {
     url: <?php echo wp_json_encode(nr_get_read_content_url($part_id)); ?>,
     key: <?php echo wp_json_encode('nr-reader-' . $part_id); ?>,
     strings: {
-        loadError: <?php echo wp_json_encode(__('This book could not be opened. You can still download it from the book page.', 'nobleread-core')); ?>
+        loadError: <?php echo wp_json_encode(__('This book could not be opened. You can still download it from the book page.', 'noblesee-core')); ?>
     }
 };
 </script>

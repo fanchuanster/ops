@@ -27,7 +27,7 @@
  * Trust: an account is only ever matched/created from an email Google
  * itself reports as verified (GoogleUser::getEmailVerified()). Without
  * that, an attacker could register a Google account claiming someone
- * else's address and take over their NobleRead account by email match.
+ * else's address and take over their NobleSee account by email match.
  */
 
 if (!defined('ABSPATH')) {
@@ -79,7 +79,7 @@ function nr_handle_social_login_request() {
     }
 
     if (!nr_google_oauth_configured()) {
-        nr_access_die(__('Google sign-up is not available right now.', 'nobleread-core'), 404);
+        nr_access_die(__('Google sign-up is not available right now.', 'noblesee-core'), 404);
     }
 
     if ('start' === $step) {
@@ -138,7 +138,7 @@ function nr_handle_google_oauth_callback() {
     $given_state = isset($_GET['state']) ? (string) $_GET['state'] : '';
 
     if (!$state_data || !$given_state || !hash_equals($state_data['token'], $given_state)) {
-        nr_access_die(__('This sign-up link has expired. Please go back and try again.', 'nobleread-core'), 403);
+        nr_access_die(__('This sign-up link has expired. Please go back and try again.', 'noblesee-core'), 403);
     }
 
     $redirect_to = wp_validate_redirect((string) ($state_data['redirect_to'] ?? ''), home_url('/'));
@@ -157,14 +157,14 @@ function nr_handle_google_oauth_callback() {
         $token = $provider->getAccessToken('authorization_code', ['code' => (string) $_GET['code']]);
         $google_user = $provider->getResourceOwner($token);
     } catch (\Throwable $e) {
-        error_log('NobleRead: Google OAuth token exchange failed: ' . $e->getMessage());
+        error_log('NobleSee: Google OAuth token exchange failed: ' . $e->getMessage());
         wp_safe_redirect(add_query_arg('oauth_error', 'google', nr_sign_up_url()));
         exit;
     }
 
     $email = $google_user->getEmail();
     if (!$email || !$google_user->getEmailVerified()) {
-        nr_access_die(__("We couldn't verify your Google account's email address.", 'nobleread-core'), 403);
+        nr_access_die(__("We couldn't verify your Google account's email address.", 'noblesee-core'), 403);
     }
 
     $user_id = nr_find_or_create_google_user($google_user->getId(), $email, $google_user->getName());

@@ -1,6 +1,6 @@
 <?php
 /**
- * The download route: /nobleread-download/{part_id}/{format}/
+ * The download route: /noblesee-download/{part_id}/{format}/
  *
  * Access checks live in includes/access.php and are shared with the
  * online reader, so the two can't drift apart. This file only decides
@@ -24,7 +24,7 @@ add_action('template_redirect', 'nr_handle_download_request');
 
 function nr_add_download_rewrite() {
     add_rewrite_rule(
-        '^nobleread-download/([0-9]+)/([a-z_]+)/?$',
+        '^noblesee-download/([0-9]+)/([a-z_]+)/?$',
         'index.php?nr_download_part=$matches[1]&nr_download_format=$matches[2]',
         'top'
     );
@@ -47,22 +47,22 @@ function nr_download_format_map() {
         'epub' => [
             'meta' => 'nr_epub_attachment_id',
             'disposition' => 'attachment',
-            'label' => __('EPUB', 'nobleread-core'),
+            'label' => __('EPUB', 'noblesee-core'),
         ],
         'pdf_standard' => [
             'meta' => 'nr_pdf_standard_attachment_id',
             'disposition' => 'inline',
-            'label' => __('PDF — Standard', 'nobleread-core'),
+            'label' => __('PDF — Standard', 'noblesee-core'),
         ],
         'pdf_large' => [
             'meta' => 'nr_pdf_large_attachment_id',
             'disposition' => 'inline',
-            'label' => __('PDF — Large', 'nobleread-core'),
+            'label' => __('PDF — Large', 'noblesee-core'),
         ],
         'pdf_xl' => [
             'meta' => 'nr_pdf_xl_attachment_id',
             'disposition' => 'inline',
-            'label' => __('PDF — Extra Large', 'nobleread-core'),
+            'label' => __('PDF — Extra Large', 'noblesee-core'),
         ],
     ];
 }
@@ -76,14 +76,14 @@ function nr_handle_download_request() {
     $format = sanitize_key(get_query_var('nr_download_format'));
     $formats = nr_download_format_map();
     if (!isset($formats[$format])) {
-        nr_access_die(__('That format is not available for download.', 'nobleread-core'), 404);
+        nr_access_die(__('That format is not available for download.', 'noblesee-core'), 404);
     }
 
     $access = nr_guard_part_access($part_id, 'nr_download_');
 
     $file = nr_part_file_path($part_id, $formats[$format]['meta']);
     if (!$file) {
-        nr_access_die(__('This format is not ready yet. Please check back soon.', 'nobleread-core'), 404);
+        nr_access_die(__('This format is not ready yet. Please check back soon.', 'noblesee-core'), 404);
     }
 
     NR_Download_Limiter::record($access['user_id'], $part_id, $access['book_id'], $format);

@@ -18,11 +18,11 @@ if (!defined('ABSPATH')) {
 $home_content = <<<'HTML'
 <div class="nr-hero">
 <h2>Books worth reading, made comfortable to read.</h2>
-<p>Many valuable books — especially traditional Chinese classics, history, and works of wisdom — survive online only as scanned images that are painful to read on a phone or e-reader. NobleRead digitizes them, proofreads them carefully, and republishes them as clean EPUB and PDF editions.</p>
+<p>Many valuable books — especially traditional Chinese classics, history, and works of wisdom — survive online only as scanned images that are painful to read on a phone or e-reader. NobleSee digitizes them, proofreads them carefully, and republishes them as clean EPUB and PDF editions.</p>
 </div>
 
 <h3 class="nr-section-heading">From the library</h3>
-[nobleread_books limit="6"]
+[noblesee_books limit="6"]
 
 <div class="nr-cta-row"><a class="nr-cta" href="/books/">Browse all books</a></div>
 HTML;

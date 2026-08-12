@@ -2,7 +2,7 @@
 /**
  * Book catalog. Theme (Kadence) supplies get_header()/get_footer() chrome
  * and typography; this file supplies structure and data only. A theme
- * can override this whole template with wordpress/themes/<theme>/nobleread/archive-nr_book.php.
+ * can override this whole template with wordpress/themes/<theme>/noblesee/archive-nr_book.php.
  */
 
 if (!defined('ABSPATH')) {
@@ -22,8 +22,8 @@ get_header();
                     <?php echo wp_kses_post($term_description); ?>
                 <?php endif; ?>
             <?php else : ?>
-                <h1><?php esc_html_e('Books', 'nobleread-core'); ?></h1>
-                <p><?php esc_html_e('Valuable, hard-to-find books — digitized, proofread, and made comfortable to read on any device.', 'nobleread-core'); ?></p>
+                <h1><?php esc_html_e('Books', 'noblesee-core'); ?></h1>
+                <p><?php esc_html_e('Valuable, hard-to-find books — digitized, proofread, and made comfortable to read on any device.', 'noblesee-core'); ?></p>
             <?php endif; ?>
         </header>
 
@@ -38,7 +38,7 @@ get_header();
             </div>
             <?php the_posts_pagination(); ?>
         <?php else : ?>
-            <p><?php esc_html_e('No books have been published yet — check back soon.', 'nobleread-core'); ?></p>
+            <p><?php esc_html_e('No books have been published yet — check back soon.', 'noblesee-core'); ?></p>
         <?php endif; ?>
     </main>
 </div>

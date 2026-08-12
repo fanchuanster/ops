@@ -1,9 +1,9 @@
 <?php
 /**
  * Shortcodes, so editors can compose pages (e.g. the front page) in
- * Gutenberg without the theme needing any NobleRead-specific knowledge.
+ * Gutenberg without the theme needing any NobleSee-specific knowledge.
  *
- *   [nobleread_books limit="6"]
+ *   [noblesee_books limit="6"]
  *
  * Renders the same book-card grid as the catalog archive, reusing the
  * shared partial and stylesheet so the two never drift apart.
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-add_shortcode('nobleread_books', 'nr_books_shortcode');
+add_shortcode('noblesee_books', 'nr_books_shortcode');
 
 function nr_books_shortcode($atts) {
     $atts = shortcode_atts(
@@ -23,7 +23,7 @@ function nr_books_shortcode($atts) {
             'order' => 'DESC',
         ],
         $atts,
-        'nobleread_books'
+        'noblesee_books'
     );
 
     $query = new WP_Query([
@@ -36,12 +36,12 @@ function nr_books_shortcode($atts) {
     ]);
 
     if (!$query->have_posts()) {
-        return '<p>' . esc_html__('No books have been published yet — check back soon.', 'nobleread-core') . '</p>';
+        return '<p>' . esc_html__('No books have been published yet — check back soon.', 'noblesee-core') . '</p>';
     }
 
     // The archive template enqueues this itself; shortcodes can land on
     // any page, so enqueue here too (wp_enqueue_style is idempotent).
-    wp_enqueue_style('nobleread-core', NR_PLUGIN_URL . 'assets/css/nobleread.css', [], NR_VERSION);
+    wp_enqueue_style('noblesee-core', NR_PLUGIN_URL . 'assets/css/noblesee.css', [], NR_VERSION);
 
     ob_start();
     echo '<div class="nr-book-grid">';

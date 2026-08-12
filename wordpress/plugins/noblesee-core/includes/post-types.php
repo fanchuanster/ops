@@ -16,7 +16,7 @@ add_action('init', 'nr_register_post_types');
 add_filter('upload_mimes', 'nr_allow_epub_uploads');
 
 /**
- * EPUB is a primary reader-facing format for NobleRead (CLAUDE.md
+ * EPUB is a primary reader-facing format for NobleSee (CLAUDE.md
  * section 10) but isn't in WordPress core's default upload allowlist —
  * add it explicitly rather than asking admins to change a global setting.
  */
@@ -28,13 +28,13 @@ function nr_allow_epub_uploads($mimes) {
 function nr_register_post_types() {
     register_post_type('nr_book', [
         'labels' => [
-            'name' => __('Books', 'nobleread-core'),
-            'singular_name' => __('Book', 'nobleread-core'),
-            'add_new_item' => __('Add New Book', 'nobleread-core'),
-            'edit_item' => __('Edit Book', 'nobleread-core'),
-            'all_items' => __('Books', 'nobleread-core'),
-            'search_items' => __('Search Books', 'nobleread-core'),
-            'not_found' => __('No books found', 'nobleread-core'),
+            'name' => __('Books', 'noblesee-core'),
+            'singular_name' => __('Book', 'noblesee-core'),
+            'add_new_item' => __('Add New Book', 'noblesee-core'),
+            'edit_item' => __('Edit Book', 'noblesee-core'),
+            'all_items' => __('Books', 'noblesee-core'),
+            'search_items' => __('Search Books', 'noblesee-core'),
+            'not_found' => __('No books found', 'noblesee-core'),
         ],
         'public' => true,
         'has_archive' => 'books',
@@ -49,13 +49,13 @@ function nr_register_post_types() {
     // no REST exposure yet.
     register_post_type('nr_part', [
         'labels' => [
-            'name' => __('Parts', 'nobleread-core'),
-            'singular_name' => __('Part', 'nobleread-core'),
-            'add_new_item' => __('Add New Part', 'nobleread-core'),
-            'edit_item' => __('Edit Part', 'nobleread-core'),
-            'all_items' => __('Parts', 'nobleread-core'),
-            'search_items' => __('Search Parts', 'nobleread-core'),
-            'not_found' => __('No parts found', 'nobleread-core'),
+            'name' => __('Parts', 'noblesee-core'),
+            'singular_name' => __('Part', 'noblesee-core'),
+            'add_new_item' => __('Add New Part', 'noblesee-core'),
+            'edit_item' => __('Edit Part', 'noblesee-core'),
+            'all_items' => __('Parts', 'noblesee-core'),
+            'search_items' => __('Search Parts', 'noblesee-core'),
+            'not_found' => __('No parts found', 'noblesee-core'),
         ],
         'public' => false,
         'show_ui' => true,
@@ -84,12 +84,12 @@ function nr_register_post_types() {
 function nr_register_taxonomies() {
     register_taxonomy('nr_collection', ['nr_book'], [
         'labels' => [
-            'name' => __('Collections', 'nobleread-core'),
-            'singular_name' => __('Collection', 'nobleread-core'),
-            'add_new_item' => __('Add New Collection', 'nobleread-core'),
-            'edit_item' => __('Edit Collection', 'nobleread-core'),
-            'all_items' => __('Collections', 'nobleread-core'),
-            'search_items' => __('Search Collections', 'nobleread-core'),
+            'name' => __('Collections', 'noblesee-core'),
+            'singular_name' => __('Collection', 'noblesee-core'),
+            'add_new_item' => __('Add New Collection', 'noblesee-core'),
+            'edit_item' => __('Edit Collection', 'noblesee-core'),
+            'all_items' => __('Collections', 'noblesee-core'),
+            'search_items' => __('Search Collections', 'noblesee-core'),
         ],
         'public' => true,
         'hierarchical' => true,
@@ -100,7 +100,7 @@ function nr_register_taxonomies() {
         // collection checked — the "uploading a book always gets a
         // catalog" requirement, with no custom save-time code needed.
         'default_term' => [
-            'name' => __('Others', 'nobleread-core'),
+            'name' => __('Others', 'noblesee-core'),
             'slug' => 'others',
         ],
     ]);
@@ -153,12 +153,12 @@ function nr_register_post_meta() {
  */
 function nr_rights_statuses() {
     return [
-        'public_domain' => __('Public domain', 'nobleread-core'),
-        'licensed' => __('Licensed', 'nobleread-core'),
-        'permission_granted' => __('Permission granted', 'nobleread-core'),
-        'user_owned' => __('User-owned (private conversion)', 'nobleread-core'),
-        'restricted' => __('Restricted', 'nobleread-core'),
-        'unknown' => __('Unknown', 'nobleread-core'),
+        'public_domain' => __('Public domain', 'noblesee-core'),
+        'licensed' => __('Licensed', 'noblesee-core'),
+        'permission_granted' => __('Permission granted', 'noblesee-core'),
+        'user_owned' => __('User-owned (private conversion)', 'noblesee-core'),
+        'restricted' => __('Restricted', 'noblesee-core'),
+        'unknown' => __('Unknown', 'noblesee-core'),
     ];
 }
 

@@ -1,6 +1,6 @@
 {
-    "name": "nobleread/nobleread-core",
-    "description": "PHP dependencies for the NobleRead core plugin (R2 storage, Google sign-up).",
+    "name": "noblesee/noblesee-core",
+    "description": "PHP dependencies for the NobleSee core plugin (R2 storage, Google sign-up).",
     "license": "proprietary",
     "require": {
         "php": ">=8.1",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# End-to-end smoke test for the NobleRead core reader flow.
+# End-to-end smoke test for the NobleSee core reader flow.
 #
 #   ./tools/smoke-test.sh                       # against http://localhost:8090
 #   BASE_URL=http://10.0.0.5:8090 ./tools/smoke-test.sh
@@ -21,7 +21,7 @@ set -uo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8090}"
 BASE_URL="${BASE_URL%/}"
-TEST_USER="nobleread_smoke"
+TEST_USER="noblesee_smoke"
 TEST_PASS="smoke-test-$$-pass"
 WORKDIR="$(mktemp -d)"
 COOKIES="$WORKDIR/cookies.txt"
@@ -80,12 +80,12 @@ status_of() { # url
 
 # Pull a nonce-signed download URL for a part+format out of a fetched page.
 download_url() { # page-file, part-id, format
-    grep -oE "href=\"[^\"]*nobleread-download/$2/$3/?[^\"]*\"" "$1" \
+    grep -oE "href=\"[^\"]*noblesee-download/$2/$3/?[^\"]*\"" "$1" \
         | head -1 | sed 's/href="//; s/"$//; s/&#038;/\&/g'
 }
 
 # --------------------------------------------------------------------------
-printf "%sNobleRead smoke test%s  →  %s\n" "$C_HEAD" "$C_OFF" "$BASE_URL"
+printf "%sNobleSee smoke test%s  →  %s\n" "$C_HEAD" "$C_OFF" "$BASE_URL"
 
 if ! curl -sf -o /dev/null "$BASE_URL/"; then
     printf "\n%sSite is not reachable at %s%s\n" "$C_FAIL" "$BASE_URL" "$C_OFF"
@@ -131,7 +131,7 @@ check_contains "catalog lists a seeded book" "$WORKDIR/catalog.html" "The Analec
 
 section "Downloads require authentication"
 check_eq "anonymous download redirects to login" \
-    "$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/nobleread-download/$PART1/epub/")" 302
+    "$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/noblesee-download/$PART1/epub/")" 302
 
 section "Login"
 curl -s -c "$COOKIES" -b "$COOKIES" \
@@ -159,7 +159,7 @@ else
     check_eq "DOCX master blocked" "$(status_of "${EPUB_URL/\/epub\//\/docx\/}")" 404
     check_eq "unknown format blocked" "$(status_of "${EPUB_URL/\/epub\//\/mobi\/}")" 404
     check_eq "tampered nonce rejected" \
-        "$(status_of "$BASE_URL/nobleread-download/$PART1/epub/?_wpnonce=deadbeef")" 403
+        "$(status_of "$BASE_URL/noblesee-download/$PART1/epub/?_wpnonce=deadbeef")" 403
 fi
 
 section "Download limit counts distinct books, not files"
@@ -178,7 +178,7 @@ if [ -n "${TTC:-}" ]; then
     URL=$(download_url "$WORKDIR/book.html" "$PART1" epub)
     status_of "$URL" >/dev/null
     curl -s -b "$COOKIES" -c "$COOKIES" "$BASE_URL/books/tao-te-ching/" -o "$WORKDIR/ttc.html"
-    TTC_PART=$(grep -oE 'nobleread-download/[0-9]+/epub' "$WORKDIR/ttc.html" | head -1 | cut -d/ -f2)
+    TTC_PART=$(grep -oE 'noblesee-download/[0-9]+/epub' "$WORKDIR/ttc.html" | head -1 | cut -d/ -f2)
     TTC_URL=$(download_url "$WORKDIR/ttc.html" "$TTC_PART" epub)
     check_eq "second distinct book blocked at limit" "$(status_of "$TTC_URL")" 429
     wp_batch "wp option update nr_download_limit_per_day 5 >/dev/null" >/dev/null

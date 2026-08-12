@@ -4,7 +4,7 @@
  *
  * A logged-in reader may download a limited number of book parts within
  * a rolling 24-hour period (default 5, configurable under
- * Settings > NobleRead). This limits volume of books downloaded, not
+ * Settings > NobleSee). This limits volume of books downloaded, not
  * network bandwidth/throughput.
  *
  * Backed by a small append-only log table (not usermeta) so the check is

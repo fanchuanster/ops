@@ -30,10 +30,10 @@ while (have_posts()) :
                 <div class="nr-book-meta">
                     <h1><?php the_title(); ?></h1>
                     <?php if ($author) : ?>
-                        <p class="nr-book-author"><?php esc_html_e('By', 'nobleread-core'); ?> <?php echo esc_html($author); ?></p>
+                        <p class="nr-book-author"><?php esc_html_e('By', 'noblesee-core'); ?> <?php echo esc_html($author); ?></p>
                     <?php endif; ?>
                     <?php if ($translator) : ?>
-                        <p class="nr-book-translator"><?php esc_html_e('Translated by', 'nobleread-core'); ?> <?php echo esc_html($translator); ?></p>
+                        <p class="nr-book-translator"><?php esc_html_e('Translated by', 'noblesee-core'); ?> <?php echo esc_html($translator); ?></p>
                     <?php endif; ?>
                     <?php if ($language) : ?>
                         <p class="nr-book-language"><?php echo esc_html($language); ?></p>
@@ -46,17 +46,17 @@ while (have_posts()) :
             <div class="nr-book-description"><?php the_content(); ?></div>
 
             <section class="nr-book-parts">
-                <h2><?php esc_html_e('Parts', 'nobleread-core'); ?></h2>
+                <h2><?php esc_html_e('Parts', 'noblesee-core'); ?></h2>
 
                 <?php if (empty($parts)) : ?>
-                    <p><?php esc_html_e('Parts for this book are being prepared.', 'nobleread-core'); ?></p>
+                    <p><?php esc_html_e('Parts for this book are being prepared.', 'noblesee-core'); ?></p>
                 <?php elseif (!is_user_logged_in()) : ?>
                     <p class="nr-login-prompt">
                         <?php
                         printf(
                             wp_kses(
                                 /* translators: 1: login URL, 2: registration URL */
-                                __('<a href="%1$s">Log in</a> or <a href="%2$s">create a free account</a> to read and download.', 'nobleread-core'),
+                                __('<a href="%1$s">Log in</a> or <a href="%2$s">create a free account</a> to read and download.', 'noblesee-core'),
                                 ['a' => ['href' => []]]
                             ),
                             esc_url(wp_login_url(get_permalink())),
@@ -73,7 +73,7 @@ while (have_posts()) :
                             <li class="nr-part<?php echo $staged['unlocked'] ? '' : ' nr-part-locked'; ?>">
                                 <span class="nr-part-title"><?php echo esc_html(get_the_title($part)); ?></span>
                                 <?php if (empty($formats)) : ?>
-                                    <span class="nr-part-pending"><?php esc_html_e('Coming soon', 'nobleread-core'); ?></span>
+                                    <span class="nr-part-pending"><?php esc_html_e('Coming soon', 'noblesee-core'); ?></span>
                                 <?php elseif (!$staged['unlocked']) : ?>
                                     <span class="nr-part-lock">
                                         <?php echo esc_html(NR_Staged_Release::lock_message($staged)); ?>
@@ -82,7 +82,7 @@ while (have_posts()) :
                                     <span class="nr-part-downloads">
                                         <?php if (nr_part_is_readable($part->ID)) : ?>
                                             <a class="nr-read-btn" href="<?php echo esc_url(nr_get_read_url($part->ID)); ?>">
-                                                <?php esc_html_e('Read online', 'nobleread-core'); ?>
+                                                <?php esc_html_e('Read online', 'noblesee-core'); ?>
                                             </a>
                                         <?php endif; ?>
                                         <?php foreach ($formats as $format => $label) : ?>
@@ -98,11 +98,11 @@ while (have_posts()) :
                     <p class="nr-remaining-note">
                         <?php
                         if (!NR_Download_Limiter::counts_against_limit(get_current_user_id(), $book_id)) {
-                            esc_html_e("You've already started this book today — every format and part of it is free to download.", 'nobleread-core');
+                            esc_html_e("You've already started this book today — every format and part of it is free to download.", 'noblesee-core');
                         } else {
                             printf(
                                 /* translators: %d: number of further books the reader may start today */
-                                esc_html__('You can start %d more book(s) today. Once you start one, all of its parts and formats are free.', 'nobleread-core'),
+                                esc_html__('You can start %d more book(s) today. Once you start one, all of its parts and formats are free.', 'noblesee-core'),
                                 (int) NR_Download_Limiter::remaining(get_current_user_id())
                             );
                         }

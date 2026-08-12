@@ -117,7 +117,7 @@ class NR_Staged_Release {
         if ('waiting' === $status['reason'] && $status['unlocks_at']) {
             return sprintf(
                 /* translators: %s: human-readable time remaining, e.g. "2 days" */
-                __('Opens in %s — time enough to enjoy the part you already have.', 'nobleread-core'),
+                __('Opens in %s — time enough to enjoy the part you already have.', 'noblesee-core'),
                 human_time_diff(time(), $status['unlocks_at'])
             );
         }
@@ -129,11 +129,11 @@ class NR_Staged_Release {
         if ($previous_title) {
             return sprintf(
                 /* translators: %s: title of the preceding part */
-                __('Opens once you begin “%s”.', 'nobleread-core'),
+                __('Opens once you begin “%s”.', 'noblesee-core'),
                 $previous_title
             );
         }
 
-        return __('Opens once you begin the previous part.', 'nobleread-core');
+        return __('Opens once you begin the previous part.', 'noblesee-core');
     }
 }

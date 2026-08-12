@@ -37,7 +37,7 @@ function nr_storage_r2_configured() {
 }
 
 function nr_storage_bucket() {
-    return nr_env('NR_R2_BUCKET', 'nobleread');
+    return nr_env('NR_R2_BUCKET', 'noblesee');
 }
 
 /**
@@ -141,7 +141,7 @@ function nr_storage_sync_to_r2($part_id, $meta_key) {
         ]);
     } catch (\Throwable $e) {
         error_log(sprintf(
-            'NobleRead: R2 upload failed for part %d field %s: %s',
+            'NobleSee: R2 upload failed for part %d field %s: %s',
             $part_id,
             $meta_key,
             $e->getMessage()
