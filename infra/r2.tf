@@ -41,20 +41,12 @@ resource "cloudflare_r2_bucket_lifecycle" "artifacts" {
   account_id  = var.account_id
   bucket_name = cloudflare_r2_bucket.artifacts.name
 
+  # ORDER MATTERS, and not for behavioural reasons. R2 returns lifecycle
+  # rules sorted by prefix — broadest first — while the provider compares
+  # the list positionally. Listing these in any other order produces a
+  # diff on every plan that an apply cannot settle, because the API keeps
+  # handing them back in its own order. Keep the empty-prefix rule first.
   rules = [
-    {
-      id      = "expire-conversion-scratch"
-      enabled = true
-      conditions = {
-        prefix = "conversion/"
-      }
-      delete_objects_transition = {
-        condition = {
-          type    = "Age"
-          max_age = 2592000 # 30 days
-        }
-      }
-    },
     {
       id      = "abort-incomplete-uploads"
       enabled = true
@@ -65,6 +57,19 @@ resource "cloudflare_r2_bucket_lifecycle" "artifacts" {
         condition = {
           type    = "Age"
           max_age = 604800 # 7 days
+        }
+      }
+    },
+    {
+      id      = "expire-conversion-scratch"
+      enabled = true
+      conditions = {
+        prefix = "conversion/"
+      }
+      delete_objects_transition = {
+        condition = {
+          type    = "Age"
+          max_age = 2592000 # 30 days
         }
       }
     },

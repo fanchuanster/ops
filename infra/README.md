@@ -16,10 +16,9 @@ tools fighting over one resource.
 
 ## Required token permissions
 
-NobleSee keeps a **single** Cloudflare token: `CLOUDFLARE_CUSTOM_TOKEN` in
-`.env`. Use the `infra/tf` wrapper, which loads it and exports it under the
-name the provider expects (`CLOUDFLARE_API_TOKEN`). The token is never a
-Terraform variable, so it stays out of `.tfvars` and out of state.
+NobleSee keeps a **single** Cloudflare token: `CLOUDFLARE_API_TOKEN` in `.env`,
+which is the name the provider reads. `infra/tf` loads it for you. The token is
+never a Terraform variable, so it stays out of `.tfvars` and out of state.
 
 The token needs:
 
@@ -41,7 +40,7 @@ for p in "accounts/$ACC/r2/buckets" "accounts/$ACC/d1/database" \
          "zones/$ZONE/dns_records"; do
   printf '%-40s %s\n' "$p" \
     "$(curl -s -o /dev/null -w '%{http_code}' \
-        -H "Authorization: Bearer $CLOUDFLARE_CUSTOM_TOKEN" \
+        -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
         "https://api.cloudflare.com/client/v4/$p")"
 done
 ```
@@ -55,7 +54,7 @@ but it is quicker to check first.
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # fill in account_id, zone_id
-# CLOUDFLARE_CUSTOM_TOKEN in .env, scoped as above
+# CLOUDFLARE_API_TOKEN in .env, scoped as above
 
 ./tf init
 ./tf plan
@@ -63,9 +62,10 @@ cp terraform.tfvars.example terraform.tfvars   # fill in account_id, zone_id
 ```
 
 `infra/tf` is a thin wrapper around `terraform` — same subcommands and flags.
-Bare `terraform` works too, but only if you export `CLOUDFLARE_API_TOKEN`
-yourself; without it the provider fails with an unhelpful authentication
-error.
+It loads `.env` and fails with a usable message when the token is missing;
+the provider's own error in that case is an unexplained authentication
+failure. Bare `terraform -chdir=infra` works too if you export the token
+yourself.
 
 ### Ordering: the Worker must exist before the domain attaches to it
 

@@ -20,7 +20,14 @@ resource "cloudflare_dns_record" "www" {
 # The redirect itself. Without this, www would serve the site on a
 # second hostname, which splits sessions (the auth cookie is scoped to
 # one host) and gives search engines duplicate content.
+#
+# Gated because it needs a zone permission the other resources do not —
+# see manage_redirect_ruleset in variables.tf. Without the gate, a token
+# missing that one permission fails every apply, including the parts it
+# is perfectly entitled to make.
 resource "cloudflare_ruleset" "www_redirect" {
+  count = var.manage_redirect_ruleset ? 1 : 0
+
   zone_id = var.zone_id
   name    = "Redirect www to apex"
   kind    = "zone"

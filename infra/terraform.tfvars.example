@@ -3,9 +3,9 @@
 #   cp terraform.tfvars.example terraform.tfvars
 #
 # Find these with:
-#   curl -s -H "Authorization: Bearer $CLOUDFLARE_CUSTOM_TOKEN" \
+#   curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
 #     https://api.cloudflare.com/client/v4/accounts
-#   curl -s -H "Authorization: Bearer $CLOUDFLARE_CUSTOM_TOKEN" \
+#   curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
 #     https://api.cloudflare.com/client/v4/zones
 
 account_id = ""
@@ -20,3 +20,7 @@ r2_location = "APAC"
 # Leave false until `wrangler deploy` has created the Worker; see the
 # ordering note at the top of worker.tf.
 worker_deployed = false
+
+# Set false if the token lacks the zone "Dynamic Redirect" permission;
+# the rest of the configuration still applies cleanly without it.
+manage_redirect_ruleset = true

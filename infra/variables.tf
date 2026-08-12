@@ -30,3 +30,16 @@ variable "r2_location" {
   type        = string
   default     = "APAC"
 }
+
+variable "manage_redirect_ruleset" {
+  description = <<-EOT
+    Whether Terraform manages the www→apex redirect ruleset.
+
+    The Rulesets API needs a zone permission beyond DNS and Zone Settings —
+    in the token UI it is the "Dynamic Redirect" permission (Zone scope).
+    Set false while the token lacks it, so the rest of the configuration
+    still applies cleanly, and true once it is granted.
+  EOT
+  type        = bool
+  default     = true
+}

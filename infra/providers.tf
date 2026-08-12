@@ -1,9 +1,8 @@
 provider "cloudflare" {
-  # The token comes from the environment, never a variable — a variable
-  # would put it in terraform.tfvars and in state.
+  # The token comes from CLOUDFLARE_API_TOKEN in the environment, never
+  # a Terraform variable — a variable would put it in terraform.tfvars
+  # and in state.
   #
-  # NobleSee keeps a single Cloudflare token, CLOUDFLARE_CUSTOM_TOKEN.
-  # The provider reads CLOUDFLARE_API_TOKEN, so use the `infra/tf`
-  # wrapper, which bridges the two names and fails loudly if the token
-  # is missing. Required scopes are in infra/README.md.
+  # `infra/tf` loads it from the repo's .env. Required scopes are listed
+  # in infra/README.md.
 }
