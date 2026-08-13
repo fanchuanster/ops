@@ -134,7 +134,16 @@ def build_document(
     title: str,
     skip_titles: frozenset[str] = frozenset({"封面", "书名", "版权", "目录", "封底"}),
     low_confidence_below: float = 0.80,
+    normalize: bool = True,
 ) -> tuple[Document, StructureReport]:
+    """Structure positioned lines into a document.
+
+    `normalize` repairs the punctuation an OCR engine reports as ASCII
+    where the printed page sets it full-width. Turn it off for text that
+    was never OCR'd — a born-digital PDF or a DOCX carries exact
+    characters, and "repairing" those is editing the author rather than
+    correcting the machine.
+    """
     report = StructureReport()
     doc = Document(title=title)
 
@@ -194,9 +203,13 @@ def build_document(
 
         for line in lines:
             text, ref = extract_ref(line.text)
-            text = normalize_text(text, report.normalization)
-            if ref:
-                ref = normalize_text(ref, report.normalization)
+            if normalize:
+                text = normalize_text(text, report.normalization)
+                if ref:
+                    ref = normalize_text(ref, report.normalization)
+            else:
+                text = text.strip()
+                ref = ref.strip() if ref else ref
 
             if line.confidence < low_confidence_below:
                 report.low_confidence.append((page.index, line.confidence, line.text))
@@ -267,7 +280,11 @@ def build_document(
                 doc.blocks.append(
                     Block(
                         kind=BlockKind.ATTRIBUTION,
-                        lines=[normalize_attribution(text, report.normalization)],
+                        lines=[
+                            normalize_attribution(text, report.normalization)
+                            if normalize
+                            else text
+                        ],
                         page=page.index,
                         confidence=line.confidence,
                     )

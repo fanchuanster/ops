@@ -100,8 +100,10 @@ def build_docx(doc: Document, out_path: Path, author: str | None = None) -> Path
     _make_styles(docx)
 
     docx.core_properties.title = doc.title
-    if author:
-        docx.core_properties.author = author
+    # Always written, even when empty: python-docx stamps its own name as
+    # the author of a new document, and a master that claims python-docx
+    # wrote it is both wrong and something a round trip would read back.
+    docx.core_properties.author = author if author is not None else (doc.author or "")
     docx.core_properties.language = "zh-CN"
 
     docx.add_paragraph(doc.title, style="Title")

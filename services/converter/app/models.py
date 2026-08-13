@@ -143,7 +143,32 @@ class Document:
     """A whole reconstructed book, ready for format generation."""
 
     title: str
+    author: str | None = None
     blocks: list[Block] = field(default_factory=list)
     # Page indices the OCR pass could not read confidently, for the
     # human review step. Never silently dropped.
     low_confidence_pages: list[int] = field(default_factory=list)
+
+
+@dataclass
+class Suggestion:
+    """One proposed correction to one line, awaiting a human decision.
+
+    The AI stage never edits a document (CLAUDE.md section 7). It emits
+    these, a human sets `approved`, and only then does anything change.
+    `original` is kept so the apply step can refuse to act on a line that
+    has moved on since the suggestion was made.
+
+    `category` is derived from the edit itself, not claimed by the model:
+    "punctuation" if only punctuation and spacing differ, "characters" if
+    the wording is touched at all. The second kind deserves a closer read.
+    """
+
+    block: int  # index into Document.blocks
+    line: int  # index into Block.lines
+    original: str
+    suggested: str
+    reason: str
+    confidence: float
+    category: str
+    approved: bool | None = None  # None = nobody has looked at it yet
