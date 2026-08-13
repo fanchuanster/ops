@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation'
 import React from 'react'
 
 import { AuthForm } from '../../../components/AuthForm'
+import { GoogleSignInButton } from '../../../components/GoogleSignInButton'
 import { getCurrentUser, safeNext } from '../../../lib/auth'
+import { isGoogleSignInConfigured } from '../../../lib/googleOAuth'
 import { signUp } from '../actions/auth'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +28,15 @@ export default async function SignUpPage({
         Free, and always will be. Every book in the public library is cleared for distribution;
         an account exists so downloads stay fair, not to put a book behind a gate.
       </p>
+
+      {isGoogleSignInConfigured() ? (
+        <>
+          <GoogleSignInButton next={target} label="Continue with Google" />
+          <p className="auth-divider">
+            <span>or</span>
+          </p>
+        </>
+      ) : null}
 
       <AuthForm action={signUp} mode="signup" next={target} />
 

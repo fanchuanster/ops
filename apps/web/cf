@@ -60,5 +60,7 @@ exec docker run --rm "${TTY[@]}" "${PORT[@]}" \
     -e ADMIN_TARGET \
     -e ADMIN_EMAIL \
     -e ADMIN_PASSWORD \
+    -e GOOGLE_OAUTH_CLIENT_ID \
+    -e GOOGLE_OAUTH_CLIENT_SECRET \
     -u "$(id -u):$(id -g)" \
     "$IMAGE" "$@"

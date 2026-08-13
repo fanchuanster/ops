@@ -526,6 +526,46 @@ h3 {
   font-size: 0.875rem;
 }
 
+/* --- sign in with Google ----------------------------------------- */
+
+.oauth-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.oauth-button:hover {
+  border-color: var(--ink-faint);
+}
+
+/* A rule with the word "or" sitting in a gap in the middle of it. */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--rule);
+}
+
 .optional,
 .hint {
   color: var(--ink-faint);

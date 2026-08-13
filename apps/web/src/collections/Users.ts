@@ -92,6 +92,25 @@ export const Users: CollectionConfig = {
       },
     },
     {
+      name: 'googleId',
+      type: 'text',
+      unique: true,
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'Google’s subject id, set when a reader signs in with Google. Unique so one Google account cannot be linked to two readers. Never edit by hand: it is the identity, and pointing it at another row hands that row’s account to whoever holds the Google login.',
+      },
+      access: {
+        // Set only by the OAuth callback, which writes with
+        // `overrideAccess: true`. Nothing a reader can reach may touch
+        // it — being able to write your own googleId is being able to
+        // claim someone else's Google identity.
+        create: () => false,
+        update: () => false,
+      },
+    },
+    {
       name: 'roles',
       type: 'select',
       hasMany: true,

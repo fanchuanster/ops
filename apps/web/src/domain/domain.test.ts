@@ -19,6 +19,11 @@ import {
   isKindleDeliverableFormat,
 } from './kindle'
 import {
+  SIGN_IN_REFUSAL_MESSAGES,
+  decideGoogleSignIn,
+  verifyGoogleClaims,
+} from './googleIdentity'
+import {
   BOOK_LEVELS,
   DEFAULT_BROWSE_LEVEL,
   LEVEL_IDS,
@@ -390,5 +395,146 @@ describe('publication review', () => {
     expect(requiresAdmin('visibility')).toBe(true)
     expect(requiresAdmin('level')).toBe(true)
     expect(requiresAdmin('title')).toBe(false)
+  })
+})
+
+describe('google sign-in', () => {
+  const CLIENT = '681003907883-example.apps.googleusercontent.com'
+  const NONCE = 'nonce-abc'
+  const future = Math.floor(NOW.getTime() / 1000) + 600
+
+  const claims = (over: Record<string, unknown> = {}) => ({
+    iss: 'https://accounts.google.com',
+    aud: CLIENT,
+    exp: future,
+    sub: 'google-sub-1',
+    nonce: NONCE,
+    email: 'Reader@Example.com',
+    email_verified: true,
+    name: 'A Reader',
+    ...over,
+  })
+
+  const verify = (over: Record<string, unknown> = {}) =>
+    verifyGoogleClaims({ claims: claims(over), clientId: CLIENT, nonce: NONCE, now: NOW })
+
+  it('accepts a well-formed token and normalises the address', () => {
+    const result = verify()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.profile).toEqual({
+        googleId: 'google-sub-1',
+        email: 'reader@example.com',
+        emailVerified: true,
+        displayName: 'A Reader',
+      })
+    }
+  })
+
+  it('accepts both issuer spellings Google uses', () => {
+    expect(verify({ iss: 'accounts.google.com' }).ok).toBe(true)
+    expect(verify({ iss: 'https://accounts.google.com' }).ok).toBe(true)
+  })
+
+  it('rejects a token minted for another OAuth client', () => {
+    // A perfectly valid Google token that must not sign anyone in here.
+    expect(verify({ aud: 'someone-else.apps.googleusercontent.com' })).toEqual({
+      ok: false,
+      reason: 'wrong_audience',
+    })
+  })
+
+  it('rejects a token from somewhere that is not Google', () => {
+    expect(verify({ iss: 'https://evil.example' })).toEqual({ ok: false, reason: 'wrong_issuer' })
+  })
+
+  it('rejects an expired token', () => {
+    expect(verify({ exp: Math.floor(NOW.getTime() / 1000) - 3600 })).toEqual({
+      ok: false,
+      reason: 'expired',
+    })
+  })
+
+  it('rejects a token bound to a different login attempt', () => {
+    expect(verify({ nonce: 'someone-elses-nonce' })).toEqual({
+      ok: false,
+      reason: 'nonce_mismatch',
+    })
+    expect(verify({ nonce: undefined })).toEqual({ ok: false, reason: 'nonce_mismatch' })
+  })
+
+  it('treats anything but a literal true as unverified', () => {
+    // Google sends a boolean; a string "true" from anywhere else must
+    // not be read as verification.
+    const result = verify({ email_verified: 'true' })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.profile.emailVerified).toBe(false)
+  })
+
+  const profile = {
+    googleId: 'google-sub-1',
+    email: 'reader@example.com',
+    emailVerified: true,
+  }
+
+  it('creates an account when the identity is new', () => {
+    expect(decideGoogleSignIn({ profile })).toEqual({ action: 'create', profile })
+  })
+
+  it('signs in the account already linked to this Google id', () => {
+    expect(
+      decideGoogleSignIn({
+        profile,
+        byGoogleId: { id: 7, email: 'moved@example.com', googleId: 'google-sub-1' },
+      }),
+    ).toEqual({ action: 'sign_in', accountId: 7 })
+  })
+
+  it('links to an existing password account with the same verified address', () => {
+    expect(
+      decideGoogleSignIn({ profile, byEmail: { id: 3, email: 'reader@example.com' } }),
+    ).toEqual({ action: 'link_and_sign_in', accountId: 3 })
+  })
+
+  it('refuses to link an unverified address, which would be account takeover', () => {
+    // Without this, anyone could register a Google account claiming
+    // someone else's address and click their way into that account.
+    expect(
+      decideGoogleSignIn({
+        profile: { ...profile, emailVerified: false },
+        byEmail: { id: 3, email: 'reader@example.com' },
+      }),
+    ).toEqual({ action: 'refuse', reason: 'email_unverified' })
+  })
+
+  it('refuses an unverified address even when nothing exists to take over', () => {
+    expect(decideGoogleSignIn({ profile: { ...profile, emailVerified: false } })).toEqual({
+      action: 'refuse',
+      reason: 'email_unverified',
+    })
+  })
+
+  it('will not re-point an address already linked to another Google account', () => {
+    expect(
+      decideGoogleSignIn({
+        profile,
+        byEmail: { id: 3, email: 'reader@example.com', googleId: 'a-different-sub' },
+      }),
+    ).toEqual({ action: 'refuse', reason: 'linked_to_other_account' })
+  })
+
+  it('has a reader-facing message for every refusal', () => {
+    for (const key of [
+      'email_unverified',
+      'linked_to_other_account',
+      'wrong_issuer',
+      'wrong_audience',
+      'expired',
+      'nonce_mismatch',
+      'no_subject',
+      'no_email',
+    ] as const) {
+      expect(SIGN_IN_REFUSAL_MESSAGES[key]).toBeTruthy()
+    }
   })
 })
