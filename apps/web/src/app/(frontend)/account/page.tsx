@@ -8,6 +8,7 @@ import {
   distinctBooksInWindow,
   type DownloadRecord,
 } from '../../../domain/downloadLimit'
+import { KindleSettings } from '../../../components/KindleSettings'
 import { getCurrentUser } from '../../../lib/auth'
 import { logout } from '../actions/auth'
 
@@ -65,7 +66,7 @@ export default async function AccountPage() {
       </p>
 
       <div className="section-head">
-        <h2>Downloads</h2>
+        <h2>Deliveries</h2>
       </div>
 
       {/*
@@ -79,8 +80,9 @@ export default async function AccountPage() {
         {` books remaining in the last ${DEFAULT_LIMIT_POLICY.windowHours} hours.`}
       </p>
       <p className="hint">
-        The limit counts books, not files. Taking the EPUB and all three PDF sizes of one book
-        uses a single slot — you read one book.
+        The limit counts books, not files, and applies to books sent to a device. Reading here
+        is never limited — send the EPUB and all three PDF sizes of one book and it is still a
+        single slot, because you read one book.
       </p>
 
       {titles.size > 0 ? (
@@ -90,8 +92,10 @@ export default async function AccountPage() {
           ))}
         </ul>
       ) : (
-        <p className="empty">Nothing downloaded in this window.</p>
+        <p className="empty">Nothing sent in this window.</p>
       )}
+
+      <KindleSettings current={user.kindleEmail ?? null} />
 
       <form action={logout} style={{ marginTop: '2.5rem' }}>
         <button type="submit" className="theme-toggle">

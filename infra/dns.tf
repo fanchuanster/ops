@@ -49,3 +49,22 @@ resource "cloudflare_ruleset" "www_redirect" {
     }
   }]
 }
+
+# Records that authorise NobleSee to send mail as this domain, for
+# Send-to-Kindle. Amazon silently discards a personal document whose
+# sender fails SPF or DKIM, so without these the feature appears to work
+# and delivers nothing.
+#
+# Never proxied: proxying applies to HTTP, and these are TXT and MX
+# records that resolvers read directly.
+resource "cloudflare_dns_record" "email" {
+  for_each = { for r in var.email_dns_records : "${r.type}-${r.name}" => r }
+
+  zone_id  = var.zone_id
+  name     = each.value.name == "@" ? var.domain : "${each.value.name}.${var.domain}"
+  type     = each.value.type
+  content  = each.value.content
+  priority = each.value.priority
+  ttl      = 3600
+  comment  = "Managed by Terraform — mail sending for Send-to-Kindle."
+}

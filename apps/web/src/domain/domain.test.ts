@@ -11,6 +11,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { checkDownloadLimit, type DownloadRecord } from './downloadLimit'
+import {
+  KINDLE_SENDER_ADDRESS,
+  checkKindleAddress,
+  checkKindleDelivery,
+  isEmailableSize,
+  isKindleDeliverableFormat,
+} from './kindle'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
 import { canAccessArtifact, effectiveRightsStatus, isPubliclyDistributable } from './rights'
 import { releaseState } from './stagedRelease'
@@ -170,5 +177,77 @@ describe('password policy', () => {
 
   it('imposes no upper bound, so a passphrase is fine', () => {
     expect(checkPassword('a long quiet room and a good book')).toBeNull()
+  })
+})
+
+describe('kindle delivery', () => {
+  it('accepts both addresses Amazon issues, normalised', () => {
+    expect(checkKindleAddress('  Reader_ABC@Kindle.com ')).toEqual({
+      valid: true,
+      address: 'reader_abc@kindle.com',
+    })
+    expect(checkKindleAddress('reader@free.kindle.com')).toEqual({
+      valid: true,
+      address: 'reader@free.kindle.com',
+    })
+  })
+
+  it('refuses an ordinary email address, which would vanish silently', () => {
+    expect(checkKindleAddress('reader@gmail.com')).toEqual({
+      valid: false,
+      problem: 'wrong_domain',
+    })
+  })
+
+  it('leaves the local part alone rather than "helpfully" stripping it', () => {
+    // Amazon assigns these; dot- and plus-stripping would break real addresses.
+    expect(checkKindleAddress('a.b+c@kindle.com')).toEqual({
+      valid: true,
+      address: 'a.b+c@kindle.com',
+    })
+  })
+
+  it('never offers the DOCX master to a Kindle', () => {
+    expect(isKindleDeliverableFormat('epub')).toBe(true)
+    expect(isKindleDeliverableFormat('pdf_xl')).toBe(true)
+    expect(isKindleDeliverableFormat('docx')).toBe(false)
+  })
+
+  it('measures the encoded size, since base64 is what gets mailed', () => {
+    // 18 MB of raw bytes becomes ~24 MB encoded, over the limit.
+    expect(isEmailableSize(18 * 1024 * 1024)).toBe(false)
+    expect(isEmailableSize(10 * 1024 * 1024)).toBe(true)
+    expect(isEmailableSize(0)).toBe(false)
+  })
+
+  it('refuses delivery when no transport is configured', () => {
+    expect(
+      checkKindleDelivery({
+        kindleAddress: 'reader@kindle.com',
+        format: 'epub',
+        transportConfigured: false,
+      }),
+    ).toEqual({ ok: false, refusal: 'delivery_unavailable' })
+  })
+
+  it('refuses delivery before an address is set', () => {
+    expect(
+      checkKindleDelivery({ kindleAddress: null, format: 'epub', transportConfigured: true }),
+    ).toEqual({ ok: false, refusal: 'no_address' })
+  })
+
+  it('allows a configured reader and hands back the normalised address', () => {
+    expect(
+      checkKindleDelivery({
+        kindleAddress: ' Reader@Kindle.com ',
+        format: 'epub',
+        bytes: 3409,
+        transportConfigured: true,
+      }),
+    ).toEqual({ ok: true, address: 'reader@kindle.com' })
+  })
+
+  it('names one sender, so the UI reminder and the From header cannot drift', () => {
+    expect(KINDLE_SENDER_ADDRESS).toBe('kindle@noblesee.com')
   })
 })

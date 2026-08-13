@@ -689,3 +689,155 @@ h3 {
   font-family: var(--font-sans);
   font-size: 0.875rem;
 }
+
+/* --- Send to Kindle ------------------------------------------------- */
+
+.kindle-settings {
+  margin-top: 2.5rem;
+}
+
+/*
+  The Amazon approved-sender step is numbered and full-width rather than
+  a footnote: skipping it makes Amazon discard the document silently, so
+  a reader who misses it has no error to read and no way to work out
+  why nothing arrived.
+*/
+.kindle-steps {
+  margin: 1rem 0 1.5rem;
+  padding-left: 1.25rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.kindle-steps li + li {
+  margin-top: 0.75rem;
+}
+
+.kindle-steps .hint {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.kindle-steps code {
+  font-size: 0.8125rem;
+}
+
+.kindle-settings input[type='email'] {
+  display: block;
+  width: 100%;
+  max-width: 26rem;
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+}
+
+.kindle-settings label {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.kindle-settings button[type='submit'] {
+  margin-top: 0.85rem;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.kindle-settings button[type='submit']:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Sits inside the .formats row, so it has to read as one of the pills. */
+.send-to-kindle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.send-to-kindle__button {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  padding: 0.2rem 0.6rem;
+  color: var(--ink-soft);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.send-to-kindle__button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.send-to-kindle__button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.form-error,
+.form-notice {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+.form-error {
+  color: var(--ink);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.6rem;
+}
+
+.form-notice {
+  color: var(--ink-faint);
+}
+
+/* Shown in place of the send control when the reader cannot use it yet. */
+.send-hint {
+  text-decoration: none;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.6rem;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.send-hint:hover {
+  border-color: var(--accent);
+  color: var(--ink-soft);
+}
+
+.send-to-kindle select {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink-soft);
+  padding: 0.2rem 0.4rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+/* What the book is available as — informational, never a link. */
+.format-tag {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.6rem;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}

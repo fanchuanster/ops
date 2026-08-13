@@ -17,3 +17,13 @@
 #
 #   openssl rand -hex 32
 PAYLOAD_SECRET=
+
+# Send-to-Kindle. Optional: with this unset the feature is switched off
+# cleanly — the account page says delivery is unavailable rather than
+# offering a button that fails.
+#
+# Workers cannot speak SMTP, so delivery goes over Resend's HTTP API.
+# The sending domain must be verified there first, and its DNS records
+# added via `email_dns_records` in infra/terraform.tfvars — Amazon drops
+# a personal document whose sender fails SPF or DKIM, silently.
+RESEND_API_KEY=

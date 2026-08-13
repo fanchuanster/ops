@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
+import { KINDLE_DOMAINS, KINDLE_SENDER_ADDRESS, checkKindleAddress } from '../domain/kindle'
 import { checkPassword } from '../domain/password'
 
 /**
@@ -60,6 +61,35 @@ export const Users: CollectionConfig = {
     {
       name: 'displayName',
       type: 'text',
+    },
+    {
+      name: 'kindleEmail',
+      type: 'text',
+      label: 'Kindle delivery address',
+      admin: {
+        description:
+          'The reader’s @kindle.com address. Delivery is off until this is set. ' +
+          `They must also add ${KINDLE_SENDER_ADDRESS} to their Approved Personal ` +
+          'Document E-mail List in Amazon settings, or Amazon discards what we send.',
+      },
+      validate: (value: unknown) => {
+        // Empty is how a reader turns delivery off, so it must stay
+        // valid — this field is optional by design.
+        if (value === null || value === undefined || value === '') return true
+        if (typeof value !== 'string') return 'Enter a Kindle address.'
+
+        const check = checkKindleAddress(value)
+        if (check.valid) return true
+
+        switch (check.problem) {
+          case 'wrong_domain':
+            return `Use the address Amazon gave you — it ends in ${KINDLE_DOMAINS.map(
+              (d) => `@${d}`,
+            ).join(' or ')}.`
+          default:
+            return 'That does not look like an email address.'
+        }
+      },
     },
     {
       name: 'roles',

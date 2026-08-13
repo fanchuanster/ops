@@ -24,3 +24,14 @@ worker_deployed = false
 # Set false if the token lacks the zone "Single Redirect" permission;
 # the rest of the configuration still applies cleanly without it.
 manage_redirect_ruleset = true
+
+# DNS records proving NobleSee may send mail as the domain, for
+# Send-to-Kindle. Paste in what Resend shows after verifying
+# noblesee.com; leave empty to run without Kindle delivery.
+#
+# email_dns_records = [
+#   { name = "send",              type = "MX",  content = "feedback-smtp.eu-west-1.amazonses.com", priority = 10 },
+#   { name = "send",              type = "TXT", content = "v=spf1 include:amazonses.com ~all" },
+#   { name = "resend._domainkey", type = "TXT", content = "p=MIGfMA0GCSq..." },
+# ]
+email_dns_records = []

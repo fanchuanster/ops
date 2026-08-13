@@ -14,7 +14,7 @@
 #   BASE_URL=https://noblesee.com ALLOW_WRITES=1 ./tools/smoke-test.sh
 #                                                        # ...including the write tests
 #
-# The signed-in section registers readers and records downloads, so it
+# The signed-in section registers readers and records deliveries, so it
 # writes to whatever database BASE_URL is pointed at. Run against
 # production it leaves real accounts and ledger rows behind — which is
 # how noblesee.com ended up with four @noblesee.test readers. Those
@@ -103,25 +103,33 @@ check_contains "shows the rights status" "$WORKDIR/book.html" "public domain"
 check_contains "offers EPUB" "$WORKDIR/book.html" "EPUB"
 check_contains "offers the three PDF sizes" "$WORKDIR/book.html" "Extra Large"
 
-# The editable master is the source of truth, not a reader download.
+# The editable master is the source of truth and is never reader-facing.
 check_not_contains "does not offer the DOCX master to readers" "$WORKDIR/book.html" "/docx"
+
+# A book is read here or sent to a device; it is never a file to collect.
+# No download links exist anywhere on the page, for any part or format.
+check_not_contains "offers no download links at all" "$WORKDIR/book.html" "/download/"
 
 # Staged release: part 1 open, later parts held for this reader.
 check_contains "first part is readable" "$WORKDIR/book.html" "/read/analects/1"
 check_contains "later parts are held back" "$WORKDIR/book.html" "Opens after the previous part"
-check_not_contains "held-back part offers no download link" "$WORKDIR/book.html" "/download/3/"
+check_not_contains "held-back part offers no reader link" "$WORKDIR/book.html" "/read/analects/3"
 
 # --- access control is server-side ------------------------------------
 echo "access control (anonymous)"
-# Anonymous readers must not be able to reach an artifact directly.
-# Anything other than a redirect-to-login or an outright refusal here
-# means the download path is not enforcing authorization.
-DL_STATUS="$(status_of "$BASE_URL/download/2/epub")"
-case "$DL_STATUS" in
-    401 | 403 | 302 | 303) pass "anonymous download is refused ($DL_STATUS)" ;;
-    404) fail "anonymous download is refused" "route not implemented yet (404)" ;;
-    200) fail "anonymous download is refused" "SERVED THE FILE — authorization is missing" ;;
-    *) fail "anonymous download is refused" "unexpected status $DL_STATUS" ;;
+# The download route was removed with the feature. Asserting it is gone
+# stops it being quietly reintroduced: it was the one path that handed a
+# reader a file, and the rules it enforced now live only in the send and
+# read paths.
+check_eq "the download route no longer exists" "$(status_of "$BASE_URL/download/2/epub")" 404
+
+# The reader's EPUB stream is now the only way bytes leave storage, so
+# it is the path that has to refuse an anonymous request.
+STREAM_STATUS="$(status_of "$BASE_URL/read/analects/1/epub")"
+case "$STREAM_STATUS" in
+    401 | 403 | 302 | 303 | 307) pass "anonymous EPUB stream is refused ($STREAM_STATUS)" ;;
+    200) fail "anonymous EPUB stream is refused" "SERVED THE FILE — authorization is missing" ;;
+    *) fail "anonymous EPUB stream is refused" "unexpected status $STREAM_STATUS" ;;
 esac
 
 for path in /account /read/analects/1; do
@@ -141,7 +149,7 @@ done
 # representative rather than a special case.
 echo "access control (signed in)"
 
-# These register a reader and record downloads, so they only run where
+# These register a reader and record deliveries, so they only run where
 # writing is acceptable. See the ALLOW_WRITES note at the top.
 if [ "$WRITES_OK" -eq 0 ]; then
     skip "signed-in checks (they write; re-run with ALLOW_WRITES=1 to include them)"
@@ -182,47 +190,48 @@ else
         check_eq "signed in, the account page opens" "$(auth /account)" 200
         check_eq "signed in, the reader opens" "$(auth /read/analects/1)" 200
 
-        # Part 1 is open to everyone; the DOCX master is not a reader
-        # download; part 3 is held until part 2 has been started.
+        # Reading is the open path: part 1 for anyone signed in, part 3
+        # held until part 2 has been started.
         # 200, not a redirect: the artifact is streamed from R2 through the
         # Worker. The R2 binding has no presigned URLs, so there is no
         # third-party URL to be sent to — which is the point, since such a
         # URL would outlive the authorization decision that produced it.
-        check_eq "an open part is authorized" "$(auth /download/2/epub)" 200
-        check_eq "the DOCX master is not offered" "$(auth /download/2/docx)" 404
-        check_eq "a held-back part is refused" "$(auth /download/3/epub)" 403
+        check_eq "an open part streams to the reader" "$(auth /read/analects/1/epub)" 200
+        check_eq "a held-back part is refused" "$(auth /read/analects/3/epub)" 403
 
         # ...and the bytes are the real file, not an error page.
         BYTES="$(curl -sL -o "$WORKDIR/part.epub" -w '%{size_download}' \
             -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
-            -H 'User-Agent: Mozilla/5.0' "$BASE_URL/download/2/epub")"
+            -H 'User-Agent: Mozilla/5.0' "$BASE_URL/read/analects/1/epub")"
         if [ "${BYTES:-0}" -gt 1000 ] && head -c 2 "$WORKDIR/part.epub" | grep -q 'PK'; then
-            pass "the authorized download delivers a real EPUB ($BYTES bytes)"
+            pass "the reader is served a real EPUB ($BYTES bytes)"
         else
-            fail "the authorized download delivers a real EPUB" "got $BYTES bytes"
+            fail "the reader is served a real EPUB" "got $BYTES bytes"
         fi
 
-        # The rule most easily got wrong: the limit counts books, not files.
-        for format in pdf_standard pdf_large pdf_xl; do
-            auth "/download/2/$format" >/dev/null
-        done
-        # totalDocs, not a grep for '"format":' — each row expands its
-        # related part, whose artifacts each carry a `format` too, so
-        # counting that string counts artifacts rather than downloads.
+        # Reading must never consume a slot. The limit exists to pace
+        # bulk *delivery*; charging someone for opening a book in the
+        # browser would penalise exactly the behaviour the site is for.
         LEDGER="$(curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
             -H 'User-Agent: Mozilla/5.0' "$BASE_URL/api/downloads?limit=50&depth=0")"
         ROWS="$(echo "$LEDGER" | grep -o '"totalDocs":[0-9]*' | cut -d: -f2)"
-        # Five requests were made above for this one book: the EPUB twice
-        # (once for the status check, once to follow through to the bytes)
-        # and the three PDF sizes. Five ledger rows, one slot consumed.
-        if [ "${ROWS:-0}" -eq 5 ]; then
-            pass "every file is logged individually ($ROWS rows)"
+        if [ "${ROWS:-0}" -eq 0 ]; then
+            pass "reading consumes no delivery slots"
         else
-            fail "every file is logged individually" "expected 5 rows, got ${ROWS:-0}"
+            fail "reading consumes no delivery slots" "expected 0 ledger rows, got ${ROWS:-0}"
         fi
+
         curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
             -H 'User-Agent: Mozilla/5.0' "$BASE_URL/account" >"$WORKDIR/account.html"
-        check_contains "but they count as one book" "$WORKDIR/account.html" "4 of 5"
+        check_contains "the full allowance is intact" "$WORKDIR/account.html" "5 of 5"
+
+        # Send-to-Kindle is offered, and the Amazon approved-sender step
+        # is shown. Getting that wrong is the one failure a reader cannot
+        # diagnose: Amazon discards the document without a bounce.
+        check_contains "the account page offers Kindle delivery" \
+            "$WORKDIR/account.html" "Send to Kindle"
+        check_contains "and names the sender to approve in Amazon" \
+            "$WORKDIR/account.html" "kindle@noblesee.com"
     fi
 fi
 

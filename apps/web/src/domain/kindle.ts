@@ -66,3 +66,77 @@ export const MAX_ATTACHMENT_BYTES = 18 * 1024 * 1024
 export function isEmailableSize(bytes: number): boolean {
   return bytes > 0 && Math.ceil(bytes / 3) * 4 <= MAX_ATTACHMENT_BYTES
 }
+
+/**
+ * The address NobleSee sends from.
+ *
+ * A business fact rather than configuration: Amazon drops documents
+ * from any sender not on the reader's Approved Personal Document
+ * E-mail List, so this exact string is what a reader has to add in
+ * their Amazon settings. The reminder shown in the UI and the From
+ * header must be the same value or the advice is wrong — hence one
+ * constant, not two strings that happen to match today.
+ */
+export const KINDLE_SENDER_ADDRESS = 'kindle@noblesee.com'
+
+/**
+ * Formats worth emailing to a Kindle.
+ *
+ * The DOCX master is deliberately absent, as it is everywhere a reader
+ * can reach: it is the editorial source of truth, not a reader format.
+ * EPUB is first because Amazon converts it to the native format and it
+ * stays reflowable; the PDFs are accepted but arrive fixed-layout,
+ * which is the thing this project exists to move away from.
+ */
+export const KINDLE_DELIVERABLE_FORMATS = [
+  'epub',
+  'pdf_standard',
+  'pdf_large',
+  'pdf_xl',
+] as const
+
+export type KindleDeliverableFormat = (typeof KINDLE_DELIVERABLE_FORMATS)[number]
+
+export function isKindleDeliverableFormat(format: string): format is KindleDeliverableFormat {
+  return (KINDLE_DELIVERABLE_FORMATS as readonly string[]).includes(format)
+}
+
+export type KindleRefusal =
+  | 'no_address'
+  | 'format_not_deliverable'
+  | 'too_large'
+  | 'delivery_unavailable'
+
+/**
+ * Whether this reader can be sent this file, given only the facts the
+ * domain is allowed to know.
+ *
+ * Deliberately does *not* decide rights, staged release or the download
+ * limit — `authorizeDownload` already owns all three, and re-deciding
+ * them here would create a second answer that could drift from the
+ * first. This adds only what is specific to Kindle.
+ */
+export function checkKindleDelivery({
+  kindleAddress,
+  format,
+  bytes,
+  transportConfigured,
+}: {
+  kindleAddress: string | null | undefined
+  format: string
+  bytes?: number
+  transportConfigured: boolean
+}): { ok: true; address: string } | { ok: false; refusal: KindleRefusal } {
+  if (!transportConfigured) return { ok: false, refusal: 'delivery_unavailable' }
+
+  const address = checkKindleAddress(kindleAddress ?? '')
+  if (!address.valid) return { ok: false, refusal: 'no_address' }
+
+  if (!isKindleDeliverableFormat(format)) return { ok: false, refusal: 'format_not_deliverable' }
+
+  if (typeof bytes === 'number' && !isEmailableSize(bytes)) {
+    return { ok: false, refusal: 'too_large' }
+  }
+
+  return { ok: true, address: address.address }
+}

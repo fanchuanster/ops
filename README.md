@@ -63,9 +63,9 @@ The Analects, in three parts, which exercises staged release). It is idempotent
 automatic, because updating in place would quietly revert an editor's changes.
 
 Its `storageKey` values point at artifacts that really exist in the production
-R2 bucket, so the download path has real files behind it. `mirror-r2-local.sh`
-copies those objects into the local bucket; without it the catalog renders but
-downloads and the reader return 502.
+R2 bucket, so delivery has real files behind it. `mirror-r2-local.sh` copies
+those objects into the local bucket; without it the catalog renders but the
+reader and Send-to-Kindle return 502.
 
 ### Deploying
 
@@ -122,7 +122,7 @@ cd apps/web
 BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # read-only against production
 ```
 
-The signed-in checks register a reader and record downloads, so they write to
+The signed-in checks register a reader and record deliveries, so they write to
 whatever database `BASE_URL` names. Against a non-local host they are skipped
 and reported as such — a read-only pass is a legitimate way to check a
 deployment, and leaving test accounts in the live database is not. Add
@@ -130,8 +130,9 @@ deployment, and leaving test accounts in the live database is not. Add
 
 `npm run verify` covers the domain rules in isolation; the smoke test covers the
 wiring between them — that the catalog only lists cleared books, that a
-held-back part offers no download link, that the DOCX master is never offered to
-readers, and that anonymous downloads are refused.
+held-back part offers no reader link, that the DOCX master is never offered to
+readers, that the page carries no download links at all, and that an anonymous
+request for the EPUB stream is refused.
 
 ### Generating book artifacts
 
@@ -166,6 +167,40 @@ tools/                       smoke test, seed-content generator, R2 mirror
 docs/                        architecture decisions and roadmap
 ```
 
+## Send to Kindle
+
+A reader adds their `@kindle.com` address on `/account`, and each part gains a
+**Send to Kindle** button. Delivery is authorized by exactly the same code path
+as a download — rights, staged release and the per-reader limit — and recorded
+in the same ledger, because it *is* a download that happens to arrive by email.
+Taking the EPUB and also sending it to a Kindle is still one book against the
+limit.
+
+Two things must be true before anything arrives:
+
+1. **The reader has added `kindle@noblesee.com`** to their Approved Personal
+   Document E-mail List, under *Manage Your Content and Devices → Preferences →
+   Personal Document Settings* in Amazon. The account page walks them through
+   it, deliberately prominently: Amazon **silently discards** documents from an
+   unapproved sender — no bounce, no error, the book simply never appears — so
+   this is the one failure the UI has to prevent rather than report.
+2. **The sending domain is verified.** Workers cannot speak SMTP, so delivery
+   goes over Resend's HTTP API. Set `RESEND_API_KEY` as a Worker secret, and put
+   the SPF/DKIM records Resend issues into `email_dns_records` in
+   `infra/terraform.tfvars`. Amazon drops mail failing either check, just as
+   silently.
+
+With `RESEND_API_KEY` unset the feature switches itself off rather than
+offering a button that cannot work.
+
+```bash
+cd apps/web
+./cf npx wrangler secret put RESEND_API_KEY
+```
+
+The sender address lives in `src/domain/kindle.ts` as one constant, so the
+reminder shown to readers and the `From:` header cannot drift apart.
+
 ## Domain rules worth knowing
 
 **Rights fail closed.** Every book carries an explicit rights status; only
@@ -174,9 +209,17 @@ publicly. `unknown` is deliberately not distributable — an unreviewed book is
 never published by default. A Part may be *more* restricted than its Book, never
 less.
 
-**Download limits count books, not files.** A reader who takes EPUB, DOCX and
-three PDF variants of one book has consumed one slot, because they read one
-book. This is an application-level fairness policy, not a bandwidth control.
+**There are no downloads.** A book is read here, in the reflowable reader, or
+sent to the reader's device. It is never handed over as a file to collect. That
+is a product decision, not a technical limit: NobleSee exists to make books
+pleasant to *read*, and a folder of PDFs is not that.
+
+**Delivery limits count books, not files.** A reader who sends EPUB and all
+three PDF variants of one book to their Kindle has consumed one slot, because
+they read one book. Reading in the browser is never limited at all — the policy
+paces bulk delivery, and charging someone for opening a book would penalise
+exactly the behaviour the site is for. This is an application-level fairness
+policy, not a bandwidth control.
 
 **Staged release is a per-reader clock.** Part N+1 opens a fixed delay after
 *that reader* reached part N — so someone who discovers a book a year late gets

@@ -47,3 +47,34 @@ variable "manage_redirect_ruleset" {
   type        = bool
   default     = true
 }
+
+variable "email_dns_records" {
+  description = <<-EOT
+    DNS records that prove NobleSee may send mail as the domain.
+
+    Kindle delivery emails the book to the reader's @kindle.com address,
+    and Amazon drops anything that fails SPF/DKIM. The exact records are
+    issued by the mail provider when the sending domain is verified, so
+    they cannot be written here in advance — paste them in once Resend
+    shows them.
+
+    Empty by default: the site runs perfectly well without Kindle
+    delivery, and an unverified sending domain is worse than none at all
+    because it produces mail that silently disappears.
+
+    Example:
+
+      email_dns_records = [
+        { name = "send",              type = "MX",  content = "feedback-smtp.eu-west-1.amazonses.com", priority = 10 },
+        { name = "send",              type = "TXT", content = "v=spf1 include:amazonses.com ~all" },
+        { name = "resend._domainkey", type = "TXT", content = "p=MIGfMA0GCSq..." },
+      ]
+  EOT
+  type = list(object({
+    name     = string
+    type     = string
+    content  = string
+    priority = optional(number)
+  }))
+  default = []
+}

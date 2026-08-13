@@ -1,22 +1,30 @@
 import { notFound } from 'next/navigation'
 import React from 'react'
 
+import { SendToKindleButton } from '../../../../components/SendToKindleButton'
+import { isKindleDeliverableFormat } from '../../../../domain/kindle'
 import { effectiveRightsStatus, isPubliclyDistributable } from '../../../../domain/rights'
 import { releaseState } from '../../../../domain/stagedRelease'
+import { getCurrentUser } from '../../../../lib/auth'
 import { getBookBySlug, getPartsForBook } from '../../../../lib/catalog'
 
 export const dynamic = 'force-dynamic'
 
+/** Order shown to readers: EPUB first, because EPUB is the point. */
+const FORMAT_ORDER = ['epub', 'pdf_standard', 'pdf_large', 'pdf_xl', 'docx']
+
+/*
+  Labels, not links. A reader should be able to see what a book is
+  available as before signing in — otherwise the page is silent about
+  the thing it is offering. These became invisible when the download
+  links went, which was an accident rather than a decision.
+*/
 const FORMAT_LABEL: Record<string, string> = {
   epub: 'EPUB',
   pdf_standard: 'PDF — Standard',
   pdf_large: 'PDF — Large',
   pdf_xl: 'PDF — Extra Large',
-  docx: 'DOCX',
 }
-
-/** Order shown to readers: EPUB first, because EPUB is the point. */
-const FORMAT_ORDER = ['epub', 'pdf_standard', 'pdf_large', 'pdf_xl', 'docx']
 
 const LANGUAGE_LABEL: Record<string, string> = {
   'zh-Hant': 'Traditional Chinese',
@@ -51,6 +59,11 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
   // download at all without an account.
   const progress = { startedAt: new Map<number, Date>() }
   const now = new Date()
+
+  // Only to decide whether the Kindle button is worth showing. The
+  // action re-checks it, so this is presentation, not authorization.
+  const reader = await getCurrentUser()
+  const kindleReady = Boolean(reader?.kindleEmail)
 
   return (
     <main className="page">
@@ -131,14 +144,33 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
                           Read online
                         </a>
                       ) : null}
-                      {artifacts.map((a) => (
-                        <a key={a.format} href={`/download/${part.id}/${a.format}`}>
-                          {FORMAT_LABEL[a.format] ?? a.format}
-                        </a>
-                      ))}
+
+                      {/*
+                        No download links. A book is read here or sent to
+                        the reader's device; it is not a file to collect.
+                      */}
+                      {artifacts
+                        .filter((a) => isKindleDeliverableFormat(a.format))
+                        .map((a) => (
+                          <span className="format-tag" key={a.format}>
+                            {FORMAT_LABEL[a.format] ?? a.format}
+                          </span>
+                        ))}
+
                       {artifacts.length === 0 ? (
                         <span className="locked">No formats generated yet.</span>
-                      ) : null}
+                      ) : kindleReady ? (
+                        <SendToKindleButton
+                          partId={part.id}
+                          formats={artifacts
+                            .map((a) => a.format)
+                            .filter((f) => isKindleDeliverableFormat(f))}
+                        />
+                      ) : (
+                        <a className="send-hint" href="/account">
+                          {reader ? 'Add a Kindle address to send' : 'Sign in to send to Kindle'}
+                        </a>
+                      )}
                     </span>
                   )}
                 </li>
