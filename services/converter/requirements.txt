@@ -1,0 +1,15 @@
+# PDF parsing and page rasterization. Ships its own MuPDF, so no poppler
+# or system libraries are needed.
+pymupdf>=1.28
+
+# OCR. paddlepaddle is the runtime; paddleocr is the model pipeline.
+# See app/ocr/paddle.py for why oneDNN is disabled by default.
+paddlepaddle>=3.3
+paddleocr>=3.7
+
+# The editable master.
+python-docx>=1.2
+
+# Pillow is pulled in by paddleocr, but the OCR backend reads page
+# dimensions with it directly, so it is a real dependency here.
+pillow>=10
