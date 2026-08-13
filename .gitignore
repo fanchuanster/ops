@@ -9,20 +9,32 @@ __pycache__/
 tmp/
 
 # Distribution / packaging
+#
+# ANCHORED to the Python service on purpose. This block comes from the
+# stock Python template, which assumes a repository that is only Python.
+# This one is not, and several of these names are ordinary words: `lib/`,
+# `parts/` and `downloads/` are all things a monorepo has. Unanchored,
+# `lib/` silently swallowed apps/web/src/lib — the download authorization
+# logic, the storage layer and the Kindle transport were never committed,
+# and nothing complained, because git says nothing about a file it has
+# been told to ignore.
+#
+# Keep these anchored. If a second Python service appears, add its path
+# rather than removing the prefix.
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+services/converter/build/
+services/converter/develop-eggs/
+services/converter/dist/
+services/converter/downloads/
+services/converter/eggs/
+services/converter/.eggs/
+services/converter/lib/
+services/converter/lib64/
+services/converter/parts/
+services/converter/sdist/
+services/converter/var/
+services/converter/wheels/
+services/converter/share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
