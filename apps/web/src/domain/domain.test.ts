@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { checkDownloadLimit, type DownloadRecord } from './downloadLimit'
+import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
 import { canAccessArtifact, effectiveRightsStatus, isPubliclyDistributable } from './rights'
 import { releaseState } from './stagedRelease'
 
@@ -148,5 +149,26 @@ describe('staged release', () => {
 
   it('keeps a part open once the reader has started it', () => {
     expect(releaseState(2, progress([[2, hoursAgo(1)]]), config, NOW)).toEqual({ state: 'open' })
+  })
+})
+
+describe('password policy', () => {
+  it('accepts a password at the minimum length', () => {
+    expect(checkPassword('a'.repeat(MIN_PASSWORD_LENGTH))).toBeNull()
+  })
+
+  it('rejects one character short of it', () => {
+    expect(checkPassword('a'.repeat(MIN_PASSWORD_LENGTH - 1))).toEqual({
+      message: `Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`,
+    })
+  })
+
+  it('rejects an empty or missing password', () => {
+    expect(checkPassword('')).toEqual({ message: 'Enter a password.' })
+    expect(checkPassword(undefined)).toEqual({ message: 'Enter a password.' })
+  })
+
+  it('imposes no upper bound, so a passphrase is fine', () => {
+    expect(checkPassword('a long quiet room and a good book')).toBeNull()
   })
 })

@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
+import { checkPassword } from '../../../domain/password'
 import { safeNext } from '../../../lib/auth'
 
 /**
@@ -56,8 +57,11 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   const displayName = String(formData.get('displayName') || '').trim()
   const next = safeNext(String(formData.get('next') || ''))
 
-  if (!email || !password) return { error: 'Enter an email address and a password.' }
-  if (password.length < 8) return { error: 'Use a password of at least 8 characters.' }
+  if (!email) return { error: 'Enter an email address and a password.' }
+  // The collection hook enforces this too; checking here as well turns a
+  // thrown APIError into a message the form can render inline.
+  const problem = checkPassword(password)
+  if (problem) return { error: problem.message }
 
   const payload = await getPayload({ config })
   try {

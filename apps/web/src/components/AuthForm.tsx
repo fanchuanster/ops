@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 
 import type { AuthState } from '../app/(frontend)/actions/auth'
+import { MIN_PASSWORD_LENGTH } from '../domain/password'
 
 /**
  * Shared shell for the log-in and sign-up forms.
@@ -51,10 +52,12 @@ export function AuthForm({
           name="password"
           type="password"
           required
-          minLength={isSignUp ? 8 : undefined}
+          minLength={isSignUp ? MIN_PASSWORD_LENGTH : undefined}
           autoComplete={isSignUp ? 'new-password' : 'current-password'}
         />
-        {isSignUp ? <span className="hint">At least 8 characters.</span> : null}
+        {isSignUp ? (
+          <span className="hint">At least {MIN_PASSWORD_LENGTH} characters.</span>
+        ) : null}
       </label>
 
       <button type="submit" disabled={pending}>

@@ -8,3 +8,4 @@
 export * from './rights'
 export * from './downloadLimit'
 export * from './stagedRelease'
+export * from './password'
