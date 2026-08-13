@@ -18,7 +18,7 @@
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-import { LEVEL_IDS } from '../domain/levels'
+import { LEVEL_IDS, type BookLevel } from '../domain/levels'
 
 type FormatKey = 'docx' | 'epub' | 'pdf_standard' | 'pdf_large' | 'pdf_xl'
 
@@ -38,6 +38,7 @@ interface SeedBook {
   language: 'zh-Hant' | 'zh-Hans' | 'en' | 'zh-en'
   description: string
   collections: string[]
+  level: BookLevel
   stagedRelease?: { enabled: boolean; unlockDelayHours: number }
   parts: SeedPart[]
 }
@@ -95,6 +96,7 @@ const BOOKS: SeedBook[] = [
     description:
       'One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge’s 1891 translation, which is in the public domain, alongside the original Chinese text.',
     collections: ['chinese-classics', 'philosophy-wisdom'],
+    level: 'normal',
     parts: [{ title: 'Chapter 1 / 第一章', order: 1, keyPrefix: 'books/4/parts/11' }],
   },
   {
@@ -107,6 +109,7 @@ const BOOKS: SeedBook[] = [
     description:
       'The recorded sayings of Confucius and his disciples, compiled by later followers — among the most influential works in Chinese thought on learning, character, and how to live well. This edition presents James Legge’s 1893 translation, which is in the public domain, alongside the original Chinese.',
     collections: ['chinese-classics', 'personal-development'],
+    level: 'essential',
     // Multi-part, so staged release is exercised by real seed data.
     stagedRelease: { enabled: true, unlockDelayHours: 24 },
     parts: [
@@ -173,10 +176,12 @@ async function seed() {
       // Both seed titles are pre-1928 translations of pre-modern texts.
       rightsStatus: 'public_domain' as const,
       visibility: 'public' as const,
-      // The Analects and the Tao Te Ching are the core of what NobleSee
-      // exists to make readable, so they sit at the essential level and
-      // are visible however narrowly a reader is browsing.
-      level: LEVEL_IDS.essential,
+      // The Analects sits at essential — it is the core of what NobleSee
+      // exists to make readable, and stays visible however narrowly a
+      // reader is browsing. The Tao Te Ching sits at normal, so the two
+      // seed books differ and the level filter has something real to do
+      // on a fresh install.
+      level: LEVEL_IDS[spec.level],
       // Library content entered by staff, not a reader submission —
       // there is nothing to review. See domain/moderation.ts.
       review: { state: 'unsubmitted' as const },
