@@ -57,5 +57,8 @@ exec docker run --rm "${TTY[@]}" "${PORT[@]}" \
     -e CLOUDFLARE_ACCOUNT_ID \
     -e NEXT_PUBLIC_SERVER_URL \
     -e PAYLOAD_SECRET \
+    -e ADMIN_TARGET \
+    -e ADMIN_EMAIL \
+    -e ADMIN_PASSWORD \
     -u "$(id -u):$(id -g)" \
     "$IMAGE" "$@"

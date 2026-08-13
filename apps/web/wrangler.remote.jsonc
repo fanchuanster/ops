@@ -1,0 +1,46 @@
+/**
+ * Bindings pointed at the LIVE production D1 and R2.
+ *
+ * This exists so an operator task can act on real data from a laptop
+ * without a hosted admin. It is deliberately a separate file rather than
+ * a flag on `wrangler.jsonc`: `npm run migrate`, `npm run seed` and
+ * `wrangler dev` all resolve bindings through the default config, and a
+ * `"remote": true` there would silently repoint every one of them at
+ * production. Migrating or seeding the live database by accident is
+ * exactly the failure this split prevents.
+ *
+ * Nothing reads this file implicitly. Only tooling that is passed this
+ * path explicitly — today `npm run create-admin -- --remote` — uses it.
+ *
+ * `main` is absent on purpose: this config is for the getPlatformProxy
+ * binding API, never for building or deploying a Worker.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "noblesee",
+
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "noblesee",
+      "database_id": "23b37124-5024-4c1b-a23a-082cfa11cd03",
+      // The whole point of this file.
+      "remote": true
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "ARTIFACTS",
+      "bucket_name": "noblesee",
+      "remote": true
+    }
+  ],
+
+  "vars": {
+    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com"
+  }
+}

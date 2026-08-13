@@ -76,7 +76,39 @@ cd apps/web
 ```
 
 The bundle is ~5.9 MB gzipped, against a 10 MB limit on Workers Paid. It does
-not fit the 3 MB free tier — Payload's admin UI is most of it.
+not fit the 3 MB free tier — Payload's admin UI is most of it. The measurements
+behind that, and what a free-tier split would cost, are in
+`docs/CLOUDFLARE_ARCHITECTURE.md`.
+
+### Creating an administrator
+
+Payload shows its "create first user" screen only while the users table is
+empty. The first reader to register closes it permanently — so on a live site
+that screen is usually already gone, and there is no way back in through the
+browser. Use:
+
+```bash
+cd apps/web
+./cf npm run create-admin          # local D1
+./cf npm run create-admin:remote   # the live production database
+```
+
+It prompts for an email and a password (echo off; `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` work too for non-interactive use). An address that already
+exists is promoted to admin rather than duplicated, and a promotion leaves the
+password alone.
+
+Run it from a real terminal rather than piping input, so the password is
+prompted for instead of sitting in your shell history.
+
+The remote variant selects `wrangler.remote.jsonc`, which carries
+`"remote": true` on the D1 and R2 bindings so the script acts on live data from
+your machine. That flag lives in a *separate* config on purpose: putting it in
+`wrangler.jsonc` would silently repoint `npm run migrate`, `npm run seed` and
+`wrangler dev` at production too. The target is selected by `ADMIN_TARGET`
+rather than a `--remote` argument because `payload run` replaces `process.argv`
+before the script runs, so a flag would vanish silently and the script would
+act on the wrong database while reporting success.
 
 ## Development
 
@@ -119,7 +151,9 @@ apps/web/                    the application — public site, API and admin
   src/migrations/            versioned schema migrations
   src/seed/                  catalog seed
   cf                         runs the toolchain in a container (see "Running it")
+  scripts/create-admin.ts    bootstraps an admin once the first-user screen is gone
   wrangler.jsonc             Worker bindings — mirrors `terraform output`
+  wrangler.remote.jsonc      the same bindings, pointed at live D1/R2 (opt-in only)
 content/seed/                generated book artifacts (DOCX/EPUB/PDF)
 infra/                       Terraform: R2, D1, DNS, the www redirect
 tools/                       smoke test, seed-content generator, R2 mirror
