@@ -119,8 +119,14 @@ cd apps/web
 
 ```bash
 ./tools/smoke-test.sh                                # HTTP-level checks, localhost:8787
-BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # or an explicit host
+BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # read-only against production
 ```
+
+The signed-in checks register a reader and record downloads, so they write to
+whatever database `BASE_URL` names. Against a non-local host they are skipped
+and reported as such — a read-only pass is a legitimate way to check a
+deployment, and leaving test accounts in the live database is not. Add
+`ALLOW_WRITES=1` when you do want them.
 
 `npm run verify` covers the domain rules in isolation; the smoke test covers the
 wiring between them — that the catalog only lists cleared books, that a

@@ -9,7 +9,17 @@
 # that catches the wiring between them.
 #
 #   ./tools/smoke-test.sh                                # the local Worker (wrangler dev)
-#   BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # or an explicit host
+#   BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # read-only against production
+#
+#   BASE_URL=https://noblesee.com ALLOW_WRITES=1 ./tools/smoke-test.sh
+#                                                        # ...including the write tests
+#
+# The signed-in section registers readers and records downloads, so it
+# writes to whatever database BASE_URL is pointed at. Run against
+# production it leaves real accounts and ledger rows behind — which is
+# how noblesee.com ended up with four @noblesee.test readers. Those
+# checks are therefore skipped for a non-local host unless ALLOW_WRITES
+# says otherwise; everything read-only still runs.
 #
 set -uo pipefail
 
@@ -17,10 +27,20 @@ BASE_URL="${BASE_URL:-http://localhost:8787}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
+# Local hosts are disposable, so writing to them needs no ceremony.
+case "$BASE_URL" in
+    http://localhost*|https://localhost*|http://127.0.0.1*|https://127.0.0.1*|http://0.0.0.0*)
+        WRITES_OK=1 ;;
+    *)
+        WRITES_OK="$([ "${ALLOW_WRITES:-0}" = "1" ] && echo 1 || echo 0)" ;;
+esac
+
 PASS=0
 FAIL=0
+SKIP=0
 
 pass() { PASS=$((PASS + 1)); printf '  \033[32mok\033[0m   %s\n' "$1"; }
+skip() { SKIP=$((SKIP + 1)); printf '  \033[33mskip\033[0m %s\n' "$1"; }
 fail() {
     FAIL=$((FAIL + 1))
     printf '  \033[31mFAIL\033[0m %s\n' "$1"
@@ -121,82 +141,89 @@ done
 # representative rather than a special case.
 echo "access control (signed in)"
 
-EMAIL="smoke-$(date +%s)-$$@noblesee.test"
-PASSWORD="smoke-test-password"
-
-REGISTER="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/api/users" \
-    -H 'Content-Type: application/json' \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")"
-check_eq "a reader can register" "$REGISTER" 201
-
-# Registering as an admin must not work, whichever door it comes through.
-ESCALATE="$(curl -s -X POST "$BASE_URL/api/users" -H 'Content-Type: application/json' \
-    -d "{\"email\":\"escalate-$(date +%s)-$$@noblesee.test\",\"password\":\"$PASSWORD\",\"roles\":[\"admin\"]}" |
-    grep -o '"roles":\[[^]]*\]' | head -1)"
-check_eq "self-granted admin role is refused" "$ESCALATE" '"roles":["reader"]'
-
-TOKEN="$(curl -s -X POST "$BASE_URL/api/users/login" -H 'Content-Type: application/json' \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" |
-    grep -o '"token":"[^"]*"' | cut -d'"' -f4)"
-
-if [ -z "$TOKEN" ]; then
-    fail "a reader can sign in" "no token returned"
+# These register a reader and record downloads, so they only run where
+# writing is acceptable. See the ALLOW_WRITES note at the top.
+if [ "$WRITES_OK" -eq 0 ]; then
+    skip "signed-in checks (they write; re-run with ALLOW_WRITES=1 to include them)"
 else
-    pass "a reader can sign in"
 
-    auth() { # path -> status
-        curl -s -o /dev/null -w '%{http_code}' \
-            -H "Cookie: payload-token=$TOKEN" \
-            -H 'Sec-Fetch-Site: same-origin' \
-            -H 'Sec-Fetch-Mode: navigate' \
-            -H 'User-Agent: Mozilla/5.0' \
-            "$BASE_URL$1"
-    }
+    EMAIL="smoke-$(date +%s)-$$@noblesee.test"
+    PASSWORD="smoke-test-password"
 
-    check_eq "signed in, the account page opens" "$(auth /account)" 200
-    check_eq "signed in, the reader opens" "$(auth /read/analects/1)" 200
+    REGISTER="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/api/users" \
+        -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")"
+    check_eq "a reader can register" "$REGISTER" 201
 
-    # Part 1 is open to everyone; the DOCX master is not a reader
-    # download; part 3 is held until part 2 has been started.
-    # 200, not a redirect: the artifact is streamed from R2 through the
-    # Worker. The R2 binding has no presigned URLs, so there is no
-    # third-party URL to be sent to — which is the point, since such a
-    # URL would outlive the authorization decision that produced it.
-    check_eq "an open part is authorized" "$(auth /download/2/epub)" 200
-    check_eq "the DOCX master is not offered" "$(auth /download/2/docx)" 404
-    check_eq "a held-back part is refused" "$(auth /download/3/epub)" 403
+    # Registering as an admin must not work, whichever door it comes through.
+    ESCALATE="$(curl -s -X POST "$BASE_URL/api/users" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"escalate-$(date +%s)-$$@noblesee.test\",\"password\":\"$PASSWORD\",\"roles\":[\"admin\"]}" |
+        grep -o '"roles":\[[^]]*\]' | head -1)"
+    check_eq "self-granted admin role is refused" "$ESCALATE" '"roles":["reader"]'
 
-    # ...and the bytes are the real file, not an error page.
-    BYTES="$(curl -sL -o "$WORKDIR/part.epub" -w '%{size_download}' \
-        -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
-        -H 'User-Agent: Mozilla/5.0' "$BASE_URL/download/2/epub")"
-    if [ "${BYTES:-0}" -gt 1000 ] && head -c 2 "$WORKDIR/part.epub" | grep -q 'PK'; then
-        pass "the authorized download delivers a real EPUB ($BYTES bytes)"
+    TOKEN="$(curl -s -X POST "$BASE_URL/api/users/login" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" |
+        grep -o '"token":"[^"]*"' | cut -d'"' -f4)"
+
+    if [ -z "$TOKEN" ]; then
+        fail "a reader can sign in" "no token returned"
     else
-        fail "the authorized download delivers a real EPUB" "got $BYTES bytes"
-    fi
+        pass "a reader can sign in"
 
-    # The rule most easily got wrong: the limit counts books, not files.
-    for format in pdf_standard pdf_large pdf_xl; do
-        auth "/download/2/$format" >/dev/null
-    done
-    # totalDocs, not a grep for '"format":' — each row expands its
-    # related part, whose artifacts each carry a `format` too, so
-    # counting that string counts artifacts rather than downloads.
-    LEDGER="$(curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
-        -H 'User-Agent: Mozilla/5.0' "$BASE_URL/api/downloads?limit=50&depth=0")"
-    ROWS="$(echo "$LEDGER" | grep -o '"totalDocs":[0-9]*' | cut -d: -f2)"
-    # Five requests were made above for this one book: the EPUB twice
-    # (once for the status check, once to follow through to the bytes)
-    # and the three PDF sizes. Five ledger rows, one slot consumed.
-    if [ "${ROWS:-0}" -eq 5 ]; then
-        pass "every file is logged individually ($ROWS rows)"
-    else
-        fail "every file is logged individually" "expected 5 rows, got ${ROWS:-0}"
+        auth() { # path -> status
+            curl -s -o /dev/null -w '%{http_code}' \
+                -H "Cookie: payload-token=$TOKEN" \
+                -H 'Sec-Fetch-Site: same-origin' \
+                -H 'Sec-Fetch-Mode: navigate' \
+                -H 'User-Agent: Mozilla/5.0' \
+                "$BASE_URL$1"
+        }
+
+        check_eq "signed in, the account page opens" "$(auth /account)" 200
+        check_eq "signed in, the reader opens" "$(auth /read/analects/1)" 200
+
+        # Part 1 is open to everyone; the DOCX master is not a reader
+        # download; part 3 is held until part 2 has been started.
+        # 200, not a redirect: the artifact is streamed from R2 through the
+        # Worker. The R2 binding has no presigned URLs, so there is no
+        # third-party URL to be sent to — which is the point, since such a
+        # URL would outlive the authorization decision that produced it.
+        check_eq "an open part is authorized" "$(auth /download/2/epub)" 200
+        check_eq "the DOCX master is not offered" "$(auth /download/2/docx)" 404
+        check_eq "a held-back part is refused" "$(auth /download/3/epub)" 403
+
+        # ...and the bytes are the real file, not an error page.
+        BYTES="$(curl -sL -o "$WORKDIR/part.epub" -w '%{size_download}' \
+            -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
+            -H 'User-Agent: Mozilla/5.0' "$BASE_URL/download/2/epub")"
+        if [ "${BYTES:-0}" -gt 1000 ] && head -c 2 "$WORKDIR/part.epub" | grep -q 'PK'; then
+            pass "the authorized download delivers a real EPUB ($BYTES bytes)"
+        else
+            fail "the authorized download delivers a real EPUB" "got $BYTES bytes"
+        fi
+
+        # The rule most easily got wrong: the limit counts books, not files.
+        for format in pdf_standard pdf_large pdf_xl; do
+            auth "/download/2/$format" >/dev/null
+        done
+        # totalDocs, not a grep for '"format":' — each row expands its
+        # related part, whose artifacts each carry a `format` too, so
+        # counting that string counts artifacts rather than downloads.
+        LEDGER="$(curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
+            -H 'User-Agent: Mozilla/5.0' "$BASE_URL/api/downloads?limit=50&depth=0")"
+        ROWS="$(echo "$LEDGER" | grep -o '"totalDocs":[0-9]*' | cut -d: -f2)"
+        # Five requests were made above for this one book: the EPUB twice
+        # (once for the status check, once to follow through to the bytes)
+        # and the three PDF sizes. Five ledger rows, one slot consumed.
+        if [ "${ROWS:-0}" -eq 5 ]; then
+            pass "every file is logged individually ($ROWS rows)"
+        else
+            fail "every file is logged individually" "expected 5 rows, got ${ROWS:-0}"
+        fi
+        curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
+            -H 'User-Agent: Mozilla/5.0' "$BASE_URL/account" >"$WORKDIR/account.html"
+        check_contains "but they count as one book" "$WORKDIR/account.html" "4 of 5"
     fi
-    curl -s -H "Cookie: payload-token=$TOKEN" -H 'Sec-Fetch-Site: same-origin' \
-        -H 'User-Agent: Mozilla/5.0' "$BASE_URL/account" >"$WORKDIR/account.html"
-    check_contains "but they count as one book" "$WORKDIR/account.html" "4 of 5"
 fi
 
 # The admin must never be reachable without authentication.
@@ -209,8 +236,16 @@ fi
 
 echo
 if [ "$FAIL" -eq 0 ]; then
-    printf '\033[32m%d passed, 0 failed\033[0m\n' "$PASS"
+    printf '\033[32m%d passed, 0 failed\033[0m' "$PASS"
 else
-    printf '\033[31m%d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
+    printf '\033[31m%d passed, %d failed\033[0m' "$PASS" "$FAIL"
+fi
+[ "$SKIP" -gt 0 ] && printf '\033[33m, %d skipped\033[0m' "$SKIP"
+printf '\n'
+
+# A skip is reported but never fails the run: a read-only pass against
+# production is a legitimate way to use this, not a broken one.
+if [ "$SKIP" -gt 0 ]; then
+    printf 'Skipped the write tests. Re-run with ALLOW_WRITES=1 to include them.\n'
 fi
 exit $((FAIL > 0))
