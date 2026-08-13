@@ -55,10 +55,35 @@ granted to this Worker. There is no connection string and no S3 access key
 anywhere in the environment. The only secret left is `PAYLOAD_SECRET`, set with
 `wrangler secret put`.
 
-**The Payload admin fits.** This was the genuine risk in the whole direction —
-a Worker script is capped at 10 MB gzipped on Workers Paid, and Payload's admin
-UI is a large React application. Measured: **5.9 MB gzipped**. It does *not*
-fit the 3 MB free tier, so this architecture requires a paid Workers plan.
+**The Payload admin fits, on Workers Paid.** This was the genuine risk in the
+whole direction — a Worker script is capped at 10 MB gzipped on Workers Paid,
+and Payload's admin UI is a large React application. Measured: **5.9 MB
+gzipped**, comfortably inside it.
+
+It does not fit the 3 MB free tier, and staying free was measured rather than
+guessed before the plan was bought:
+
+| Build                              | gzipped  | vs 3072 KiB |
+| ---------------------------------- | -------- | ----------- |
+| Full — frontend + `/api` + `/admin` | 6020 KiB | 196%        |
+| Minus `/admin`                     | 4387 KiB | 143%        |
+| Frontend only                      | 2691 KiB | 88% — fits  |
+
+The saving is stepwise, not proportional, and the metafile says why. Payload
+core — config, collections, lexical, the D1/drizzle adapter — is ~2.1 MB raw,
+and Next bundles it **once per runtime entry point**. The full build carries
+three byte-identical copies: two route-handler roots and one SSR root. Dropping
+`/admin` deletes one copy, dropping `/api` deletes another, and the third is
+irreducible because the catalog's server components use Payload's local API.
+So the free tier is reachable only by removing *both* the admin and the REST
+API — dropping the admin alone still lands 43% over.
+
+That option was rejected at a cost of $5/month. It works (25 of 29 smoke
+assertions pass; the 4 failures are the harness driving `/api/users`, which the
+site itself never calls — sign-up and login go through server actions). But it
+leaves 380 KiB of headroom against a roadmap of Stripe, blogs and Kindle
+delivery, each of which grows the surviving config chunk, and it permanently
+forecloses a REST API for any future mobile or external client.
 
 **drizzle-kit has to be stubbed out of the bundle.** Payload's Drizzle layer
 `require`s it lazily to diff schemas — that is what backs `push: true` and

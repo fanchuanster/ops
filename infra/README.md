@@ -34,6 +34,13 @@ Editing a Cloudflare token **replaces** its permission list rather than adding
 to it, so granting one permission can silently revoke another. Set all five in
 a single edit.
 
+**D1 only appears if the token is scoped to one specific account.** With
+*Account Resources* set to "All accounts", the permission dropdown does not
+offer D1 at all — it is not hidden behind a search term or a plan, it is simply
+absent from the list. Scope the token to the single NobleSee account and it
+appears. This cost an afternoon: the failure looks like a missing permission
+that cannot be granted, when it is really a scope that suppresses the option.
+
 Verify a token with:
 
 ```bash

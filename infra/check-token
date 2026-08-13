@@ -72,6 +72,10 @@ else
     echo
     echo "Editing a token REPLACES its permission list — granting one can revoke"
     echo "another. Set all five in a single edit, then re-run this."
+    echo
+    echo "If D1 is missing and the dropdown does not offer it: the token is"
+    echo "scoped to \"All accounts\". D1 is only listed when Account Resources"
+    echo "names one specific account."
 fi
 
 exit $((MISSING > 0))
