@@ -18,6 +18,17 @@ import {
   isEmailableSize,
   isKindleDeliverableFormat,
 } from './kindle'
+import {
+  BOOK_LEVELS,
+  DEFAULT_BROWSE_LEVEL,
+  LEVEL_IDS,
+  isVisibleAtLevel,
+  levelFromId,
+  levelId,
+  levelsVisibleAt,
+  parseBrowseLevel,
+} from './levels'
+import { canPublishToLibrary, canSubmitForReview, requiresAdmin } from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
 import { canAccessArtifact, effectiveRightsStatus, isPubliclyDistributable } from './rights'
 import { releaseState } from './stagedRelease'
@@ -249,5 +260,135 @@ describe('kindle delivery', () => {
 
   it('names one sender, so the UI reminder and the From header cannot drift', () => {
     expect(KINDLE_SENDER_ADDRESS).toBe('kindle@noblesee.com')
+  })
+})
+
+describe('reading levels', () => {
+  it('nests: each level contains the ones before it', () => {
+    expect(levelsVisibleAt('essential')).toEqual(['essential'])
+    expect(levelsVisibleAt('normal')).toEqual(['essential', 'normal'])
+    expect(levelsVisibleAt('extensive')).toEqual(['essential', 'normal', 'extensive'])
+  })
+
+  it('hides deeper books from a shallower reader', () => {
+    expect(isVisibleAtLevel('extensive', 'normal')).toBe(false)
+    expect(isVisibleAtLevel('normal', 'essential')).toBe(false)
+  })
+
+  it('shows an essential book at every level', () => {
+    for (const level of BOOK_LEVELS) {
+      expect(isVisibleAtLevel('essential', level)).toBe(true)
+    }
+  })
+
+  it('keeps the id comparison and the level list in agreement', () => {
+    // The catalog queries `level <= id`; the UI uses levelsVisibleAt. If
+    // the two disagreed, the catalog would show what the rule hides.
+    for (const browse of BOOK_LEVELS) {
+      const allowed = new Set(levelsVisibleAt(browse))
+      for (const book of BOOK_LEVELS) {
+        expect(allowed.has(book)).toBe(levelId(book) <= levelId(browse))
+        expect(allowed.has(book)).toBe(isVisibleAtLevel(book, browse))
+      }
+    }
+  })
+
+  it('orders the ids so a greater id sees everything below it', () => {
+    expect(LEVEL_IDS.essential).toBeLessThan(LEVEL_IDS.normal)
+    expect(LEVEL_IDS.normal).toBeLessThan(LEVEL_IDS.extensive)
+  })
+
+  it('round-trips a level through its stored id', () => {
+    for (const level of BOOK_LEVELS) {
+      expect(levelFromId(levelId(level))).toBe(level)
+    }
+  })
+
+  it('degrades an unrecognised stored id to the default, not to everything', () => {
+    // An id written by a later schema must not widen the catalog.
+    expect(levelFromId(999)).toBe('normal')
+    expect(levelId(levelFromId(999))).toBeLessThan(LEVEL_IDS.extensive)
+  })
+
+  it('falls back to the default rather than widening on a bad level', () => {
+    // A stale bookmark must not become "show me everything".
+    expect(parseBrowseLevel('extenzive')).toBe(DEFAULT_BROWSE_LEVEL)
+    expect(parseBrowseLevel(undefined)).toBe(DEFAULT_BROWSE_LEVEL)
+    expect(parseBrowseLevel('')).toBe(DEFAULT_BROWSE_LEVEL)
+    expect(DEFAULT_BROWSE_LEVEL).not.toBe('extensive')
+  })
+
+  it('reads a valid level from the query string', () => {
+    expect(parseBrowseLevel('essential')).toBe('essential')
+    expect(parseBrowseLevel('extensive')).toBe('extensive')
+  })
+})
+
+describe('publication review', () => {
+  it('will not publish a reader-created book that was never submitted', () => {
+    expect(
+      canPublishToLibrary({ reviewState: 'unsubmitted', rightsStatus: 'public_domain' }),
+    ).toEqual({ allowed: false, reason: 'not_submitted' })
+  })
+
+  it('will not publish while review is pending or after rejection', () => {
+    expect(
+      canPublishToLibrary({ reviewState: 'submitted', rightsStatus: 'public_domain' }),
+    ).toEqual({ allowed: false, reason: 'awaiting_review' })
+    expect(
+      canPublishToLibrary({ reviewState: 'rejected', rightsStatus: 'public_domain' }),
+    ).toEqual({ allowed: false, reason: 'rejected' })
+  })
+
+  it('does not let approval stand in for rights clearance', () => {
+    // An admin saying "this belongs in the library" is not a finding
+    // that it is legally distributable. Both gates, independently.
+    for (const rightsStatus of ['unknown', 'restricted', 'user_owned'] as const) {
+      expect(canPublishToLibrary({ reviewState: 'approved', rightsStatus })).toEqual({
+        allowed: false,
+        reason: 'rights_not_cleared',
+      })
+    }
+  })
+
+  it('publishes only on approval plus cleared rights', () => {
+    expect(
+      canPublishToLibrary({ reviewState: 'approved', rightsStatus: 'public_domain' }),
+    ).toEqual({ allowed: true })
+  })
+
+  it('requires the uploader to declare rights before review', () => {
+    expect(
+      canSubmitForReview({ reviewState: 'unsubmitted', rightsStatus: 'unknown', hasContent: true }),
+    ).toEqual({ allowed: false, reason: 'rights_undeclared' })
+  })
+
+  it('will not review an empty book', () => {
+    expect(
+      canSubmitForReview({
+        reviewState: 'unsubmitted',
+        rightsStatus: 'public_domain',
+        hasContent: false,
+      }),
+    ).toEqual({ allowed: false, reason: 'no_content' })
+  })
+
+  it('refuses a second submission while one is in flight', () => {
+    expect(
+      canSubmitForReview({ reviewState: 'submitted', rightsStatus: 'public_domain', hasContent: true }),
+    ).toEqual({ allowed: false, reason: 'already_submitted' })
+  })
+
+  it('lets a rejected submission be fixed and resubmitted', () => {
+    expect(
+      canSubmitForReview({ reviewState: 'rejected', rightsStatus: 'user_owned', hasContent: true }),
+    ).toEqual({ allowed: true })
+  })
+
+  it('keeps rights, visibility and level out of the uploader’s hands', () => {
+    expect(requiresAdmin('rightsStatus')).toBe(true)
+    expect(requiresAdmin('visibility')).toBe(true)
+    expect(requiresAdmin('level')).toBe(true)
+    expect(requiresAdmin('title')).toBe(false)
   })
 })

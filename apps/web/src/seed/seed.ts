@@ -18,6 +18,8 @@
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
+import { LEVEL_IDS } from '../domain/levels'
+
 type FormatKey = 'docx' | 'epub' | 'pdf_standard' | 'pdf_large' | 'pdf_xl'
 
 interface SeedPart {
@@ -171,6 +173,13 @@ async function seed() {
       // Both seed titles are pre-1928 translations of pre-modern texts.
       rightsStatus: 'public_domain' as const,
       visibility: 'public' as const,
+      // The Analects and the Tao Te Ching are the core of what NobleSee
+      // exists to make readable, so they sit at the essential level and
+      // are visible however narrowly a reader is browsing.
+      level: LEVEL_IDS.essential,
+      // Library content entered by staff, not a reader submission —
+      // there is nothing to review. See domain/moderation.ts.
+      review: { state: 'unsubmitted' as const },
       status: 'published' as const,
       stagedRelease: spec.stagedRelease ?? { enabled: false, unlockDelayHours: 24 },
       collections: spec.collections

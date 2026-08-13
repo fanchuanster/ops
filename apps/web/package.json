@@ -21,6 +21,8 @@
     "generate:importmap": "NEXT_RUNTIME=nodejs payload generate:importmap",
     "migrate:create": "NEXT_RUNTIME=nodejs payload migrate:create",
     "migrate": "NEXT_RUNTIME=nodejs payload migrate",
+    "//migrate:remote": "Applies pending migrations to the LIVE database. npm run migrate always targets local D1 by design; see scripts/migrate-remote.ts. Migrate before deploying the Worker.",
+    "migrate:remote": "MIGRATE_TARGET=remote NEXT_RUNTIME=nodejs payload run scripts/migrate-remote.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:boundary": "sh scripts/check-domain-boundary.sh",
