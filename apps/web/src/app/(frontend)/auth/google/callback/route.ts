@@ -1,28 +1,20 @@
 /**
  * Where Google sends the reader back.
  *
- * Exchanges the code, checks the claims, decides what the identity means
- * for our accounts, and issues a Payload session. Every refusal ends at
- * the login page with a message; none of them leak whether an address
- * has an account here.
+ * Exchanges the code, checks the claims, and issues a Payload session.
+ * Every refusal ends at the login page with a message; none of them leak
+ * whether an address has an account here.
  *
- * The two decisions that matter are not made in this file. Claim
- * validation and account linking live in `domain/googleIdentity.ts`
- * under test; this handler supplies them with data and acts on the
- * answer.
+ * The decisions that matter are not made in this file. Claim validation
+ * and account linking live in `domain/googleIdentity.ts` under test, and
+ * turning a verified profile into a session is `lib/googleSession.ts`,
+ * shared with One Tap. This handler is the redirect flow's transport and
+ * nothing else.
  */
 
-import config from '@payload-config'
 import { NextResponse } from 'next/server'
-import { generatePayloadCookie, getFieldsToSign, getPayload, jwtSign } from 'payload'
 
-import {
-  SIGN_IN_REFUSAL_MESSAGES,
-  decideGoogleSignIn,
-  verifyGoogleClaims,
-  type ExistingAccount,
-  type GoogleProfile,
-} from '../../../../../domain/googleIdentity'
+import { SIGN_IN_REFUSAL_MESSAGES, verifyGoogleClaims } from '../../../../../domain/googleIdentity'
 import { safeNext } from '../../../../../lib/auth'
 import {
   NEXT_COOKIE,
@@ -32,19 +24,37 @@ import {
   decodeIdTokenClaims,
   exchangeCode,
   googleOAuthConfig,
-  randomToken,
 } from '../../../../../lib/googleOAuth'
+import { sessionForGoogleProfile } from '../../../../../lib/googleSession'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Expire the four round-trip cookies.
+ *
+ * Appends the headers by hand rather than calling `response.cookies.delete`.
+ * `NextResponse.cookies` rebuilds the whole Set-Cookie header set from its
+ * own parsed view of the response, and anything added with
+ * `headers.append` is not in that view — so a single `delete` call silently
+ * discards every appended cookie, including the session cookie this handler
+ * exists to issue. Staying on one mechanism removes the ordering trap
+ * instead of relying on getting the order right.
+ */
+function expireRoundTripCookies(response: NextResponse, secure: boolean) {
+  for (const name of [STATE_COOKIE, NONCE_COOKIE, VERIFIER_COOKIE, NEXT_COOKIE]) {
+    response.headers.append(
+      'Set-Cookie',
+      `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`,
+    )
+  }
+}
 
 /** Send the reader back to the login page with something to read. */
 function fail(origin: string, message: string) {
   const url = new URL('/login', origin)
   url.searchParams.set('error', message)
   const response = NextResponse.redirect(url)
-  for (const name of [STATE_COOKIE, NONCE_COOKIE, VERIFIER_COOKIE, NEXT_COOKIE]) {
-    response.cookies.delete(name)
-  }
+  expireRoundTripCookies(response, url.protocol === 'https:')
   return response
 }
 
@@ -64,8 +74,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get('code')
   const returnedState = url.searchParams.get('state')
 
-  const cookies = request.headers
-  const cookieHeader = cookies.get('cookie') ?? ''
+  const cookieHeader = request.headers.get('cookie') ?? ''
   const jar = new Map(
     cookieHeader
       .split(';')
@@ -97,6 +106,10 @@ export async function GET(request: Request) {
   try {
     const tokens = await exchangeCode({ config: oauth, code, codeVerifier })
     if (!tokens.id_token) throw new Error('no id_token in the token response')
+    // Reading without verifying the signature is correct here and only
+    // here: this token came straight from Google's token endpoint over
+    // TLS and never touched the browser. One Tap receives its token from
+    // the client and must check the signature — lib/googleIdToken.ts.
     claims = decodeIdTokenClaims(tokens.id_token)
   } catch {
     // The detail is deliberately not shown: it can carry the client
@@ -114,114 +127,11 @@ export async function GET(request: Request) {
     return fail(origin, SIGN_IN_REFUSAL_MESSAGES[verified.reason])
   }
 
-  const profile = verified.profile
-  const payload = await getPayload({ config })
-
-  const asAccount = (doc: { id: string | number; email: string; googleId?: string | null }) =>
-    ({ id: doc.id, email: doc.email, googleId: doc.googleId ?? null }) as ExistingAccount
-
-  const [linked, byEmail] = await Promise.all([
-    payload.find({
-      collection: 'users',
-      where: { googleId: { equals: profile.googleId } },
-      limit: 1,
-      overrideAccess: true,
-    }),
-    payload.find({
-      collection: 'users',
-      where: { email: { equals: profile.email } },
-      limit: 1,
-      overrideAccess: true,
-    }),
-  ])
-
-  const decision = decideGoogleSignIn({
-    profile,
-    byGoogleId: linked.docs[0] ? asAccount(linked.docs[0]) : null,
-    byEmail: byEmail.docs[0] ? asAccount(byEmail.docs[0]) : null,
-  })
-
-  if (decision.action === 'refuse') {
-    return fail(origin, SIGN_IN_REFUSAL_MESSAGES[decision.reason])
-  }
-
-  let userId: string | number
-  try {
-    if (decision.action === 'create') {
-      userId = await createReader(payload, decision.profile)
-    } else {
-      userId = decision.accountId
-      if (decision.action === 'link_and_sign_in') {
-        await payload.update({
-          collection: 'users',
-          id: userId,
-          data: { googleId: profile.googleId },
-          overrideAccess: true,
-        })
-      }
-    }
-  } catch {
-    return fail(origin, 'Could not complete the sign-in. Please try again.')
-  }
-
-  const user = await payload.findByID({
-    collection: 'users',
-    id: userId,
-    overrideAccess: true,
-  })
-
-  // Payload's own session, issued without a password — the reader has
-  // just proved who they are to Google, which is the whole point.
-  const collectionConfig = payload.collections['users'].config
-  const fieldsToSign = getFieldsToSign({
-    collectionConfig,
-    email: user.email,
-    user: { ...user, collection: 'users' } as never,
-  })
-  const { token } = await jwtSign({
-    fieldsToSign,
-    secret: payload.secret,
-    tokenExpiration: collectionConfig.auth.tokenExpiration,
-  })
+  const session = await sessionForGoogleProfile(verified.profile)
+  if (!session.ok) return fail(origin, session.message)
 
   const response = NextResponse.redirect(new URL(next, origin))
-  response.headers.append(
-    'Set-Cookie',
-    generatePayloadCookie({
-      collectionAuthConfig: collectionConfig.auth,
-      cookiePrefix: payload.config.cookiePrefix,
-      token,
-    }),
-  )
-  for (const name of [STATE_COOKIE, NONCE_COOKIE, VERIFIER_COOKIE, NEXT_COOKIE]) {
-    response.cookies.delete(name)
-  }
+  response.headers.append('Set-Cookie', session.cookie)
+  expireRoundTripCookies(response, url.protocol === 'https:')
   return response
-}
-
-/**
- * Create a reader for a Google identity.
- *
- * Payload's auth requires a password, and this reader does not have one.
- * A long random value is set rather than a blank or a known placeholder:
- * it is never shown to anyone and never used, so the account can only be
- * entered through Google — until the reader sets a real password through
- * password reset, which works because the address is verified.
- */
-async function createReader(
-  payload: Awaited<ReturnType<typeof getPayload>>,
-  profile: GoogleProfile,
-): Promise<string | number> {
-  const created = await payload.create({
-    collection: 'users',
-    data: {
-      email: profile.email,
-      password: randomToken(48),
-      displayName: profile.displayName || undefined,
-      googleId: profile.googleId,
-      roles: ['reader'],
-    },
-    overrideAccess: true,
-  })
-  return created.id
 }
