@@ -142,9 +142,10 @@ python3 tools/generate-seed-content.py
 ```
 
 Writes DOCX, EPUB and three PDF sizes into `content/seed/`. This stands in for
-the real OCR/AI conversion pipeline (`services/converter`, not yet built) so the
-seed content is reproducible rather than a pile of committed binaries nobody can
-regenerate.
+the OCR/AI conversion pipeline, which reaches a proofread DOCX master but does
+not yet generate EPUB or PDF — see `services/converter/README.md`. The seed
+content is generated rather than committed so it is reproducible instead of a
+pile of binaries nobody can regenerate.
 
 ## Layout
 
@@ -161,6 +162,7 @@ apps/web/                    the application — public site, API and admin
   scripts/create-admin.ts    bootstraps an admin once the first-user screen is gone
   wrangler.jsonc             Worker bindings — mirrors `terraform output`
   wrangler.remote.jsonc      the same bindings, pointed at live D1/R2 (opt-in only)
+services/converter/          scan → OCR → proofread → DOCX master (its own README)
 content/seed/                generated book artifacts (DOCX/EPUB/PDF)
 infra/                       Terraform: R2, D1, DNS, the www redirect
 tools/                       smoke test, seed-content generator, R2 mirror

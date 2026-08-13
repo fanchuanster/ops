@@ -39,23 +39,49 @@ oversight.
 - **Converter, partially** — PyMuPDF rendering, PaddleOCR behind a replaceable
   interface, normalization/structure, and python-docx master generation, driven
   by a CLI.
+- **Four inputs, one master** — scanned PDF (OCR), text-layer PDF, DOCX and
+  plain text all converge on the same DOCX master, detected by file content
+  rather than extension. The DOCX reader is also what makes "generate reader
+  formats from the *approved* master" possible, and the round trip is tested.
+- **Reading levels** (`CLAUDE.md` section 5.1) — essential/normal/extensive as
+  ordered ids, nesting so a reader sees their level and everything shallower.
+  Curation, not access control; filtered in the catalog query.
+- **Publication review** (`CLAUDE.md` section 6.1) — a reader-created book
+  reaches the public library only on an admin approval *and* cleared rights,
+  which are independent gates. Enforced in the domain layer and on write.
+- **Google sign-in** (NR-30) — Authorization Code with PKCE, in two route
+  handlers under `/auth/google`. Claim checking and account linking live in
+  `domain/googleIdentity.ts` under test, not in the handler: an unverified
+  Google email is refused outright, because linking one to an existing account
+  would be account takeover. Requires the redirect URIs registered in the Google
+  Cloud Console and the credentials uploaded as Worker secrets — see
+  `.env.example`.
+- **AI-assisted OCR correction** — `correct` proposes, a human approves in a
+  review file, `apply` edits. Never silent rewriting, per `CLAUDE.md` section 7,
+  and enforced by deterministic guardrails rather than by the prompt: a proposal
+  that changes more than two substantive characters is refused as a rewrite, and
+  the refusal is recorded. The provider is xAI by default and the self-hosted
+  vLLM endpoint by configuration (`services/converter/README.md`).
 
 ## Not built
 
 ### Reader experience
 
 - **In-reader typography controls** — font size, line spacing, margins (NR-18).
-- **Google sign-in** (NR-30) and **Apple Sign In** (NR-25) — hang off the
-  accounts that now exist; the Google OAuth client carries over unchanged.
+- **Apple Sign In** (NR-25) — hangs off the accounts that now exist.
 
 ### Content production
 
 - **The rest of `services/converter`** — the FastAPI async job API and job-state
-  machine (`CLAUDE.md` section 13), the Cloudflare Queues consumer, the
-  vLLM/Gemma correction stage (never silent rewriting — original + AI suggestion
-  + human approval, per `CLAUDE.md` section 7), EPUB 3 generation and
-  validation, PDF rendering in three sizes, and the public conversion portal
-  (NR-1 … NR-8).
+  machine (`CLAUDE.md` section 13), the Cloudflare Queues consumer, EPUB 3
+  generation and validation, and PDF rendering in three sizes (NR-1 … NR-8).
+
+- **The conversion portal's web half** (`CLAUDE.md` section 6.1) — the domain
+  rules and the converter's input adapters are built; the upload route, the
+  job record, the reader-facing "my books" and submit-for-review screens, the
+  admin review queue and per-user upload quotas are not. Two things to settle
+  first: whether a private upload may be sent to a third-party LLM at all, and
+  how a large scan reaches R2 given a Worker's request-size limit.
 
   Until the pipeline is complete, `tools/generate-seed-content.py` stands in for
   it, writing reproducible artifacts into `content/seed/`.

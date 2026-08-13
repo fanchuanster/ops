@@ -182,6 +182,9 @@ happens to arrive by email.
 - User blogs (each user has their own blog)
 - E-reader product/affiliate sales
 - Potential automated X/Twitter anti-explicit-content activity
+- A conversion portal: readers upload their own material and get a
+  readable edition back (section 6.1)
+- Reading levels: essential / normal / extensive (section 5.1)
 
 ---
 
@@ -251,6 +254,24 @@ The following must remain server-side application functionality
 Do NOT turn the web application into the conversion pipeline. That stays
 a separate FastAPI service (`services/converter`).
 
+## 2.2 Open source and third-party integration are welcome
+
+This project is open to open source, third-party integration, borrowing
+and reuse. Where a mature library, plugin, model or hosted API already
+does the job well, use it rather than reimplementing it. That applies to
+OCR engines, document tooling, LLM providers, payment and email — the
+default answer to "should we build this ourselves?" is no.
+
+The conditions on that are the ordinary ones, not obstacles:
+
+- honour the licence of anything borrowed, and keep attribution intact;
+- keep the dependency behind an interface where it is plausibly
+  replaceable (`app/ocr/base.py` and `app/llm/client.py` are the pattern);
+- credentials come from the environment, never from source;
+- think before sending user-owned or restricted content to a third-party
+  service — public-domain library text is not the same as a reader's
+  private upload (section 6).
+
 ---
 
 # 3. HIGH-LEVEL ARCHITECTURE
@@ -288,9 +309,9 @@ Target architecture:
         |         |         |
        OCR       LLM     Rendering
                   |
-                 vLLM
+                xAI API
                   |
-           Gemma 4 31B
+              Grok 4.6
 
 The dividing line is CPU shape, not importance: a Worker is billed and
 limited by CPU time, so I/O-shaped request handling belongs on it and
@@ -372,32 +393,35 @@ JavaScript is justified.
 
 ---
 
-# 4. EXISTING AI INFRASTRUCTURE
+# 4. AI INFRASTRUCTURE
 
-A self-hosted vLLM endpoint already exists.
+The LLM provider is **xAI**, over its OpenAI-compatible HTTP API.
 
-Completion endpoint:
+    XAI_BASE_URL=https://api.x.ai/v1     (default; need not be set)
+    XAI_MODEL=grok-4.6                   (default; need not be set)
+    XAI_API_KEY=...                      (required, from .env)
 
-http://10.211.51.231:8000/v1/chat/completions
-
-Model:
-
-google/gemma-4-31B-it-qat-w4a16-ct
-
-Use OpenAI-compatible HTTP APIs when possible.
+This section specified a self-hosted vLLM endpoint at
+`http://10.211.51.231:8000/v1` running `google/gemma-4-31B-it-qat-w4a16-ct`
+until 2026-08-13. Both are interchangeable as far as the code is
+concerned — the client in `services/converter/app/llm/client.py` speaks
+the OpenAI chat-completions shape and takes base URL, model and key from
+the environment, so pointing it back at vLLM is a matter of setting
+`XAI_BASE_URL` and `XAI_MODEL`. Nothing in the pipeline knows which is
+answering.
 
 IMPORTANT:
 
-- Do not expose this endpoint directly to public browsers.
-- The web application should not directly depend on the vLLM endpoint.
-- The conversion/AI service should communicate with vLLM.
-- Make the LLM endpoint configurable through environment variables.
-- Never hard-code the endpoint in application source code.
-
-Example:
-
-VLLM_BASE_URL=http://10.211.51.231:8000/v1
-VLLM_MODEL=google/gemma-4-31B-it-qat-w4a16-ct
+- Do not expose the endpoint or the key directly to public browsers.
+- The web application should not directly depend on the LLM endpoint.
+  Only the conversion service talks to it.
+- Make endpoint, model and key configurable through environment
+  variables; never hard-code any of them in application source.
+- The key is read from the environment, falling back to the repo-root
+  `.env` for local CLI runs. `.env` is gitignored and stays that way.
+- The provider is now a third party, which the self-hosted endpoint was
+  not. Public-domain library text is fine to send. A reader's private
+  upload (section 6) is not — that distinction is now load-bearing.
 
 ---
 
@@ -450,6 +474,34 @@ Reader-facing formats must be generated from the approved DOCX master.
 
 Do NOT use PDF as the canonical source.
 
+## 5.1 Reading levels
+
+Every book carries a level: **essential**, **normal** or **extensive**.
+They nest rather than exclude — a reader browsing at one level sees that
+level and everything shallower:
+
+    essential  →  essential
+    normal     →  essential + normal
+    extensive  →  essential + normal + extensive
+
+The levels are stored and compared as ordered **ids**, never as names:
+`essential = 10, normal = 20, extensive = 30`, in
+`apps/web/src/domain/levels.ts`. A reader at id N sees every book whose
+id is ≤ N, which is one indexed comparison in the catalog query. The gaps
+are deliberate — a level added later between two existing ones takes id
+25 and needs no stored row rewritten.
+
+This is **curation, not access control**. A reader chooses their own
+level and can raise it at any time, so `extensive` is always one click
+away. Rights clearance, private-workspace ownership and staged release
+are the access rules (section 6), they are enforced independently, and
+nothing about levels may ever be relied on to keep a reader away from
+anything. The purpose is the mission's "low visual distraction": let a
+reader start with the core and open up the tail when they want it.
+
+Level is an administrator field, like rights status and visibility
+(section 6.1).
+
 ---
 
 # 6. COPYRIGHT / RIGHTS MANAGEMENT
@@ -475,6 +527,42 @@ For the conversion portal, distinguish:
 2. User-owned/private conversion content
 
 Private user uploads should not automatically become publicly accessible.
+
+## 6.1 The conversion portal
+
+A reader may upload a scanned PDF, an ordinary text-layer PDF, a DOCX or
+a plain text file. All four converge on the same DOCX master (section 5)
+— there is no second-class path — and from that master they get the same
+things the library offers: EPUB and the PDF variants, delivery to an
+e-reader, and the online reader.
+
+Such a book is **private by default**, visible only to its owner, and
+may stay that way forever. Publishing it to the public library is a
+separate act and takes two independent approvals:
+
+1. an administrator approves the submission, and
+2. the rights status permits public distribution.
+
+The second is not a formality the first can wave through. An admin
+approving a submission is saying "this belongs in the library"; it is not
+a finding that the material is legally distributable. `user_owned` is the
+status for "the uploader owns a copy", and it never clears public
+distribution — a reader owning a book confers no right to publish it to
+everyone else. `canPublishToLibrary` in `apps/web/src/domain/moderation.ts`
+enforces both gates, and `unknown` rights block submission entirely: the
+uploader is the only person who knows where their material came from, and
+that is the one moment in the flow when the question is easy to answer.
+
+Rights status, visibility and reading level are administrator fields. An
+uploader who could set their own would walk their upload straight into
+the front of the library.
+
+**Do not send private uploads to a third-party LLM.** The AI correction
+stage now talks to xAI by default (section 4), which the self-hosted
+endpoint was not. Public-domain library text is fine to send; a reader's
+private material is a different question and needs either the
+self-hosted provider, or explicit consent, before it goes anywhere. This
+is unresolved and must be decided before the portal accepts uploads.
 
 ---
 
@@ -691,12 +779,21 @@ no Redis to run. An in-process queue inside the converter is still fine
 for its own pipeline stages.
 
 Built so far: PyMuPDF rendering, a PaddleOCR backend behind an
-interface, normalization/structure, and python-docx master generation —
-driven by a CLI (`app/cli.py`) rather than an API. The CLI came first
-deliberately: a book takes hours to OCR, and an editor needs to re-run
-the structure and DOCX stages against a cached read without paying for
-the OCR again. Not yet built: the FastAPI job API, the queue consumer,
-the vLLM correction stage, and EPUB/PDF generation.
+interface, normalization/structure, python-docx master generation, and
+the AI correction stage — driven by a CLI (`app/cli.py`) rather than an
+API. The CLI came first deliberately: a book takes hours to OCR, and an
+editor needs to re-run the structure and DOCX stages against a cached
+read without paying for the OCR again.
+
+The correction stage is two commands, `correct` and `apply`, with a
+human review file between them, because section 7's requirement is not
+satisfiable by a prompt. `correct` writes suggestions and changes
+nothing; deterministic guardrails in `app/llm/correct.py` refuse
+anything that reads as a rewrite rather than an OCR repair, and record
+why. `services/converter/README.md` has the detail.
+
+Not yet built: the FastAPI job API, the queue consumer, and EPUB/PDF
+generation.
 
 Example:
 
