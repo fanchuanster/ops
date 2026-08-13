@@ -1,7 +1,9 @@
 import React from 'react'
 
+import { GoogleOneTap } from '../../components/GoogleOneTap'
 import { ThemeToggle } from '../../components/ThemeToggle'
 import { getCurrentUser } from '../../lib/auth'
+import { isGoogleSignInConfigured } from '../../lib/googleOAuth'
 import './styles.css'
 
 // The header reflects who is signed in, so the shell is per-request.
@@ -55,6 +57,11 @@ export default async function FrontendLayout({ children }: { children: React.Rea
             </nav>
           </div>
         </header>
+
+        {/* Only for a signed-out reader, and only when Google is set up.
+            Rendering it otherwise would prompt someone who already has a
+            session, or load Google's script for nothing. */}
+        {!user && isGoogleSignInConfigured() ? <GoogleOneTap next="/" /> : null}
 
         {children}
 
