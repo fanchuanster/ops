@@ -1,5 +1,20 @@
 # NobleSee — Modernization Assessment
 
+> **Status: a dated decision record, written 2026-08-12. Not current
+> state.**
+>
+> This is the assessment that justified rebuilding greenfield rather than
+> migrating, and it is cited for that reasoning. It describes the
+> repository *as it stood before the rebuild* — WordPress, MySQL, Docker
+> Compose, a blocked tunnel — none of which exists now. Section 1 in
+> particular is a snapshot of a system that has since been deleted.
+>
+> Two decisions recorded here were themselves later reversed: PostgreSQL 18
+> (now Cloudflare D1) and the S3/container deployment (now Workers). See
+> `docs/CLOUDFLARE_ARCHITECTURE.md`.
+>
+> For current state, read `README.md` and `docs/ROADMAP.md`.
+
 Required output per `docs/MODERNIZATION.md` section 45, produced after
 the section 41 repository inspection and before any substantial
 implementation.
@@ -101,7 +116,7 @@ for free.
 | `services/web` — Django 5.1, added today | **Remove, do not migrate.** ~2 hours old, health endpoint + 2 tests, zero domain logic. Nothing to preserve; keeping it would leave two contradictory backends. Documented here rather than silently deleted, per §43. |
 | `webdb` runs PostgreSQL **17**; spec requires **18** | Recreate on `postgres:18` (verified available). No data to migrate. |
 | `CLAUDE.md` §2.1 mandates **Django + Astro** | Rewrite to Next.js + Payload. It was rewritten earlier today to Django/Astro and is now wrong. |
-| `ARCHITECTURE_REVIEW.md` §11 recommends Django + Astro | Add a second reversal note; keep the coupling analysis, which still holds. |
+| `ARCHITECTURE_REVIEW.md` §11 recommends Django + Astro | Add a second reversal note; keep the coupling analysis, which still holds. *(That file was deleted on 2026-08-13 — it reviewed WordPress themes for a platform that no longer exists, and its recommendation had been superseded twice. In git history.)* |
 | Spec §14 requires **Next.js**; `CLAUDE.md` FRONTEND section says **Astro** | Next.js wins — Payload 3 requires it regardless. |
 | MySQL | Stays until WordPress is decommissioned; no new functionality on it (§43). |
 
@@ -208,7 +223,7 @@ Incremental per §42. WordPress keeps serving until Phase 6.
 **Phase 0 — Decisions and cleanup**
 Resolve §1.7 gaps 1–3. Remove `services/web`; recreate `webdb` on
 PostgreSQL 18. Rewrite `CLAUDE.md` §2.1 and the FRONTEND section; add
-the reversal note to `ARCHITECTURE_REVIEW.md` §11.
+the reversal note to `ARCHITECTURE_REVIEW.md` §11 *(since deleted)*.
 
 **Phase 1 — Parity harness**
 Port the 23 smoke assertions to Playwright, running against WordPress

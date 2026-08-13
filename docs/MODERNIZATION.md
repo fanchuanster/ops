@@ -1,5 +1,36 @@
 # NobleSee — Architecture Modernization & Payload Migration Prompt
 
+> **Status: historical prompt, partly superseded. Read this banner first.**
+>
+> This is the *specification* that drove the WordPress → Next.js + Payload
+> rebuild in August 2026. The rebuild happened; the platform half of this
+> document is done. It is kept, rather than deleted, for two reasons: the
+> domain layer cites its section numbers in source comments
+> (`src/domain/rights.ts`, `downloadLimit.ts`, `stagedRelease.ts`,
+> `scripts/check-domain-boundary.sh`), and sections 19–35 are still the
+> fullest statement of requirements for subsystems that are not built yet.
+>
+> **Superseded — do not implement as written:**
+>
+> | Section | Says | Actually |
+> | --- | --- | --- |
+> | 6 — Database | PostgreSQL 18 | **Cloudflare D1** (SQLite), via a Worker binding |
+> | 12 — Object storage | Amazon S3, MinIO in dev | **Cloudflare R2**; a binding for the Worker, the S3 API only for the converter |
+> | 13 — Downloads | short-lived signed URLs | **streamed through the Worker** — the R2 binding cannot presign |
+> | 36 — Deployment | Docker Compose, then ECS | **`wrangler deploy`** to Workers; Terraform for infrastructure. Compose retired 2026-08-13 |
+> | 26 — Temporal, 27 — events | Temporal workflows, an event bus | not built, and not planned at this scale. **Cloudflare Queues** is the web → converter handoff |
+>
+> The reasoning for each is in `docs/CLOUDFLARE_ARCHITECTURE.md`.
+>
+> **Still authoritative:** sections 3 and 7 (the framework-independent
+> domain layer — enforced by a check in `npm run verify`, not merely
+> documented), 8–11 (book model and rights), 15–18 (reader, EPUB, PDF,
+> DOCX), 19–24 (OCR, AI architecture, vLLM, human-in-the-loop, evaluation)
+> and 31–35.
+>
+> For what is built versus deferred, `docs/ROADMAP.md` is the current
+> answer and this document is not.
+
 You are the lead software architect and implementation engineer for **NobleSee**.
 
 Your task is to thoroughly inspect the existing repository and then **modernize the architecture toward a state-of-the-art 2026 technology stack**, replacing the previous WordPress-centered architecture with a modern TypeScript/Next.js/Payload architecture.

@@ -159,15 +159,26 @@ NobleSee is a website for hosting and sharing essential and noble books, especia
 The platform should eventually provide:
 
 - Online book reading
-- Book downloads
 - AI-assisted book digitization and production
 - EPUB/PDF and potentially other e-reader formats
 - Staged/part-based book releases
 - Paid early unlocks
 - Donations
 - Send-to-Kindle functionality
-- Download abuse protection (per-user limit on number of books downloaded
+- Delivery abuse protection (per-user limit on number of books delivered
   per period — not a network/bandwidth control)
+
+This list said "Book downloads" until 2026-08-13. It is deliberately
+gone: a book is read here, in the reflowable reader, or sent to the
+reader's device — it is never handed over as a file to collect. That is
+a product decision, not a technical limit. NobleSee exists to make books
+pleasant to *read*, and a folder of PDFs is not that.
+
+"Download" survives in code and in this document as the name of the
+*authorization* concept — the rights/limit/staged-release decision in
+`src/lib/authorizeDownload.ts` and the `Downloads` ledger. Kindle
+delivery runs through exactly that path, because it is a download that
+happens to arrive by email.
 - User blogs (each user has their own blog)
 - E-reader product/affiliate sales
 - Potential automated X/Twitter anti-explicit-content activity
@@ -179,11 +190,16 @@ The platform should eventually provide:
 ## 2.1 Next.js + Payload is the main website platform
 
 This section previously mandated WordPress, and briefly Django. The
-current direction is set by `docs/MODERNIZATION.md` and assessed in
-`docs/MODERNIZATION_ASSESSMENT.md`: with no users and no data to
-preserve, the platform is being rebuilt greenfield.
+rebuild was specified in `docs/MODERNIZATION.md` and justified in
+`docs/MODERNIZATION_ASSESSMENT.md` — with no users and no data to
+preserve, the platform was rebuilt greenfield rather than migrated.
 
-Use **Next.js + React + TypeScript with Payload CMS on PostgreSQL 18**
+Both of those are now historical records with status banners, and the
+platform decisions in them have moved on. **This section and
+`docs/CLOUDFLARE_ARCHITECTURE.md` are the current direction**;
+`docs/ROADMAP.md` says what is built.
+
+Use **Next.js + React + TypeScript with Payload CMS on Cloudflare D1**
 for:
 
 - User accounts and authentication
@@ -196,6 +212,17 @@ for:
 
 Payload runs *inside* the Next.js application rather than beside it, so
 the admin, the API and the public site are one deployable.
+
+That deployable is a **Cloudflare Worker**, built by OpenNext, on **D1**
+for the database and **R2** for book artifacts. This section specified
+PostgreSQL 18 in a container until 2026-08-13; the reasoning for the
+move, and what it cost, is in `docs/CLOUDFLARE_ARCHITECTURE.md`. D1 and
+R2 arrive as Worker *bindings* rather than credentials, so there is no
+connection string and no S3 access key in the environment.
+
+Migrations are explicit and versioned in `apps/web/src/migrations`, and
+the adapter runs with `push: false` — nothing may alter the schema at
+boot.
 
 Next.js also covers:
 
@@ -234,59 +261,70 @@ Target architecture:
                            |
                     Cloudflare (TLS, CDN)
                            |
-                   Cloudflare Tunnel
-                           |
-        +------------------+------------------+
-        |                                     |
-        v                                     v
-        Next.js + Payload application
+        Next.js + Payload application  [Cloudflare Worker]
         catalog, book pages, reader, blog,
         accounts, rights, limits, staged
-        release, downloads, admin/editorial
+        release, delivery, admin/editorial
         UI, JSON API
                            |
         +------------------+------------------+
-                           |
-        +------------------+------------------+
+        |                  |                  |
+     bindings           bindings           HTTP API
         |                  |                  |
         v                  v                  v
-   PostgreSQL            Redis          Cloudflare R2
-        |                  |                  |
-        |                  |            Book artifacts
-        |                  |            DOCX/EPUB/PDF
-        |              Job queues
+  Cloudflare D1     Cloudflare R2          Stripe
+   (SQLite)               |                Resend
+        |           Book artifacts        (Kindle)
+        |           DOCX/EPUB/PDF
+        |                  ^
         |                  |
-        |                  v
-        |            Converter API
+        v                  |
+ Cloudflare Queues         |
         |                  |
-        |        +---------+---------+
-        |        |         |         |
-        |       OCR       LLM     Rendering
-        |                  |
-        |                 vLLM
-        |                  |
-        |           Gemma 4 31B
+        v                  |
+   Converter  [container] -+
         |
-        +------------ Stripe
+        +---------+---------+
+        |         |         |
+       OCR       LLM     Rendering
+                  |
+                 vLLM
+                  |
+           Gemma 4 31B
+
+The dividing line is CPU shape, not importance: a Worker is billed and
+limited by CPU time, so I/O-shaped request handling belongs on it and
+long *computation* — OCR, LLM correction, DOCX/EPUB/PDF rendering — does
+not. `docs/CLOUDFLARE_ARCHITECTURE.md` has the full table.
+
+The Worker never waits for a conversion. It enqueues a job and returns
+an id; the converter consumes the queue and writes results back to R2.
+The converter therefore needs no inbound port, which is what makes it
+deployable behind this host's filtered egress.
 
 Separate services:
 
-- NobleSee Web (Next.js + Payload + PostgreSQL) — one deployable
-  serving the public site, the API and the admin
-- NobleSee Converter
-- NobleSee Conversion Worker
+- NobleSee Web (Next.js + Payload on D1/R2) — one Worker serving the
+  public site, the API and the admin
+- NobleSee Converter — container; OCR, LLM correction, format generation
 - NobleSee X Worker
-- Future Kindle Delivery Service
+- Kindle delivery — built, and *not* a separate service: Workers cannot
+  speak SMTP, so it goes over Resend's HTTP API from the Worker itself
 
-Initial deployment:
+Deployment:
 
-Docker Compose
+`wrangler deploy` for the Worker; Terraform in `infra/` for R2, D1, DNS
+and the redirect. There is no Docker Compose stack — it was retired on
+2026-08-13 when the last container left production. Development still
+uses a container for the toolchain, for an unrelated glibc reason
+documented in `README.md`.
 
-Future deployment:
+Where the converter container runs is deliberately still open. The queue
+boundary means it can be answered later without touching application
+code.
 
-Kubernetes / AWS EKS
-
-Do not prematurely introduce Kubernetes-specific complexity into the MVP.
+Kubernetes / AWS EKS remains a possible future target. Do not
+prematurely introduce Kubernetes-specific complexity into the MVP.
 
 PaddleOCR is the OCR engine feeding the conversion services (see section
 8, OCR, for the fuller evaluation). The conversion service is
@@ -298,9 +336,10 @@ application over HTTP and knows nothing about the frontend.
 # FRONTEND
 
 The NobleSee frontend is a Next.js (App Router) application in React
-and TypeScript, with Payload embedded in the same application. It was
-previously specified as WordPress + Kadence, then briefly Django +
-Astro; see section 2.1 and `docs/MODERNIZATION.md` section 14.
+and TypeScript, with Payload embedded in the same application, deployed
+as a Cloudflare Worker. It was previously specified as WordPress +
+Kadence, then briefly Django + Astro; see section 2.1 and
+`docs/MODERNIZATION.md` section 14.
 
 Next.js is required by Payload 3, which is Next-native, and gives
 server-side and static rendering where each page needs it — the catalog
@@ -319,8 +358,8 @@ The frontend must provide:
 - dark/light reading modes
 - an excellent reflowable reading experience
 
-Do NOT put business logic in the frontend. Rights checks, download
-authorization, rate limiting and staged release are enforced server-side
+Do NOT put business logic in the frontend. Rights checks, delivery
+authorization, rate limiting and staged release are enforced
 server-side; the frontend renders what the API permits and must never be
 the only thing standing between a reader and a restricted file.
 
@@ -640,9 +679,24 @@ Suggested stack:
 
 Python
 FastAPI
-Celery or equivalent queue
-Redis
-S3-compatible object storage
+Cloudflare Queues for the handoff from the Worker
+S3-compatible object storage (R2, over the S3 API — the converter is not
+a Worker and so has no binding; it is the one component that legitimately
+holds R2 credentials)
+
+Celery + Redis were specified here until 2026-08-13. Cloudflare Queues
+replaced them for the *web → converter* handoff, because the enqueuing
+side is a Worker and a native queue keeps that to one bounded write with
+no Redis to run. An in-process queue inside the converter is still fine
+for its own pipeline stages.
+
+Built so far: PyMuPDF rendering, a PaddleOCR backend behind an
+interface, normalization/structure, and python-docx master generation —
+driven by a CLI (`app/cli.py`) rather than an API. The CLI came first
+deliberately: a book takes hours to OCR, and an editor needs to re-run
+the structure and DOCX stages against a cached read without paying for
+the OCR again. Not yet built: the FastAPI job API, the queue consumer,
+the vLLM correction stage, and EPUB/PDF generation.
 
 Example:
 
@@ -702,21 +756,32 @@ Target: S3-compatible object storage.
 
 Production:
 
-Cloudflare R2, over the S3 API. Chosen over AWS S3 because the domain,
-DNS and tunnel already live on Cloudflare and R2 has no egress fees.
-Because it is S3-compatible, moving to S3 later is a configuration
-change rather than a rewrite.
+Cloudflare R2. Chosen over AWS S3 because the domain and DNS already
+live on Cloudflare and R2 has no egress fees.
+
+The web application reaches it through a Worker **binding**, not the S3
+API — so there is no access key in its environment. The converter, which
+is not a Worker, uses the S3 API with credentials. R2 being
+S3-compatible keeps a later move to S3 a configuration change on that
+side rather than a rewrite.
 
 Development:
 
-Leaving the R2 credentials unset is acceptable — Payload falls back to
-local disk, so the stack runs with no cloud account. MinIO is also
-fine.
+`wrangler dev` provides a local R2 simulation through the same binding,
+so the stack runs with no cloud account; `tools/mirror-r2-local.sh`
+copies real artifacts into it. A local-disk path also remains in
+`src/lib/storage.ts` for running without Cloudflare at all.
 
-The download path must stream files or issue short-lived signed URLs,
+The download path must **stream artifacts through the application**,
 never redirect to a public object URL: protected artifacts must not be
 reachable without passing the server-side rights, limit and staged
 release checks.
+
+Short-lived signed URLs were the original design and are no longer
+available — presigning is an S3-API feature and the R2 binding has no
+equivalent. This is a better shape regardless: no credential exists to
+be lifted, and no URL outlives the authorization decision that produced
+it. Streaming is I/O, so it stays cheap on a Worker.
 
 Suggested structure:
 
