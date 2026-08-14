@@ -10,10 +10,14 @@ provider "cloudflare" {
 /*
  * Google Cloud, for Document AI only.
  *
- * Credentials come from the environment — GOOGLE_APPLICATION_CREDENTIALS,
- * or `gcloud auth application-default login` — and deliberately not from
- * a Terraform variable, for the same reason the Cloudflare token is not
- * one: a variable ends up in terraform.tfvars.
+ * Credentials come from the environment, not from a Terraform variable —
+ * same reason as the Cloudflare token: a variable ends up in
+ * terraform.tfvars.
+ *
+ * gcloud is not installed on this host and runs in a container instead
+ * (`infra/gc`), so its application-default credentials land in
+ * `infra/.gcloud-home/`. `infra/tf` points
+ * GOOGLE_APPLICATION_CREDENTIALS at them.
  */
 provider "google" {
   project = var.gcp_project

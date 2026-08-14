@@ -34,4 +34,23 @@ if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
     exit 1
 fi
 
+# Google credentials, for the Document AI resources.
+#
+# gcloud is not installed on this host — it runs in a container, see
+# infra/gc — so the application-default credentials it writes land beside
+# that wrapper rather than in ~/.config. Terraform is told where they are
+# rather than being expected to guess.
+#
+# Absent, this is not an error: the Cloudflare half of the configuration
+# is independently useful, and `plan` will say plainly which resources
+# need Google auth.
+ADC="$HERE/.gcloud-home/application_default_credentials.json"
+if [ -f "$ADC" ]; then
+    export GOOGLE_APPLICATION_CREDENTIALS="$ADC"
+elif [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
+    echo "infra/tf: no Google credentials found. If you are touching the" >&2
+    echo "          Document AI resources, run:" >&2
+    echo "            ./infra/gc gcloud auth application-default login --no-launch-browser" >&2
+fi
+
 exec terraform -chdir="$HERE" "$@"

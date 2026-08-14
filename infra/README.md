@@ -175,8 +175,16 @@ Batch rather than online: online caps a request at 15 pages, so a
 one operation. Batch answers into the bucket rather than inline, which is
 why the bucket exists.
 
+gcloud is not installed on this host and does not need to be — `infra/gc`
+runs it in a container, the same trick `apps/web/cf` uses for wrangler.
+Credentials persist in `infra/.gcloud-home/`, gitignored, and `infra/tf`
+points Terraform at them.
+
 ```bash
-gcloud auth application-default login          # the provider reads the environment
+# Once. --no-launch-browser prints a URL to open elsewhere and waits for
+# the code, which is what you want on a machine with no browser.
+./infra/gc gcloud auth application-default login --no-launch-browser
+./infra/gc gcloud auth application-default set-quota-project my-project-first-296702
 
 cd infra
 cp terraform.tfvars.example terraform.tfvars   # set gcp_project, documentai_bucket

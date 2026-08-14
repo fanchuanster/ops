@@ -239,3 +239,6 @@ infra/*.tfstate
 infra/*.tfstate.*
 infra/terraform.tfvars
 infra/*.tfplan
+
+# Google Cloud credentials for the containerised gcloud (infra/gc).
+infra/.gcloud-home/

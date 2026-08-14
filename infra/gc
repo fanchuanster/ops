@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# Runs the Google Cloud CLI in a container.
+#
+# Same reasoning as apps/web/cf: this host has no gcloud and installing
+# one is a bigger commitment than borrowing an image. Terraform's google
+# provider only needs the credentials file gcloud writes, so the CLI
+# itself never has to exist outside this wrapper.
+#
+#   ./gc gcloud auth application-default login --no-launch-browser
+#   ./gc gcloud config set project my-project-first-296702
+#   ./gc gcloud projects describe my-project-first-296702
+#
+# Credentials persist in .gcloud-home/ beside this script, which is
+# gitignored. Terraform reads them through GOOGLE_APPLICATION_CREDENTIALS
+# — see providers.tf — so nothing needs to be copied anywhere.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE="google/cloud-sdk:slim"
+
+mkdir -p "$HERE/.gcloud-home"
+
+# A pseudo-terminal only when there is one, so this works from a shell
+# and from a script alike. The device-code login needs stdin either way.
+TTY=(-i)
+[ -t 0 ] && TTY=(-it)
+
+exec docker run --rm "${TTY[@]}" \
+    -v "$HERE/.gcloud-home:/root/.config/gcloud" \
+    -v "$(cd "$HERE/.." && pwd):/repo" \
+    -w /repo/infra \
+    "$IMAGE" "$@"
