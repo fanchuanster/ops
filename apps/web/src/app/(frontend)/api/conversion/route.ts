@@ -32,10 +32,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
-export const dynamic = 'force-dynamic'
+import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
 
-/** Formats the converter may attach, and nothing else. */
-const ALLOWED_FORMATS = new Set(['docx', 'epub', 'pdf_standard', 'pdf_large', 'pdf_xl'])
+export const dynamic = 'force-dynamic'
 
 async function converterSecret(): Promise<string | null> {
   try {
@@ -185,28 +184,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  // Only keys the converter is allowed to attach, and only under the
-  // book's own prefix. A converter that has been tampered with must not
-  // be able to point a book's artifacts at another book's files.
-  const prefix = `books/${bookId}/`
-  const artifacts = Object.entries((body.artifacts ?? {}) as Record<string, unknown>)
-    .filter(
-      ([format, key]) =>
-        ALLOWED_FORMATS.has(format) && typeof key === 'string' && key.startsWith(prefix),
-    )
-    .map(([format, key]) => ({
-      format: format as 'epub',
-      storageKey: key as string,
-      // The DOCX master is the editorial source of truth, never a
-      // reader download.
-      downloadable: format !== 'docx',
-    }))
-
+  // What the converter may attach, and only under this book's own
+  // prefix. Decided in the domain layer so the containment rule is
+  // testable without an HTTP request — domain/conversion.ts.
+  const artifacts = acceptArtifacts({ bookId, artifacts: body.artifacts })
   if (artifacts.length === 0) {
     return NextResponse.json({ error: 'No usable artifacts.' }, { status: 400 })
   }
 
-  const pageCount = Number(body.page_count)
+  const pageCount = acceptPageCount(body.page_count)
 
   await payload.update({
     collection: 'books',
@@ -214,8 +200,9 @@ export async function POST(request: Request) {
     data: {
       artifacts,
       // The price derives from this in a collection hook, so setting it
-      // is what prices the book.
-      ...(Number.isFinite(pageCount) && pageCount > 0 ? { pageCount } : {}),
+      // is what prices the book. Null leaves whatever is there, which
+      // for a new book means the minimum — the right way to fail.
+      ...(pageCount === null ? {} : { pageCount }),
       conversion: { ...book.conversion, state: 'ready', message: null },
       // Readable now, and still private to its owner. Publishing to the
       // library is a separate act needing an administrator and a rights

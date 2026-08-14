@@ -6,9 +6,9 @@ to Cloudflare D1 + Workers on 2026-08-13 (see
 `docs/CLOUDFLARE_ARCHITECTURE.md`).
 
 What exists today is a working reading site: a catalog, book pages, an
-in-browser reflowable reader, reader accounts, Send-to-Kindle, and the three
-domain rules — rights, delivery limits, staged release — implemented and
-unit-tested in a framework-independent layer.
+in-browser reflowable reader, reader accounts, Send-to-Kindle, a credit
+economy, and a reader upload portal — with the rules that govern them
+implemented and unit-tested in a framework-independent layer.
 
 Everything under "Not built" is deliberately deferred, named here so the
 current scope stays legible as a foundation rather than reading as an
@@ -16,13 +16,22 @@ oversight.
 
 ## Built
 
-- **Rights model** — six statuses, failing closed on `unknown`; part-level
-  overrides that may restrict but never relax the parent book (NR-9, NR-10).
-- **Delivery limits** — distinct books in a rolling window, not files. Reading
-  in the browser is never limited.
-- **Staged release** — a per-reader clock, not a global publication date.
+- **Rights model** — six statuses, failing closed on `unknown` (NR-9, NR-10).
+  Two access rules, not one: `canReadOnline` stops before the account
+  requirement that `canAccessArtifact` enforces, because reading is free.
+- **Credits** — 1 per 70 pages of the DOCX master, min 1 max 7; 10 at signup,
+  5 for a month you sign in and 2 for a month away; the first delivery buys
+  the book and later ones cost a flat credit. Reading is never charged.
+  Accrual is lazy — no cron — because a sign-in always grants for its own
+  month. Replaced the rolling delivery cap on 2026-08-14.
+- **Whole books** — Parts and staged release were removed on 2026-08-14. A book
+  is one record, one master, one set of formats.
+- **Converter** — the full pipeline: OCR, structure, DOCX master, EPUB 3, three
+  PDF sizes, R2, the async job API, and the pull handoff from the Worker.
+- **Upload portal** — uploads land private and owned, queued for conversion;
+  the account area has history, my books and the upload form.
 - **Site** — catalog with collection filtering, book pages, reading-first
-  typography with Traditional Chinese first in the font stack, light/dark/auto.
+  typography with Traditional Chinese first in the font stack.
 - **Authorized delivery** — the three domain rules wired to artifact streaming
   through the Worker (`src/lib/authorizeDownload.ts`). Not signed URLs: the R2
   binding has no presigning, and streaming turned out to be the better shape.
@@ -72,19 +81,23 @@ oversight.
 
 ### Content production
 
-- **The rest of `services/converter`** — the FastAPI async job API and job-state
-  machine (`CLAUDE.md` section 13), the Cloudflare Queues consumer, EPUB 3
-  generation and validation, and PDF rendering in three sizes (NR-1 … NR-8).
+- **Where the converter runs** — the service is complete and the wire to the
+  Worker is built, but nothing hosts the container yet. Deliberately open
+  (`CLAUDE.md` section 3); the pull handoff means it can be answered later
+  without touching application code. `CONVERTER_SECRET` must be set on the
+  Worker before the handoff does anything — it fails closed until then.
 
-- **The conversion portal's web half** (`CLAUDE.md` section 6.1) — the domain
-  rules and the converter's input adapters are built; the upload route, the
-  job record, the reader-facing "my books" and submit-for-review screens, the
-  admin review queue and per-user upload quotas are not. Two things to settle
-  first: whether a private upload may be sent to a third-party LLM at all, and
-  how a large scan reaches R2 given a Worker's request-size limit.
+- **EPUB validation** — generated EPUBs are well-formed and open, but nothing
+  runs epubcheck over them (NR-1 … NR-8).
 
-  Until the pipeline is complete, `tools/generate-seed-content.py` stands in for
-  it, writing reproducible artifacts into `content/seed/`.
+- **The portal's remaining screens** — submit-for-review, the admin review
+  queue, and per-user upload quotas. One thing to settle first: whether a
+  private upload may be sent to a third-party LLM at all (`CLAUDE.md` section
+  6.1). `allow_third_party_ai` is false everywhere today, so the question is
+  not yet load-bearing.
+
+  `tools/generate-seed-content.py` still writes the seed library's own
+  reproducible artifacts into `content/seed/`.
 
 - **Cover image processing** — Payload uses `sharp`, a native binary that cannot
   run on a Worker. Covers are currently stored at the size they are uploaded.
@@ -98,9 +111,9 @@ No dark patterns.
 - **Stripe** — donations and paid unlocks, integrated directly from the
   application (NR-12). WooCommerce is gone with WordPress and is not being
   replaced.
-- **Paid early unlock** — the time-delay half of staged release is built; the
-  "pay a small amount to open the next part early" half should stay a
-  seriousness gate rather than a revenue mechanism.
+- **Buying credits** — the economy exists and grants credits monthly; nothing
+  sells them. Any purchase route should stay a top-up rather than becoming the
+  only realistic way to read, which the free online reader already prevents.
 - **E-reader affiliate/resale link** — discounted, dedicated product link
   (NR-14).
 

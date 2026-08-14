@@ -51,7 +51,6 @@ a high-quality Kindle book:
 - low visual distraction
 - excellent mobile experience
 - excellent e-reader compatibility
-- dark/light reading modes where appropriate
 - preservation of the original meaning and structure
 
 NobleSee should particularly focus on books that currently have poor
@@ -161,12 +160,11 @@ The platform should eventually provide:
 - Online book reading
 - AI-assisted book digitization and production
 - EPUB/PDF and potentially other e-reader formats
-- Staged/part-based book releases
 - Paid early unlocks
 - Donations
 - Send-to-Kindle functionality
-- Delivery abuse protection (per-user limit on number of books delivered
-  per period — not a network/bandwidth control)
+- A credit economy: every book has a price, and sending one to a device
+  spends credits (section 5.2)
 
 This list said "Book downloads" until 2026-08-13. It is deliberately
 gone: a book is read here, in the reflowable reader, or sent to the
@@ -175,7 +173,7 @@ a product decision, not a technical limit. NobleSee exists to make books
 pleasant to *read*, and a folder of PDFs is not that.
 
 "Download" survives in code and in this document as the name of the
-*authorization* concept — the rights/limit/staged-release decision in
+*authorization* concept — the rights and credit decision in
 `src/lib/authorizeDownload.ts` and the `Downloads` ledger. Kindle
 delivery runs through exactly that path, because it is a download that
 happens to arrive by email.
@@ -206,10 +204,10 @@ Use **Next.js + React + TypeScript with Payload CMS on Cloudflare D1**
 for:
 
 - User accounts and authentication
-- Book/Part/Format domain model
+- Book/Format domain model
 - Administration and the editorial/proofreading workflow
 - Rights status and access control
-- Download authorization, rate limiting, staged release
+- Delivery authorization and the credit economy
 - Donations/payment integration (Stripe)
 - The JSON API consumed by the frontend
 
@@ -242,9 +240,9 @@ it, never the reverse.
 The following must remain server-side application functionality
 (Next.js route handlers and Payload, never the browser):
 
-- book management and book parts
+- book management
 - release scheduling
-- download authorization and rate limiting
+- delivery authorization and credit accounting
 - payment/unlock state
 - rights status enforcement
 - conversion job orchestration
@@ -284,8 +282,8 @@ Target architecture:
                            |
         Next.js + Payload application  [Cloudflare Worker]
         catalog, book pages, reader, blog,
-        accounts, rights, limits, staged
-        release, delivery, admin/editorial
+        accounts, rights, credits,
+        delivery, admin/editorial
         UI, JSON API
                            |
         +------------------+------------------+
@@ -376,11 +374,10 @@ The frontend must provide:
 - archive/category layouts
 - accessibility
 - performance optimization
-- dark/light reading modes
 - an excellent reflowable reading experience
 
 Do NOT put business logic in the frontend. Rights checks, delivery
-authorization, rate limiting and staged release are enforced
+authorization and credit accounting are enforced
 server-side; the frontend renders what the API permits and must never be
 the only thing standing between a reader and a restricted file.
 
@@ -445,28 +442,26 @@ A Book should include concepts such as:
 - created_at
 - updated_at
 
-A book contains multiple Parts.
+A book is whole. It was split into Parts until 2026-08-14, each
+separately released and separately downloadable; that is gone, and the
+`parts` table with it. A book is one record, one DOCX master, one set of
+generated formats — as it was written.
 
 Example:
 
 Book
 |
-+-- Part 1
-|    +-- DOCX
-|    +-- EPUB
-|    +-- PDF Standard
-|    +-- PDF Large
-|    +-- PDF Extra Large
++-- pageCount, priceCredits
 |
-+-- Part 2
-|    +-- DOCX
-|    +-- EPUB
-|    +-- PDF Standard
-|    +-- PDF Large
-|    +-- PDF Extra Large
-|
-+-- Part 3
-     ...
++-- DOCX (master, never a reader download)
++-- EPUB
++-- PDF Standard
++-- PDF Large
++-- PDF Extra Large
+
+What the split bought was staged release — a per-reader clock that paced
+someone through a book. That is also gone. The credit price in section
+5.2 is what governs access now.
 
 The DOCX master is the source of truth.
 
@@ -493,14 +488,55 @@ are deliberate — a level added later between two existing ones takes id
 
 This is **curation, not access control**. A reader chooses their own
 level and can raise it at any time, so `extensive` is always one click
-away. Rights clearance, private-workspace ownership and staged release
-are the access rules (section 6), they are enforced independently, and
+away. Rights clearance, private-workspace ownership and the credit
+price are the access rules (sections 5.2 and 6), they are enforced
+independently, and
 nothing about levels may ever be relied on to keep a reader away from
 anything. The purpose is the mission's "low visual distraction": let a
 reader start with the core and open up the tail when they want it.
 
 Level is an administrator field, like rights status and visibility
 (section 6.1).
+
+---
+
+## 5.2 Credits
+
+Every book has a price in credits, derived from the length of its DOCX
+master: one credit per 70 pages, at least 1 and never more than 7. The
+rule is `priceInCredits` in `apps/web/src/domain/credits.ts`; the price
+is stored on the book by a collection hook so what a reader was charged
+is a recorded fact rather than a re-derivation that could change under
+them.
+
+Credits pay for **taking a book away** — sending it to a device. They
+never pay for reading. The online reader is free, unlimited, and needs
+no account at all, which is not a generosity setting but the product
+thesis: a reader who cannot afford a credit must still get every word.
+`canReadOnline` and `canAccessArtifact` in `domain/rights.ts` are two
+rules for exactly this reason — the first deliberately stops before the
+account requirement the second enforces.
+
+  - New accounts start with 10 credits.
+  - A month in which the reader signs in is worth 5; a month they are
+    away is worth 2. Being away is not punished.
+  - The first delivery of a book buys it, at the book's price. Every
+    later delivery costs 1 credit, with a confirmation before it is
+    spent. That charge is what replaced the rolling 24-hour delivery cap
+    as the thing bounding how fast an account can drain the library.
+  - A reader's own upload is free to send. It is their book.
+
+Accrual is lazy and has no scheduled job behind it. A sign-in always
+grants for its own month, so any month with no grant recorded is by
+construction a month with no sign-in and can be paid the away rate on
+sight — `accrualFor` in `domain/credits.ts`. Backlog is capped at 24
+months so a reader returning after years does not arrive to a windfall.
+
+The balance lives on the user and the `credit-ledger` collection is the
+account of how it got there. That duplication is deliberate: summing a
+ledger on D1 for every delivery decision would be a table scan per
+request. `apps/web/src/lib/credits.ts` is the only module permitted to
+move a balance, and it writes both together.
 
 ---
 
@@ -792,8 +828,27 @@ nothing; deterministic guardrails in `app/llm/correct.py` refuse
 anything that reads as a rewrite rather than an OCR repair, and record
 why. `services/converter/README.md` has the detail.
 
-Not yet built: the FastAPI job API, the queue consumer, and EPUB/PDF
-generation.
+Also built since: EPUB 3 and the three PDF variants (`app/epub`,
+`app/pdf`, from one shared HTML rendering in `app/render` so the two
+cannot drift), R2 over the S3 API (`app/storage`), the asynchronous job
+API (`app/api`), and the handoff (`app/handoff`).
+
+The handoff is a **pull**, not Cloudflare Queues. The converter has no
+inbound port — the thing that makes it deployable behind a filtered
+egress — so it polls `GET /api/conversion` on the Worker, which hands
+out one queued book at a time with a compare-and-swap, and reports back
+to `POST /api/conversion`. A pull consumer against Queues would be the
+same shape with a queue to provision, a second place for the job list to
+disagree with the Book row, and no atomic claim. The Book row is already
+the durable record. Swapping in Queues later replaces one route and one
+poller; nothing else knows.
+
+The endpoint authenticates with `CONVERTER_SECRET` and **fails closed**:
+with no secret configured it 404s as though it does not exist, so
+deploying ahead of the secret exposes nothing.
+
+Not yet built: where the converter container runs. That is still
+deliberately open.
 
 Example:
 
@@ -871,8 +926,8 @@ copies real artifacts into it. A local-disk path also remains in
 
 The download path must **stream artifacts through the application**,
 never redirect to a public object URL: protected artifacts must not be
-reachable without passing the server-side rights, limit and staged
-release checks.
+reachable without passing the server-side rights and credit
+checks.
 
 Short-lived signed URLs were the original design and are no longer
 available — presigning is an S3-API feature and the R2 binding has no
@@ -884,14 +939,12 @@ Suggested structure:
 
 books/
   {book_id}/
-    source/
+    book/
       master.docx
-    parts/
-      {part_id}/
-        master.docx
-        epub/
-        pdf/
-        metadata/
+      book.epub
+      standard.pdf
+      large.pdf
+      xl.pdf
 
 conversion/
   {job_id}/

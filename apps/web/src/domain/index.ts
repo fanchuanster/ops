@@ -7,6 +7,7 @@
  */
 export * from './rights'
 export * from './credits'
+export * from './conversion'
 export * from './password'
 export * from './kindle'
 export * from './levels'
