@@ -36,11 +36,27 @@ TTY=(-i)
 # CLOUDSDK_CONFIG rather than the default ~/.config/gcloud, because a
 # non-root uid cannot write to /root. HOME is somewhere writable for the
 # same reason.
-exec docker run --rm "${TTY[@]}" \
+# `|| STATUS=$?` rather than a bare call: `set -e` would otherwise abort
+# here on a non-zero exit, skipping the chmod below — and a failed login
+# is exactly when a half-written credential is most likely to be sitting
+# there with the wrong mode.
+STATUS=0
+docker run --rm "${TTY[@]}" \
     -v "$HERE/.gcloud-home:/gcloud" \
     -v "$(cd "$HERE/.." && pwd):/repo" \
     -w /repo/infra \
     -e CLOUDSDK_CONFIG=/gcloud \
     -e HOME=/tmp \
     -u "$(id -u):$(id -g)" \
-    "$IMAGE" "$@"
+    "$IMAGE" "$@" || STATUS=$?
+
+# Credentials stay readable by you alone.
+#
+# gcloud writes the credential file itself as 0600, but not everything
+# beside it: access_tokens.db holds live OAuth access tokens and lands
+# 0644 under the container's umask. The 0700 directory already stops
+# another user reaching it, and this is the second layer — cheap, and it
+# survives someone loosening the directory later.
+chmod -R go-rwx "$HERE/.gcloud-home" 2>/dev/null || true
+
+exit $STATUS
