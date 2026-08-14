@@ -4,7 +4,7 @@ import React from 'react'
 import { SendToKindleButton } from '../../../../components/SendToKindleButton'
 import { isKindleDeliverableFormat } from '../../../../domain/kindle'
 import { effectiveRightsStatus, isPubliclyDistributable } from '../../../../domain/rights'
-import { releaseState } from '../../../../domain/stagedRelease'
+import { isOpen, releaseState } from '../../../../domain/stagedRelease'
 import { getCurrentUser } from '../../../../lib/auth'
 import { getBookBySlug, getPartsForBook } from '../../../../lib/catalog'
 
@@ -124,10 +124,25 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
                   (a, b) => FORMAT_ORDER.indexOf(a.format) - FORMAT_ORDER.indexOf(b.format),
                 )
 
+              // The title is the way in. A separate "Read online" button
+              // was a second thing to aim at for the one action this
+              // page is for — and it left the title, the most obvious
+              // thing on the row, inert.
+              const readable =
+                distributable && isOpen(release) && artifacts.some((a) => a.format === 'epub')
+
               return (
                 <li className="part" key={part.id}>
                   <span className="part__order">Part {part.order}</span>
-                  <h3 className="part__title cjk">{part.title}</h3>
+                  <h3 className="part__title cjk">
+                    {readable ? (
+                      <a className="part__read" href={`/read/${book.slug}/${part.order}`}>
+                        {part.title}
+                      </a>
+                    ) : (
+                      part.title
+                    )}
+                  </h3>
 
                   {!distributable ? (
                     <span className="locked">Not available for distribution.</span>
@@ -139,12 +154,6 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
                     </span>
                   ) : (
                     <span className="formats">
-                      {artifacts.some((a) => a.format === 'epub') ? (
-                        <a className="read" href={`/read/${book.slug}/${part.order}`}>
-                          Read online
-                        </a>
-                      ) : null}
-
                       {/*
                         No download links. A book is read here or sent to
                         the reader's device; it is not a file to collect.

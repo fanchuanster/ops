@@ -98,8 +98,28 @@ export function Reader({
   useEffect(() => {
     if (!viewerRef.current) return
 
-    const book = ePub(epubUrl)
+    // `openAs` is not optional here, however redundant it looks.
+    //
+    // Given a bare URL, epub.js guesses what it is *from the file
+    // extension* (`determineType` in epubjs/src/book.js). Our URL is
+    // `/read/<slug>/<order>/epub` — authorization is a route, not a
+    // file, so there is no `.epub` on the end. epub.js reads the empty
+    // extension as `DIRECTORY` and goes looking for
+    // `/read/<slug>/<order>/epub/META-INF/container.xml`, which is a
+    // 404.
+    //
+    // What made this hard to see is how it fails. epub.js catches that
+    // rejection, emits `openFailed` and swallows it, so `book.opened`
+    // never settles — `display()` below neither resolves nor rejects,
+    // and the page sits on "Opening…" with an empty frame forever. No
+    // error, no console message, no content.
+    const book = ePub(epubUrl, { openAs: 'epub' })
     bookRef.current = book
+
+    // Belt and braces for the above: anything that stops the book
+    // opening should reach the reader as a message rather than as an
+    // empty page that never resolves.
+    book.on('openFailed', () => setError('This edition could not be opened.'))
 
     const rendition = book.renderTo(viewerRef.current, {
       width: '100%',

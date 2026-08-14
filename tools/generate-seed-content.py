@@ -245,7 +245,17 @@ def write_epub(book, part, path):
     epub_book.toc = (epub.Link("chapter.xhtml", part["title"], part["slug"]),)
     epub_book.add_item(epub.EpubNcx())
     epub_book.add_item(epub.EpubNav())
-    epub_book.spine = ["nav", chapter]
+
+    # The text is the first page, not the table of contents.
+    #
+    # ebooklib's usual idiom is `spine = ["nav", chapter]`, which puts the
+    # navigation document first. A reader opening a one-part edition then
+    # lands on a contents page listing exactly one entry — the part they
+    # just clicked — and has to click again to reach the text. The nav
+    # document stays in the manifest, which is what EPUB 3 requires and
+    # what feeds the reader's chapter display; it just is not where the
+    # book opens.
+    epub_book.spine = [chapter]
 
     epub.write_epub(path, epub_book, {})
 

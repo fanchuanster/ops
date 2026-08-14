@@ -386,6 +386,24 @@ h3 {
   flex: 1 1 16rem;
 }
 
+/*
+ * The title itself opens the part. Underlined only on hover so the list
+ * still reads as a table of contents rather than a wall of links, but
+ * coloured from the start so it is visibly the thing to click.
+ */
+.part__read {
+  color: var(--ink);
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+}
+
+.part__read:hover,
+.part__read:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
 .part__order {
   color: var(--ink-faint);
   font-family: var(--font-sans);
@@ -413,12 +431,6 @@ h3 {
 
 .formats a:hover {
   border-color: var(--accent);
-  color: var(--ink);
-}
-
-.formats .read {
-  border-color: var(--accent);
-  background: var(--accent-soft);
   color: var(--ink);
 }
 
