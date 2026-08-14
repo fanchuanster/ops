@@ -52,15 +52,25 @@ const JUNK = [
   // the books this library exists for.
   /^[^\p{Letter}\p{Number}]*$/u,
   /^(unknown|none|n\/a|null|undefined)$/i,
-  /\.(docx?|pdf|txt|md)$/i,
-  // What a scanner or a phone names its output.
-  /^(scan|img|image|doc|dsc|page|photo)[\s_-]*\d+$/i,
+  // What a scanner or a phone names its output, and what a word
+  // processor names a fragment. Checked after the file extension is
+  // stripped, so "chapter1.docx" is caught as "chapter1".
+  /^(scan|img|image|doc|dsc|page|photo|chapter|part|section|file)[\s_-]*\d+$/i,
 ]
 
 function clean(value: string | undefined | null, limit = MAX_TITLE): string | undefined {
   if (typeof value !== 'string') return undefined
   // Collapse the newlines and tabs that survive in XMP and PDF strings.
-  const text = value.replace(/\s+/g, ' ').trim()
+  const text = value
+    .replace(/\s+/g, ' ')
+    .trim()
+    // Producers routinely write the filename into the title field. The
+    // extension is noise, but the rest of it is usually the best title
+    // available — discarding the whole value over four characters threw
+    // away real titles.
+    .replace(/\.(docx?|pdf|txt|md)$/i, '')
+    .trim()
+
   if (!text || JUNK.some((pattern) => pattern.test(text))) return undefined
   return text.slice(0, limit)
 }
@@ -120,6 +130,46 @@ export function bytesToBinaryString(bytes: Uint8Array): string {
  * bytes produced none, which is what keeps "Café Littéraire" from being
  * reinterpreted as characters nobody wrote.
  */
+/**
+ * UTF-16 bytes, big or little endian, without the byte-order mark.
+ *
+ * Written out rather than handed to `TextDecoder('utf-16be')`: that
+ * label is not guaranteed present outside a full-ICU build, and pairing
+ * bytes is four lines.
+ */
+function decodeUtf16(bytes: Uint8Array, bigEndian: boolean): string {
+  let text = ''
+  for (let i = 0; i + 1 < bytes.length; i += 2) {
+    const a = bytes[i]!
+    const b = bytes[i + 1]!
+    text += String.fromCharCode(bigEndian ? (a << 8) | b : (b << 8) | a)
+  }
+  return text
+}
+
+/**
+ * Decode bytes whose encoding is stated rather than guessed.
+ *
+ * Two cases carry their own proof. A byte-order mark says outright that
+ * the bytes are UTF-16, and PDF permits one inside an ordinary literal
+ * string, not only the hex form — which is how the producers that get
+ * CJK *right* usually write it. And UTF-8 is self-validating: arbitrary
+ * bytes essentially never form valid multi-byte sequences, so a strict
+ * decode that succeeds is near-proof.
+ *
+ * Returns null when neither applies, which is when guessing begins.
+ */
+function decodeSelfEvident(bytes: Uint8Array): string | null {
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return decodeUtf16(bytes.subarray(2), true)
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return decodeUtf16(bytes.subarray(2), false)
+
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return null
+  }
+}
+
 export function repairUtf8(value: string): string {
   // Nothing outside ASCII, so nothing to decide.
   if (!/[\u0080-\u00ff]/.test(value)) return value
@@ -131,11 +181,8 @@ export function repairUtf8(value: string): string {
 
   const bytes = Uint8Array.from(value, (character) => character.charCodeAt(0))
 
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  } catch {
-    // Not UTF-8. Fall through to the legacy Chinese encodings.
-  }
+  const evident = decodeSelfEvident(bytes)
+  if (evident !== null) return evident
 
   let best = value
   let bestScore = cjkScore(value)
@@ -269,43 +316,50 @@ export function fromCoreXml(xml: string): ExtractedMetadata {
  * is the one that gets updated.
  */
 export function fromPdfText(raw: string): ExtractedMetadata {
-  const xmpTitle = firstMatch(raw, [
+  // Raw, uncleaned. `clean` collapses whitespace, and on an undecoded
+  // byte string that is destructive: 复 is U+590D, so its low byte is
+  // 0x0D — a carriage return. Normalising it to a space before decoding
+  // silently turns 复旦大学 into 夠旦大学. Decode first, tidy after.
+  const xmpTitle = firstRaw(raw, [
     /<dc:title>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i,
     /<dc:title[^>]*>([^<]+)<\/dc:title>/i,
   ])
-  const xmpAuthor = firstMatch(raw, [
+  const xmpAuthor = firstRaw(raw, [
     /<dc:creator>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i,
     /<dc:creator[^>]*>([^<]+)<\/dc:creator>/i,
   ])
-  const xmpDescription = firstMatch(raw, [
+  const xmpDescription = firstRaw(raw, [
     /<dc:description>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i,
   ])
 
-  // Decoded together, not one field at a time.
-  //
-  // A file has one encoding, and an author's name is three characters —
-  // far too little to tell GBK from Big5, both of which turn any bytes
-  // into plausible-looking CJK. Judging title, author and subject as one
-  // string gives the detector more to go on and, more importantly,
-  // guarantees they agree: a book whose title decoded one way and whose
-  // author decoded another is obviously wrong to a reader even when
-  // each looks fine alone.
+  // Decoded together where they are ambiguous, individually where the
+  // bytes state their own encoding — see `repairTogether`.
   const [title, author, description] = repairTogether([
-    xmpTitle ?? clean(pdfString(raw, 'Title')),
-    xmpAuthor ?? clean(pdfString(raw, 'Author')),
-    clean(xmpDescription ?? pdfString(raw, 'Subject'), MAX_DESCRIPTION),
+    xmpTitle ?? pdfString(raw, 'Title'),
+    xmpAuthor ?? pdfString(raw, 'Author'),
+    xmpDescription ?? pdfString(raw, 'Subject'),
   ])
 
   return dropEmpty({
-    title,
-    author,
-    description,
+    title: clean(title),
+    author: clean(author),
+    description: clean(description, MAX_DESCRIPTION),
     language: normalizeLanguage(
-      firstMatch(raw, [/<dc:language>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i]) ??
-        pdfString(raw, 'Lang'),
+      clean(firstRaw(raw, [/<dc:language>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i])) ??
+        clean(pdfString(raw, 'Lang')),
     ),
   })
 }
+
+/** First capturing match, XML entities decoded, otherwise untouched. */
+function firstRaw(source: string, patterns: RegExp[]): string | undefined {
+  for (const pattern of patterns) {
+    const found = source.match(pattern)
+    if (found?.[1]) return decodeXmlEntities(found[1])
+  }
+  return undefined
+}
+
 
 /**
  * A PDF's page count, from the page tree root.
@@ -385,13 +439,7 @@ function decodePdfHex(value: string): string | undefined {
 
   // A UTF-16BE byte-order mark is how PDF carries anything outside
   // Latin-1 — which is every Chinese title this project cares about.
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
-    let text = ''
-    for (let i = 2; i + 1 < bytes.length; i += 2) {
-      text += String.fromCharCode((bytes[i]! << 8) | bytes[i + 1]!)
-    }
-    return text
-  }
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return decodeUtf16(bytes.subarray(2), true)
 
   // No byte-order mark. PDFDocEncoding in theory, but producers that
   // write CJK here almost always mean UTF-8, so the repair decides.
@@ -415,25 +463,44 @@ function decodePdfHex(value: string): string | undefined {
  * considered — repaired together, and put back.
  */
 export function repairTogether(values: (string | undefined)[]): (string | undefined)[] {
-  const isRaw = (value: string | undefined): value is string => {
-    if (!value) return false
+  const out = [...values]
+  const ambiguous: number[] = []
+
+  values.forEach((value, index) => {
+    if (!value) return
+    const bytes: number[] = []
     for (const character of value) {
-      if (character.codePointAt(0)! > 0xff) return false
+      const code = character.codePointAt(0)!
+      // Already decoded by someone else; leave it entirely alone.
+      if (code > 0xff) return
+      bytes.push(code)
     }
-    return true
+
+    // A field that states its own encoding is decoded on its own. It
+    // must NOT be grouped: joining UTF-16 fields with a newline puts an
+    // odd byte in the middle and misaligns every character after it.
+    const evident = decodeSelfEvident(Uint8Array.from(bytes))
+    if (evident !== null) {
+      out[index] = evident
+      return
+    }
+
+    ambiguous.push(index)
+  })
+
+  // What is left is GBK-or-Big5, which no single short field can settle
+  // — an author's name is three characters. Those are judged together,
+  // both for the extra evidence and so the fields cannot disagree.
+  if (ambiguous.length > 0) {
+    const repaired = repairUtf8(ambiguous.map((index) => values[index]).join('\n')).split('\n')
+    ambiguous.forEach((index, position) => {
+      out[index] = repaired[position] ?? values[index]
+    })
   }
 
-  const rawIndexes = values.map((value, index) => (isRaw(value) ? index : -1)).filter((i) => i >= 0)
-  if (rawIndexes.length === 0) return values
-
-  const repaired = repairUtf8(rawIndexes.map((index) => values[index]).join('\n')).split('\n')
-
-  const out = [...values]
-  rawIndexes.forEach((index, position) => {
-    out[index] = repaired[position] ?? values[index]
-  })
   return out
 }
+
 
 /**
  * A title from the text itself, for a plain-text or Markdown upload.

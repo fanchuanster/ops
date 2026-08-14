@@ -330,3 +330,65 @@ describe('a PDF that mixes encodings between fields', () => {
     expect(author).toBe('南懷瑾')
   })
 })
+
+describe('UTF-16 inside a PDF literal string', () => {
+  // The shape that was actually reported. PDF allows a byte-order mark
+  // in an ordinary (…) string, not only the <hex> form, and this is how
+  // producers that handle CJK correctly usually write it.
+  const bytes = (values: number[]) => bytesToBinaryString(new Uint8Array(values))
+  // Escaped as PDF requires. This is not incidental: 作 is U+4F5C, so
+  // its low byte is 0x5C — a backslash — and an unescaped one would be
+  // read as an escape introducer and swallow the next byte. Real
+  // producers escape it, which is why the reported file contained `\\`.
+  const pdfLiteral = (values: number[]) => {
+    const out: number[] = []
+    for (const byte of values) {
+      if (byte === 0x5c || byte === 0x28 || byte === 0x29) out.push(0x5c)
+      out.push(byte)
+    }
+    return bytes(out)
+  }
+  const utf16be = (text: string) => {
+    const out = [0xfe, 0xff]
+    for (const character of text) {
+      const code = character.codePointAt(0)!
+      out.push(code >> 8, code & 0xff)
+    }
+    return pdfLiteral(out)
+  }
+
+  it('decodes a UTF-16BE literal title and author', () => {
+    const pdf = `/Title (${utf16be('南怀瑾著作')}) /Author (${utf16be('Wen Dong')})`
+    expect(fromPdfText(pdf)).toMatchObject({ title: '南怀瑾著作', author: 'Wen Dong' })
+  })
+
+  it('decodes little-endian too', () => {
+    const out = [0xff, 0xfe]
+    for (const character of '論語') {
+      const code = character.codePointAt(0)!
+      out.push(code & 0xff, code >> 8)
+    }
+    expect(fromPdfText(`/Title (${pdfLiteral(out)})`).title).toBe('論語')
+  })
+
+  it('keeps a character whose low byte is a carriage return', () => {
+    // 复 is U+590D. Collapsing whitespace *before* decoding turns that
+    // 0x0D into a space and silently yields 夠 — so decoding has to come
+    // first. This is the regression that produced 夠旦大学 for 复旦大学.
+    expect(fromPdfText(`/Title (${utf16be('复旦大学出版社')})`).title).toBe('复旦大学出版社')
+  })
+
+  it('does not group a UTF-16 field with another field', () => {
+    // Joining them on a newline puts an odd byte in the middle and
+    // misaligns every character after it.
+    const [title, author] = repairTogether([utf16be('南怀瑾'), utf16be('Wen Dong')])
+    expect(title).toBe('南怀瑾')
+    expect(author).toBe('Wen Dong')
+  })
+
+  it('strips a file extension from a title rather than discarding it', () => {
+    // Producers routinely put the filename in the title field; the rest
+    // of it is usually the best title available.
+    expect(fromPdfText(`/Title (${utf16be('南怀瑾著作.pdf')})`).title).toBe('南怀瑾著作')
+  })
+})
