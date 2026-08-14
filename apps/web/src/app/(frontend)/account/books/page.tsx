@@ -39,8 +39,6 @@ export default async function MyBooksPage() {
           {books.map((book) => {
             const state = book.conversion?.state ?? 'none'
             const ready = state === 'none' || state === 'ready'
-            // A draft has nothing to read yet; it has a question waiting.
-            const href = state === 'draft' ? `/account/books/${book.id}` : `/books/${book.slug}`
             const collections = (book.collections ?? [])
               .map((c) => (typeof c === 'object' && c ? c.title : null))
               .filter(Boolean)
@@ -48,8 +46,11 @@ export default async function MyBooksPage() {
             return (
               <li key={book.id} className="my-books__item">
                 <div>
+                  {/* Always its own page: that is where editing,
+                      converting, submitting and deleting live, whatever
+                      state the book is in. */}
                   <h3>
-                    {ready || state === 'draft' ? <a href={href}>{book.title}</a> : book.title}
+                    <a href={`/account/books/${book.id}`}>{book.title}</a>
                   </h3>
                   <p className="my-books__meta">
                     {[
@@ -66,8 +67,14 @@ export default async function MyBooksPage() {
                     <p className="form-error">{book.conversion.message}</p>
                   ) : null}
                 </div>
-                <span className={`pill pill--${state}`}>
-                  {CONVERSION_LABEL[state] ?? state}
+                <span className="my-books__right">
+                  <span className={`pill pill--${state}`}>
+                    {CONVERSION_LABEL[state] ?? state}
+                  </span>
+                  <span className="my-books__links">
+                    <a href={`/account/books/${book.id}`}>Manage</a>
+                    {ready ? <a href={`/read/${book.slug}`}>Read</a> : null}
+                  </span>
                 </span>
               </li>
             )

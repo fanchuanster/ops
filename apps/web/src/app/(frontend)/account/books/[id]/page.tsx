@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
+import { BookActions } from '../../../../../components/BookActions'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
 import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
@@ -121,6 +122,12 @@ export default async function BookDetailsPage({
           />
         </>
       )}
+
+      <BookActions
+        bookId={Number(book.id)}
+        title={book.title}
+        canRetry={state === 'failed'}
+      />
     </>
   )
 }

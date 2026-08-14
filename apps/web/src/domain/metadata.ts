@@ -401,13 +401,38 @@ function decodePdfHex(value: string): string | undefined {
 /**
  * Repair several fields as one, so they cannot disagree about encoding.
  *
- * Joined with a newline, which is the same byte in every encoding
- * considered, so the split afterwards is exact.
+ * Only the fields that are *still raw bytes* are grouped. That
+ * distinction is the whole correctness of this function: a PDF may
+ * carry its title as UTF-16BE hex — which `decodePdfHex` has already
+ * turned into real characters — and its author as raw UTF-8 in a
+ * literal string. Joining those two and repairing the result does
+ * nothing at all, because `repairUtf8` sees a character above U+00FF
+ * from the decoded title and correctly concludes the string was already
+ * decoded. The author stays garbled, and only the author.
+ *
+ * So already-decoded fields pass through untouched, and the raw ones
+ * are joined with a newline — the same byte in every encoding
+ * considered — repaired together, and put back.
  */
 export function repairTogether(values: (string | undefined)[]): (string | undefined)[] {
-  const present = values.map((value) => value ?? '')
-  const repaired = repairUtf8(present.join('\n')).split('\n')
-  return values.map((value, index) => (value === undefined ? undefined : repaired[index]))
+  const isRaw = (value: string | undefined): value is string => {
+    if (!value) return false
+    for (const character of value) {
+      if (character.codePointAt(0)! > 0xff) return false
+    }
+    return true
+  }
+
+  const rawIndexes = values.map((value, index) => (isRaw(value) ? index : -1)).filter((i) => i >= 0)
+  if (rawIndexes.length === 0) return values
+
+  const repaired = repairUtf8(rawIndexes.map((index) => values[index]).join('\n')).split('\n')
+
+  const out = [...values]
+  rawIndexes.forEach((index, position) => {
+    out[index] = repaired[position] ?? values[index]
+  })
+  return out
 }
 
 /**

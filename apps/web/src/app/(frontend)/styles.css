@@ -654,6 +654,60 @@ h3 {
   gap: 0.4rem;
 }
 
+/* --- managing your own upload ------------------------------------- */
+
+.book-manage {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.book-manage h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.book-manage__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Destructive, so it reads as destructive — but not shouting, because
+   it is a perfectly ordinary thing to do with your own draft. */
+.button-quiet--danger {
+  border-color: var(--rule);
+  color: var(--ink-faint);
+}
+
+.button-quiet--danger:hover {
+  border-color: #a4443a;
+  color: #a4443a;
+}
+
+.my-books__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.my-books__links {
+  display: flex;
+  gap: 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+.my-books__links a {
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.my-books__links a:hover {
+  color: var(--accent);
+}
+
 /* --- the conversion pipeline -------------------------------------- */
 
 .pipeline {

@@ -48,6 +48,25 @@ async function artifactBucket(): Promise<R2Bucket | null> {
   }
 }
 
+/**
+ * Remove objects, best effort.
+ *
+ * Used when a reader deletes their own upload. Failures are swallowed:
+ * an orphaned object costs a fraction of a penny, and refusing to
+ * delete the book because its files would not go would leave the reader
+ * unable to clear their own workspace over something they cannot see or
+ * fix.
+ */
+export async function deleteObjects(keys: readonly string[]): Promise<void> {
+  const bucket = await artifactBucket()
+  if (!bucket || keys.length === 0) return
+  try {
+    await bucket.delete([...keys])
+  } catch {
+    // See above.
+  }
+}
+
 export async function isObjectStorageConfigured(): Promise<boolean> {
   return (await artifactBucket()) !== null
 }

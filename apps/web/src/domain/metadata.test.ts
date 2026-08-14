@@ -304,3 +304,29 @@ describe('Chinese PDFs that are not UTF-8', () => {
     expect(repairTogether(['x', undefined])).toEqual(['x', undefined])
   })
 })
+
+describe('a PDF that mixes encodings between fields', () => {
+  // The real-world shape that broke: title as UTF-16BE hex, author as
+  // raw UTF-8 in a literal string. Grouping them naively does nothing —
+  // the already-decoded title contains characters above U+00FF, so the
+  // repair concludes the whole string was decoded and leaves the author
+  // garbled.
+  const utf8Bytes = (value: string) => bytesToBinaryString(new TextEncoder().encode(value))
+
+  it('decodes a hex title and a UTF-8 author in the same file', () => {
+    const pdf = `/Title <FEFF8AD68A9E522588C1> /Author (${utf8Bytes('南懷瑾')})`
+    expect(fromPdfText(pdf)).toMatchObject({ title: '論語別裁', author: '南懷瑾' })
+  })
+
+  it('leaves an already-decoded field alone while repairing a raw one', () => {
+    const [decoded, raw] = repairTogether(['論語別裁', utf8Bytes('南懷瑾')])
+    expect(decoded).toBe('論語別裁')
+    expect(raw).toBe('南懷瑾')
+  })
+
+  it('still groups raw fields so they share one encoding decision', () => {
+    const [title, author] = repairTogether([utf8Bytes('論語別裁'), utf8Bytes('南懷瑾')])
+    expect(title).toBe('論語別裁')
+    expect(author).toBe('南懷瑾')
+  })
+})

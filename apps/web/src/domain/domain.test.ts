@@ -33,7 +33,13 @@ import {
   levelsVisibleAt,
   parseBrowseLevel,
 } from './levels'
-import { canPublishToLibrary, canSubmitForReview, requiresAdmin } from './moderation'
+import {
+  DELETION_ERRORS,
+  canDeleteUpload,
+  canPublishToLibrary,
+  canSubmitForReview,
+  requiresAdmin,
+} from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
 import {
   UPLOADER_RIGHTS,
@@ -613,5 +619,38 @@ describe('what an uploader may claim about their own file', () => {
     // publish it to everyone else.
     expect(isUploaderSelectableRights('user_owned')).toBe(true)
     expect(isPubliclyDistributable('user_owned')).toBe(false)
+  })
+})
+
+describe('deleting your own upload', () => {
+  const request = (over: Partial<Parameters<typeof canDeleteUpload>[0]> = {}) =>
+    canDeleteUpload({ isOwner: true, boughtByOthers: false, isPublic: false, ...over })
+
+  it('lets an uploader delete their own private book', () => {
+    expect(request()).toEqual({ allowed: true })
+  })
+
+  it('lets them delete a public book nobody has taken', () => {
+    // Being in the library is not itself a reason to keep it.
+    expect(request({ isPublic: true })).toEqual({ allowed: true })
+  })
+
+  it('refuses when other readers have bought it', () => {
+    // An entitlement never expires; deleting the book underneath one
+    // would make that promise false.
+    expect(request({ boughtByOthers: true })).toEqual({
+      allowed: false,
+      reason: 'bought_by_others',
+    })
+  })
+
+  it('refuses anyone who is not the uploader', () => {
+    expect(request({ isOwner: false })).toEqual({ allowed: false, reason: 'not_owner' })
+  })
+
+  it('has a message for every refusal', () => {
+    for (const reason of ['not_owner', 'bought_by_others'] as const) {
+      expect(DELETION_ERRORS[reason]).toBeTruthy()
+    }
   })
 })

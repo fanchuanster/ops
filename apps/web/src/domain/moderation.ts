@@ -123,3 +123,44 @@ export const ADMIN_ONLY_BOOK_FIELDS = ['visibility', 'rightsStatus', 'level', 'r
 export function requiresAdmin(field: string): boolean {
   return (ADMIN_ONLY_BOOK_FIELDS as readonly string[]).includes(field)
 }
+
+
+export interface DeletionRequest {
+  /** Is the person asking the book's uploader? */
+  isOwner: boolean
+  /** Do readers other than the uploader hold entitlements to it? */
+  boughtByOthers: boolean
+  /** Is it currently in the public library? */
+  isPublic: boolean
+}
+
+export type DeletionDecision =
+  | { allowed: true }
+  | { allowed: false; reason: DeletionBlockedReason }
+
+export type DeletionBlockedReason = 'not_owner' | 'bought_by_others'
+
+/**
+ * May this reader delete their own upload?
+ *
+ * Yes, almost always. It is their book, it is private by default, and a
+ * workspace you cannot clear out is not a workspace.
+ *
+ * The exception is the one case where deleting takes something from
+ * somebody else: a reader has spent credits to have this book delivered.
+ * That purchase is permanent by design — an entitlement never expires —
+ * and quietly deleting the book underneath it would make the promise
+ * false. Being in the public library is *not* itself a reason to refuse;
+ * a book nobody has taken can still be withdrawn.
+ */
+export function canDeleteUpload(request: DeletionRequest): DeletionDecision {
+  if (!request.isOwner) return { allowed: false, reason: 'not_owner' }
+  if (request.boughtByOthers) return { allowed: false, reason: 'bought_by_others' }
+  return { allowed: true }
+}
+
+export const DELETION_ERRORS: Record<DeletionBlockedReason, string> = {
+  not_owner: 'That book is not yours to delete.',
+  bought_by_others:
+    'Other readers have spent credits to have this book sent to them, and what they bought does not expire. It cannot be deleted — ask an administrator to withdraw it from the library instead.',
+}
