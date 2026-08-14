@@ -218,6 +218,67 @@ written to a master and read back is the same document, verified in
 file has to be readable, which is why the builder writes real named
 styles rather than direct formatting.
 
-Not yet built: the FastAPI job API and job-state machine, the Cloudflare
-Queues consumer, EPUB 3 generation, and the three PDF variants.
-`tools/generate-seed-content.py` stands in for the last two until then.
+## The job API
+
+`POST /api/v1/jobs` returns a job id immediately and `GET
+/api/v1/jobs/{id}` reports where it has got to, through the states in
+CLAUDE.md section 13. The request never waits for the work: a scanned
+book takes minutes to hours to OCR.
+
+```bash
+uvicorn app.api.main:app --port 8000
+
+curl -X POST localhost:8000/api/v1/jobs -H 'Content-Type: application/json' \
+  -d '{"source_key":"conversion/<id>/input/source.pdf","book_id":"42","title":"..."}'
+# -> 202 {"job_id":"...","status":"queued"}
+
+curl localhost:8000/api/v1/jobs/<job_id>
+# -> {"status":"format_generation", ...}
+```
+
+`allow_third_party_ai` defaults to **false** and that default is
+load-bearing: a reader's private upload must not be sent to xAI
+(CLAUDE.md section 6.1). Forgetting the field cannot leak someone's
+book — only a caller that deliberately sets it opts in.
+
+Work runs on a bounded thread pool, not Celery. The pipeline is
+CPU-bound and drops into native code (PyMuPDF, PaddleOCR, WeasyPrint)
+where it matters, and the durable record of a conversion is the Book row
+in the web application — so a broker would be a second stateful service
+to operate for queueing a thread pool already does. Scaling past one
+machine means putting a queue between the web app and *several* of
+these, which is the boundary CLAUDE.md already describes, not a broker
+inside this one.
+
+## Formats
+
+EPUB 3 (`app/epub`) and three PDF sizes (`app/pdf`) are generated from
+the same HTML rendering in `app/render`, so the two cannot drift — a
+footnote that appears in one and vanishes in the other is the classic
+failure and it is invisible until a reader hits that page.
+
+The EPUB deliberately sets no page size, no font size and no measure:
+the device decides, which is the whole reason EPUB is the primary format
+(CLAUDE.md section 10). The PDFs exist because a fixed layout cannot
+reflow, so serving a reader who needs larger type means rendering the
+book again — hence three variants rather than one.
+
+WeasyPrint rather than Playwright or LibreOffice: it needs no browser
+and no display, which is what keeps this service deployable somewhere
+small. Its weakness is CSS coverage, and the CSS here is a page box, a
+font stack and margins.
+
+`app/pdf.page_count()` is what the credit price is derived from. A DOCX
+carries no reliable page count — pagination is a rendering decision and
+python-docx writes no `<Pages>` property — so the standard PDF, rendered
+from the same content, is the honest answer to the same question.
+
+Storage is R2 over the S3 API (`app/storage`). This service is not a
+Worker and has no binding, so it is the one component that legitimately
+holds an R2 key; keeping that in one small module is the point.
+
+Not yet built: the handoff from the web application. The Worker records
+an upload as `conversion.state = 'queued'` with its source key, but
+nothing yet carries that to this service and nothing writes the finished
+artifacts back onto the Book row. `tools/generate-seed-content.py`
+remains the way the seed library's files are produced.

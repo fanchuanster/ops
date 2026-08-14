@@ -21,3 +21,20 @@ httpx>=0.28
 # Reads XAI_API_KEY from the repo-root .env for local CLI runs. In a
 # container the environment is set directly and no .env exists.
 python-dotenv>=1.0
+
+# The reader-facing formats. ebooklib writes valid EPUB 3; WeasyPrint
+# renders the PDF variants from the same HTML, with no browser and no
+# display needed — which is what makes this service deployable somewhere
+# small. See app/pdf/builder.py for why not Playwright.
+ebooklib>=0.18
+weasyprint>=62
+
+# The asynchronous job API (CLAUDE.md section 13). A scanned book takes
+# hours, so the request must not wait for it.
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+
+# R2 over the S3 API. This service is not a Worker and so has no
+# binding; it is the one component that legitimately holds a key.
+boto3>=1.35
