@@ -161,8 +161,8 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
         )}
 
         <p className="notice" style={{ marginTop: '2rem' }}>
-          Reading online is free and unlimited — no account, no credits, nothing to spend.
-          Credits pay only for sending a book to a device.
+          Reading is free and unlimited — no account needed. Credits pay only for sending a book
+          to a device.
         </p>
       </article>
     </main>

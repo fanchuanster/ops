@@ -28,8 +28,13 @@ oversight.
   is one record, one master, one set of formats.
 - **Converter** — the full pipeline: OCR, structure, DOCX master, EPUB 3, three
   PDF sizes, R2, the async job API, and the pull handoff from the Worker.
-- **Upload portal** — uploads land private and owned, queued for conversion;
-  the account area has history, my books and the upload form.
+- **Upload portal** — file-only upload with metadata read from the file
+  (UTF-16/UTF-8/GBK/Big5), an editable summary, a private draft workspace with
+  master download and replace, delete, retry, and optional submit-for-review.
+- **Conversion quota** — 3 books and 1200 pages a month, admins unlimited,
+  charged at conversion so drafts stay free.
+- **Uploader share** — 33% public domain, 66% authored or licensed, accumulated
+  in hundredths so small books actually pay.
 - **Site** — catalog with collection filtering, book pages, reading-first
   typography with Traditional Chinese first in the font stack.
 - **Authorized delivery** — the three domain rules wired to artifact streaming

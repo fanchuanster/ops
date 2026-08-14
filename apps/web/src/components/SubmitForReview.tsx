@@ -39,12 +39,9 @@ export function SubmitForReview({
     <section className="submit-review">
       <h3>Share it with everyone?</h3>
       <p className="hint">
-        Optional, and not the usual case. Your book works exactly as it does now if you keep it
-        to yourself — forever, if you like. Submitting asks an administrator to consider it for
-        the public library.
-        {reviewState === 'rejected'
-          ? ' A previous submission was not accepted; you can fix what was raised and submit again.'
-          : ''}
+        Optional. Keeping it private changes nothing about how it works for you. Submitting asks
+        an administrator to consider it for the public library.
+        {reviewState === 'rejected' ? ' An earlier submission was not accepted — you can fix it and try again.' : ''}
       </p>
 
       {rightsDeclared ? (
@@ -57,8 +54,7 @@ export function SubmitForReview({
         </form>
       ) : (
         <p className="hint">
-          Answer <strong>where this book came from</strong> above first. You are the only person
-          who knows, and nobody downstream can answer it for you.
+          Answer <strong>where this book came from</strong> above first — only you can.
         </p>
       )}
     </section>

@@ -6,6 +6,7 @@ import * as migration_20260814_025455_add_avatar_url from './20260814_025455_add
 import * as migration_20260814_050000_books_credits_and_uploads from './20260814_050000_books_credits_and_uploads';
 import * as migration_20260814_150000_upload_quota from './20260814_150000_upload_quota';
 import * as migration_20260814_155000_uploader_share from './20260814_155000_uploader_share';
+import * as migration_20260814_182000_cascade_book_deletes from './20260814_182000_cascade_book_deletes';
 
 export const migrations = [
   {
@@ -47,5 +48,10 @@ export const migrations = [
     up: migration_20260814_155000_uploader_share.up,
     down: migration_20260814_155000_uploader_share.down,
     name: '20260814_155000_uploader_share'
+  },
+  {
+    up: migration_20260814_182000_cascade_book_deletes.up,
+    down: migration_20260814_182000_cascade_book_deletes.down,
+    name: '20260814_182000_cascade_book_deletes'
   },
 ];

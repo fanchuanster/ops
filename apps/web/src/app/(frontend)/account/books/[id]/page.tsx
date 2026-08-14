@@ -63,9 +63,8 @@ export default async function BookDetailsPage({
 
       {draft ? (
         <p>
-          We read these from <strong>{book.conversion?.sourceFilename ?? 'your file'}</strong>.
-          Correct anything that is wrong — files are often vague about themselves — then choose
-          what happens next.
+          Read from <strong>{book.conversion?.sourceFilename ?? 'your file'}</strong>. Correct
+          anything wrong, then convert.
         </p>
       ) : null}
 
@@ -74,9 +73,7 @@ export default async function BookDetailsPage({
           <a className="book-actions__read" href={`/read/${book.slug}`}>
             Read it
           </a>
-          <span className="hint">
-            Private to you. Nobody else can open this, whatever the link.
-          </span>
+          <span className="hint">Private to you.</span>
         </p>
       ) : null}
 
@@ -93,7 +90,6 @@ export default async function BookDetailsPage({
         book={{
           id: Number(book.id),
           title: book.title,
-          originalTitle: book.originalTitle ?? '',
           author: book.author ?? '',
           language: book.language ?? '',
           rightsStatus: book.rightsStatus,
@@ -107,7 +103,11 @@ export default async function BookDetailsPage({
 
       {share && book.visibility === 'public' ? <p className="hint">{share}</p> : null}
 
-      <ConversionProgress state={state} message={book.conversion?.message} />
+      <ConversionProgress
+        state={state}
+        message={book.conversion?.message}
+        queuedSince={book.conversion?.startedAt}
+      />
 
       {/* Only once the book has been through the pipeline: there is
           nothing to correct, and nothing to judge, until something has

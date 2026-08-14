@@ -9,7 +9,7 @@ export const metadata = { title: 'My books' }
 /** Where an upload is in the pipeline, in the uploader's words. */
 const CONVERSION_LABEL: Record<string, string> = {
   none: 'Ready',
-  draft: 'Check the details',
+  draft: 'Draft',
   queued: 'Waiting to be converted',
   converting: 'Converting',
   ready: 'Ready',
@@ -31,8 +31,8 @@ export default async function MyBooksPage() {
 
       {books.length === 0 ? (
         <p className="empty">
-          You have not uploaded anything yet. <a href="/account/upload">Upload a book</a> and it
-          will be rebuilt as a clean EPUB and PDF you can read here or send to your Kindle.
+          Nothing here yet. <a href="/account/upload">Upload a book</a> to get a clean EPUB and
+          PDFs you can read here or send to your Kindle.
         </p>
       ) : (
         <ul className="my-books">
@@ -83,9 +83,8 @@ export default async function MyBooksPage() {
       )}
 
       <p className="hint" style={{ marginTop: '2rem' }}>
-        An upload is private to you and stays that way. Putting one into the public library takes
-        an administrator’s approval <em>and</em> a rights status that permits distribution — owning
-        a copy of a book is not the right to publish it to everyone else.
+        Uploads stay private to you. Publishing one to the library needs an administrator’s
+        approval and clear rights — owning a copy is not the right to publish it.
       </p>
     </>
   )

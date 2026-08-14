@@ -107,12 +107,13 @@ export async function saveBookDetails(
       data: {
         title,
         author: String(formData.get('author') || '').trim() || null,
-        originalTitle: String(formData.get('originalTitle') || '').trim() || null,
-        // Translator and description are not on this form. They stay
-        // editable in the admin, but an uploader confirming a scan has
-        // nothing useful to say about either, and every field that is
-        // not worth filling in is a field that makes the ones that are
-        // look optional too.
+        // Original title, translator and description are not on this
+        // form. The first only means something when the title is a
+        // translation — 道德經 under "Tao Te Ching" — which is a
+        // curatorial decision, not something an uploader confirming
+        // their own scan can answer. All three stay editable in the
+        // admin. Every field not worth filling in makes the ones that
+        // are look optional too.
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collections: collectionIds,

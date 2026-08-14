@@ -44,8 +44,7 @@ export default async function AccountPage() {
       </div>
 
       <p>
-        Credits pay for sending a book to your Kindle. <strong>Reading is always free</strong> —
-        no account needed, no limit, nothing to spend.
+        Credits pay for sending a book to your Kindle. <strong>Reading is always free.</strong>
       </p>
       <ul className="plain-list">
         <li>
@@ -60,7 +59,7 @@ export default async function AccountPage() {
 
       {pendingShare > 0 ? (
         <p className="hint">
-          {`You have earned ${pendingShare} hundredths of a credit from readers sending your books. It becomes a whole credit at 100 — nothing is lost on the way.`}
+          {`${pendingShare}/100 of a credit earned from readers sending your books. Paid out at 100.`}
         </p>
       ) : null}
 

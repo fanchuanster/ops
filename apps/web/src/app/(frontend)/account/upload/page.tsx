@@ -26,25 +26,18 @@ export default async function UploadPage() {
       </div>
 
       <p>
-        A scanned PDF, an ordinary PDF, a DOCX or a plain text file. It is read, rebuilt as an
-        editable DOCX master, and from that master you get the same things the library offers —
-        a clean EPUB, PDFs in three sizes, and delivery to your Kindle.
-      </p>
-      <p>
-        Just the file for now. We will read whatever it says about itself — title, author,
-        language — and show you the details to check before anything else happens.
+        A scanned PDF, an ordinary PDF, a DOCX or plain text. You get back a clean EPUB, PDFs in
+        three sizes, and an editable DOCX master.
       </p>
       <p className="hint">
-        Your upload is <strong>private to you</strong> and stays that way unless you ask for it to
-        be published and an administrator approves it. Sending your own book to your own device is
-        free — it is your book.
+        Just the file — we read the details from it and show them to you next. Uploads are
+        private to you, and free to send to your own device.
       </p>
 
       {usage ? (
         <p className="hint">
-          {`This month: ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books converted, ${usage.pages} of ${MONTHLY_PAGE_LIMIT} pages. `}
-          Uploading costs nothing — a draft you never convert is not counted, and the allowance
-          resets at the start of each month.
+          {`This month: ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books, ${usage.pages} of ${MONTHLY_PAGE_LIMIT} pages. `}
+          Drafts are free; only converting counts.
         </p>
       ) : null}
 

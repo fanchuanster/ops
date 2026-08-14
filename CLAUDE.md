@@ -602,6 +602,66 @@ is unresolved and must be decided before the portal accepts uploads.
 
 ---
 
+## 6.2 What the portal actually does
+
+Upload asks for **the file and nothing else**. Title, author, language
+and length are read out of it — `domain/metadata.ts` for the rules,
+`lib/extractMetadata.ts` for the I/O — and shown on an editable summary
+page. Asking someone to retype what their file already says is friction
+that stops uploads happening.
+
+Extraction is harder than it sounds and the difficulty is all encoding.
+A PDF's metadata carries no declared encoding, so the bytes may be
+UTF-16 (with a byte-order mark, in either the `<hex>` or the `(literal)`
+form), UTF-8, GBK or Big5. UTF-8 and a BOM are self-describing; GBK and
+Big5 are not and are told apart by whether the result reads as real
+Chinese, which needs a common-character check rather than a CJK-range
+check — "München" contains a legal GBK pair for a real but unused
+character. Two ordering rules are load-bearing: decode **before**
+tidying whitespace (复 is U+590D, whose low byte is a carriage return),
+and decode self-describing fields **individually** (joining UTF-16
+fields misaligns everything after the join).
+
+A book then sits as a **draft**: private, owned, not converted, and not
+submitted. The draft is a workspace, not a form — it can be read, its
+DOCX master downloaded, corrected and re-uploaded, and it can be
+deleted. Deleting is refused only when other readers have spent credits
+on it, because an entitlement never expires.
+
+Submitting for review is a separate, optional act on a finished book,
+because asking someone to decide about publication before they have
+seen a converted page is asking them to guess. A book may stay private
+forever.
+
+### Conversion quota
+
+Three books and 1200 pages a month, administrators unlimited
+(`domain/uploadQuota.ts`). Counted at conversion, not upload: a draft
+costs nothing, so a refused conversion leaves the draft to convert next
+month rather than being thrown away. The page rule is "would this take
+the total past the limit", not "is there any room left".
+
+The quota needs a page count before anything is rendered, which is
+circular — so it runs on an estimate read from the file (the PDF page
+tree, Word's statistics, or characters of text), and the exact count
+replaces it once conversion finishes.
+
+### The uploader's share
+
+When a reader spends credits sending someone else's upload, the
+uploader earns a share: 33% for a public-domain text, 66% for one they
+wrote or hold a licence to (`domain/uploaderShare.ts`). Nothing else
+earns — `user_owned` never clears public distribution, and a staff-
+entered library book has no uploader.
+
+Shares accumulate in **hundredths of a credit**. This is not fussiness:
+a third of a 1-credit book is 0.33, so paying whole credits per delivery
+pays nothing at all for every book under four credits, which is most of
+them. A credit is paid each time the total crosses a hundred and the
+remainder carries.
+
+---
+
 # 7. AI BOOK PRODUCTION PIPELINE
 
 The production pipeline is:

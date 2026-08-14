@@ -31,7 +31,6 @@ const LANGUAGES = [
 export interface EditableBook {
   id: number
   title: string
-  originalTitle: string
   author: string
   language: string
   rightsStatus: string
@@ -67,20 +66,6 @@ export function BookDetailsForm({
       </label>
 
       <label>
-        <span>Title in the original script</span>
-        <input
-          type="text"
-          name="originalTitle"
-          defaultValue={book.originalTitle}
-          maxLength={200}
-        />
-        <small>
-          Only when the title above is a translation or a romanisation. If the title is already
-          in the original script, leave this empty — it is not a second copy of it.
-        </small>
-      </label>
-
-      <label>
         <span>Author</span>
         <input type="text" name="author" defaultValue={book.author} maxLength={200} />
       </label>
@@ -107,16 +92,15 @@ export function BookDetailsForm({
           ))}
         </select>
         <small>
-          The one thing your file cannot tell us. Owning a copy keeps the book private to you,
-          which is the normal case and perfectly fine — it is only needed if you want the book
-          considered for the public library.
+          The one thing your file cannot tell us. Only needed if you later want the book in the
+          public library.
         </small>
       </label>
 
       {collections.length > 0 ? (
         <fieldset className="upload-form__collections">
           <legend>Collections</legend>
-          <small>Where this book belongs, if it is ever published.</small>
+          <small>Only used if the book is ever published.</small>
           <div>
             {collections.map((collection) => (
               <label key={collection.id} className="upload-form__check">

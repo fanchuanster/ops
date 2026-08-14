@@ -25,16 +25,10 @@ export function MasterFile({ bookId, hasMaster }: { bookId: number; hasMaster: b
           <a href={`/account/books/${bookId}/master`} className="master__download">
             Download the DOCX master
           </a>
-          <span className="hint">
-            {' '}
-            Everything else — the EPUB, the PDFs — is generated from this file, so correcting it
-            here is how a mistake gets fixed everywhere.
-          </span>
+          <span className="hint"> Every other format is generated from it.</span>
         </p>
       ) : (
-        <p className="hint">
-          There is no master yet. It appears once the book has been through conversion.
-        </p>
+        <p className="hint">No master yet — it appears after conversion.</p>
       )}
 
       <form action={action} className="master__replace">
@@ -47,10 +41,7 @@ export function MasterFile({ bookId, hasMaster }: { bookId: number; hasMaster: b
             accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             required
           />
-          <small>
-            The book is rebuilt from it. This does not use another of your monthly conversions —
-            correcting a book you already uploaded is not a new book.
-          </small>
+          <small>The book is rebuilt from it. Does not count against your monthly limit.</small>
         </label>
         <button type="submit" className="button-quiet" disabled={pending}>
           {pending ? 'Uploading…' : 'Replace and rebuild'}

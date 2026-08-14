@@ -17,7 +17,7 @@ interface Stage {
 
 const STAGES: Stage[] = [
   { key: 'uploaded', label: 'Uploaded', detail: 'Your file is stored and its details read.' },
-  { key: 'queued', label: 'Queued', detail: 'Waiting for a converter to pick it up.' },
+  { key: 'queued', label: 'Queued', detail: 'Waiting for a converter to collect it.' },
   {
     key: 'converting',
     label: 'Reading the pages',
@@ -52,15 +52,32 @@ const REACHED: Record<string, number> = {
   failed: 2,
 }
 
+/**
+ * How long a book may sit queued before the wait is worth explaining.
+ *
+ * A converter polls every thirty seconds, so a book that has been
+ * queued for a quarter of an hour is not waiting its turn — nothing is
+ * listening. Saying "waiting for a converter to pick it up" then is
+ * technically true and practically a lie.
+ */
+const STALE_AFTER_MS = 15 * 60 * 1000
+
 export function ConversionProgress({
   state,
   message,
+  queuedSince,
 }: {
   state: string
   message?: string | null
+  /** When the book entered the pipeline, if it has. */
+  queuedSince?: string | null
 }) {
   const reached = REACHED[state] ?? 0
   const failed = state === 'failed'
+  const stalled =
+    state === 'queued' &&
+    Boolean(queuedSince) &&
+    Date.now() - new Date(queuedSince!).getTime() > STALE_AFTER_MS
 
   return (
     <section className="pipeline">
@@ -88,6 +105,14 @@ export function ConversionProgress({
           )
         })}
       </ol>
+
+      {stalled ? (
+        <p className="notice">
+          No converter has collected this yet. Conversion runs on a separate service that is not
+          online at the moment — your book and its details are safe, and it will be picked up as
+          soon as one is running.
+        </p>
+      ) : null}
 
       {failed ? (
         <p className="form-error">
