@@ -27,7 +27,7 @@ import type { Payload } from 'payload'
 
 import { type DeliveryDecision, decideDelivery, priceInCredits } from '../domain/credits'
 import type { Book } from '../payload-types'
-import { canAccessArtifact, isPubliclyDistributable } from '../domain/rights'
+import { canAccessArtifact, canReadOnline, isPubliclyDistributable } from '../domain/rights'
 
 export type DownloadRefusal =
   | { reason: 'not_found' }
@@ -91,7 +91,7 @@ export async function authorizeReading({
   const book = await loadBook(payload, bookId)
   if (!book) return { allowed: false, refusal: { reason: 'not_found' } }
 
-  const gate = gateBook(book, userId)
+  const gate = gateBook(book, userId, canReadOnline)
   if (gate) return { allowed: false, refusal: gate }
 
   const artifact = (book.artifacts ?? []).find((a) => a.format === 'epub')
@@ -196,13 +196,17 @@ async function loadBook(payload: Payload, bookId: string | number) {
  *
  * Returns a refusal, or null to continue.
  */
-function gateBook(book: Book, userId: string | number | null): DownloadRefusal | null {
+function gateBook(
+  book: Book,
+  userId: string | number | null,
+  rule: typeof canAccessArtifact = canAccessArtifact,
+): DownloadRefusal | null {
   const ownerId =
     book.owner && typeof book.owner === 'object'
       ? (book.owner as { id: string | number }).id
       : (book.owner as string | number | undefined)
 
-  const access = canAccessArtifact({
+  const access = rule({
     book: { rightsStatus: book.rightsStatus, visibility: book.visibility },
     userId: userId ? String(userId) : null,
     ownerId: ownerId ? String(ownerId) : undefined,

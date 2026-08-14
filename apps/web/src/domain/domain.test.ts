@@ -35,7 +35,7 @@ import {
 } from './levels'
 import { canPublishToLibrary, canSubmitForReview, requiresAdmin } from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
-import { canAccessArtifact, effectiveRightsStatus, isPubliclyDistributable } from './rights'
+import { canAccessArtifact, canReadOnline, effectiveRightsStatus, isPubliclyDistributable } from './rights'
 
 const NOW = new Date('2026-08-12T12:00:00Z')
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000)
@@ -534,5 +534,43 @@ describe('reader name and initials', () => {
       expect(hue).toBeGreaterThanOrEqual(80)
       expect(hue).toBeLessThan(360)
     }
+  })
+})
+
+describe('reading online is free of the account requirement', () => {
+  const publicDomain = { rightsStatus: 'public_domain' as const, visibility: 'public' as const }
+
+  it('lets a signed-out visitor read a cleared public book', () => {
+    // The difference that matters between the two rules, and the reason
+    // canReadOnline exists at all.
+    expect(canReadOnline({ book: publicDomain, userId: null })).toEqual({ allowed: true })
+    expect(canAccessArtifact({ book: publicDomain, userId: null })).toEqual({
+      allowed: false,
+      reason: 'authentication_required',
+    })
+  })
+
+  it('still refuses uncleared rights to everyone', () => {
+    expect(
+      canReadOnline({
+        book: { rightsStatus: 'restricted', visibility: 'public' },
+        userId: 'reader-1',
+      }),
+    ).toEqual({ allowed: false, reason: 'rights_not_cleared' })
+  })
+
+  it('still keeps a private upload to its owner', () => {
+    const book = { rightsStatus: 'user_owned' as const, visibility: 'private' as const }
+    expect(canReadOnline({ book, userId: null })).toEqual({
+      allowed: false,
+      reason: 'authentication_required',
+    })
+    expect(canReadOnline({ book, userId: 'someone-else', ownerId: 'owner-1' })).toEqual({
+      allowed: false,
+      reason: 'not_owner',
+    })
+    expect(canReadOnline({ book, userId: 'owner-1', ownerId: 'owner-1' })).toEqual({
+      allowed: true,
+    })
   })
 })

@@ -106,9 +106,45 @@ export function isPubliclyDistributable(status: RightsStatus): boolean {
 }
 
 /**
- * Server-side access decision. Never call this from a UI component and
- * never mirror it client-side as the only check — MODERNIZATION.md
- * section 31, "never trust client-side access decisions".
+ * Whether a book may be *read online*, by whoever is asking.
+ *
+ * The same rights and ownership rules as `canAccessArtifact`, minus its
+ * final one: reading does not require an account. That difference is
+ * the whole point and is deliberate rather than an oversight —
+ * NobleSee exists to make these books pleasant to read, credits pay
+ * only for taking one away, and a reader with no account and no balance
+ * must still get every word.
+ *
+ * A private upload is still only its owner's, and uncleared rights
+ * still block everyone. Free does not mean unguarded.
+ */
+export function canReadOnline(request: AccessRequest): AccessDecision {
+  const { book, part, userId, ownerId } = request
+  const status = effectiveRightsStatus(book.rightsStatus, part?.rightsStatus)
+
+  if (book.visibility === 'private') {
+    if (!userId) return { allowed: false, reason: 'authentication_required' }
+    if (!ownerId || ownerId !== userId) return { allowed: false, reason: 'not_owner' }
+    return { allowed: true }
+  }
+
+  if (!isPubliclyDistributable(status)) {
+    if (status === 'user_owned' && userId && ownerId === userId) return { allowed: true }
+    return { allowed: false, reason: 'rights_not_cleared' }
+  }
+
+  return { allowed: true }
+}
+
+/**
+ * Server-side access decision for a book *leaving* the site.
+ *
+ * Requires an account, unlike `canReadOnline`: a delivery is charged to
+ * a balance, and a balance needs somebody to belong to.
+ *
+ * Never call this from a UI component and never mirror it client-side
+ * as the only check — MODERNIZATION.md section 31, "never trust
+ * client-side access decisions".
  */
 export function canAccessArtifact(request: AccessRequest): AccessDecision {
   const { book, part, userId, ownerId } = request

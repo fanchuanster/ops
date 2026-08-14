@@ -26,7 +26,11 @@ export const ReadingProgress: CollectionConfig = {
     update: () => false,
     delete: () => false,
   },
-  indexes: [{ fields: ['user', 'book'], unique: true }],
+  // Ordered (book, user) rather than (user, book) on purpose: Payload
+  // names a composite index after its fields with no table prefix, and
+  // SQLite index names are global — so `user_book_idx` here would
+  // collide with the entitlements index of the same shape.
+  indexes: [{ fields: ['book', 'user'], unique: true }],
   fields: [
     { name: 'user', type: 'relationship', relationTo: 'users', required: true, index: true },
     { name: 'book', type: 'relationship', relationTo: 'books', required: true, index: true },

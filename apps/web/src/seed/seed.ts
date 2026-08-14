@@ -92,8 +92,11 @@ const BOOKS: SeedBook[] = [
       'One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge’s 1891 translation, which is in the public domain, alongside the original Chinese text.',
     collections: ['chinese-classics', 'philosophy-wisdom'],
     level: 'normal',
-    pageCount: 12,
-    keyPrefix: 'books/4/parts/11',
+    // Measured from the rendered standard PDF, which is what the price
+    // rule means by "pages". Both seed books are short enough to cost
+    // the minimum — the rule is exercised properly by real uploads.
+    pageCount: 3,
+    keyPrefix: 'books/4/book',
   },
   {
     slug: 'analects',
@@ -106,10 +109,8 @@ const BOOKS: SeedBook[] = [
       'The recorded sayings of Confucius and his disciples, compiled by later followers — among the most influential works in Chinese thought on learning, character, and how to live well. This edition presents James Legge’s 1893 translation, which is in the public domain, alongside the original Chinese.',
     collections: ['chinese-classics', 'personal-development'],
     level: 'essential',
-    // Enough pages to cost more than the minimum, so a fresh install
-    // exercises a real price rather than everything costing 1.
-    pageCount: 96,
-    keyPrefix: 'books/18/parts/20',
+    pageCount: 6,
+    keyPrefix: 'books/18/book',
   },
 ]
 

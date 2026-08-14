@@ -166,27 +166,38 @@ BOOKS = {"analects": ANALECTS}
 # Rendering
 # --------------------------------------------------------------------------
 
-def part_html(book, part):
-    blocks = []
-    for i, section in enumerate(part["sections"], start=1):
-        blocks.append(
-            f"<section class='passage'>"
-            f"<p class='zh'>{section['zh']}</p>"
-            f"<p class='en'>{section['en']}</p>"
-            f"</section>"
-        )
+def chapter_html(part):
+    """One chapter's passages. Shared by the DOCX, EPUB and PDF paths."""
+    blocks = [
+        f"<section class='passage'>"
+        f"<p class='zh'>{section['zh']}</p>"
+        f"<p class='en'>{section['en']}</p>"
+        f"</section>"
+        for section in part["sections"]
+    ]
+    return f"<h2>{part['title']}</h2>{''.join(blocks)}"
+
+
+def book_html(book):
+    """The whole book in one document.
+
+    Books stopped being split into parts on 2026-08-14. What were
+    separate downloadable units are now chapters inside a single work —
+    which is how the book was written, and what a reader expects to
+    receive.
+    """
+    chapters = "".join(chapter_html(part) for part in book["parts"])
     return f"""
     <article>
       <h1>{book['title']}</h1>
       <p class="byline">{book['author']} · {book['translator']}</p>
-      <h2>{part['title']}</h2>
-      {''.join(blocks)}
+      {chapters}
       <p class="colophon"><em>{book['colophon']}</em></p>
     </article>
     """
 
 
-def write_docx(book, part, path):
+def write_docx(book, path):
     doc = Document()
 
     title = doc.add_heading(book["title"], level=0)
@@ -196,13 +207,15 @@ def write_docx(book, part, path):
     byline.alignment = WD_ALIGN_PARAGRAPH.CENTER
     byline.runs[0].italic = True
 
-    doc.add_heading(part["title"], level=1)
-
-    for section in part["sections"]:
-        zh = doc.add_paragraph(section["zh"])
-        zh.runs[0].font.size = Pt(13)
-        doc.add_paragraph(section["en"])
-        doc.add_paragraph()
+    for index, part in enumerate(book["parts"]):
+        if index:
+            doc.add_page_break()
+        doc.add_heading(part["title"], level=1)
+        for section in part["sections"]:
+            zh = doc.add_paragraph(section["zh"])
+            zh.runs[0].font.size = Pt(13)
+            doc.add_paragraph(section["en"])
+            doc.add_paragraph()
 
     colophon = doc.add_paragraph(book["colophon"])
     colophon.runs[0].italic = True
@@ -211,21 +224,12 @@ def write_docx(book, part, path):
     doc.save(path)
 
 
-def write_epub(book, part, path):
+def write_epub(book, path):
     epub_book = epub.EpubBook()
-    epub_book.set_identifier(f"noblesee-{book['slug']}-{part['slug']}")
-    epub_book.set_title(f"{book['title']} — {part['title']}")
+    epub_book.set_identifier(f"noblesee-{book['slug']}")
+    epub_book.set_title(book["title"])
     epub_book.set_language("en")
     epub_book.add_author(f"{book['author']} (trans. {book['translator']})")
-
-    chapter = epub.EpubHtml(
-        title=part["title"], file_name="chapter.xhtml", lang="en"
-    )
-    chapter.content = (
-        f"<html><head><title>{part['title']}</title></head>"
-        f"<body>{part_html(book, part)}</body></html>"
-    )
-    epub_book.add_item(chapter)
 
     style = epub.EpubItem(
         uid="style",
@@ -240,33 +244,58 @@ def write_epub(book, part, path):
         ),
     )
     epub_book.add_item(style)
-    chapter.add_item(style)
 
-    epub_book.toc = (epub.Link("chapter.xhtml", part["title"], part["slug"]),)
+    chapters = []
+    for index, part in enumerate(book["parts"], start=1):
+        chapter = epub.EpubHtml(
+            title=part["title"], file_name=f"chapter-{index}.xhtml", lang="en"
+        )
+        # The title block only on the first chapter; after that the book
+        # is already open and repeating it reads as a new book each time.
+        opening = (
+            f"<h1>{book['title']}</h1>"
+            f"<p class='byline'>{book['author']} · {book['translator']}</p>"
+            if index == 1
+            else ""
+        )
+        closing = (
+            f"<p class='colophon'><em>{book['colophon']}</em></p>"
+            if index == len(book["parts"])
+            else ""
+        )
+        chapter.content = (
+            f"<html><head><title>{part['title']}</title></head>"
+            f"<body><article>{opening}{chapter_html(part)}{closing}</article></body></html>"
+        )
+        chapter.add_item(style)
+        epub_book.add_item(chapter)
+        chapters.append(chapter)
+
+    # A real table of contents now that a book has more than one chapter.
+    epub_book.toc = tuple(
+        epub.Link(c.file_name, p["title"], p["slug"])
+        for c, p in zip(chapters, book["parts"])
+    )
     epub_book.add_item(epub.EpubNcx())
     epub_book.add_item(epub.EpubNav())
 
-    # The text is the first page, not the table of contents.
-    #
-    # ebooklib's usual idiom is `spine = ["nav", chapter]`, which puts the
-    # navigation document first. A reader opening a one-part edition then
-    # lands on a contents page listing exactly one entry — the part they
-    # just clicked — and has to click again to reach the text. The nav
+    # The text is the first page, not the table of contents. The nav
     # document stays in the manifest, which is what EPUB 3 requires and
     # what feeds the reader's chapter display; it just is not where the
     # book opens.
-    epub_book.spine = [chapter]
+    epub_book.spine = chapters
 
     epub.write_epub(path, epub_book, {})
 
 
-def write_pdf(book, part, path, base_pt):
-    css = f"""
+def pdf_css(base_pt):
+    return f"""
     @page {{ size: A5; margin: 2cm; }}
     body {{ font-family: Georgia, 'Droid Sans Fallback', serif;
              font-size: {base_pt}pt; line-height: 1.6; color: #1a1a1a; }}
     h1 {{ font-size: {base_pt + 8}pt; text-align: center; }}
-    h2 {{ font-size: {base_pt + 3}pt; color: #444; }}
+    h2 {{ font-size: {base_pt + 3}pt; color: #444; page-break-before: always; }}
+    h2:first-of-type {{ page-break-before: avoid; }}
     .byline {{ text-align: center; font-style: italic; color: #555;
                 margin-bottom: 1.5em; }}
     .zh {{ font-size: {base_pt + 1}pt; margin-bottom: .4em; }}
@@ -275,11 +304,28 @@ def write_pdf(book, part, path, base_pt):
     .colophon {{ font-size: {max(base_pt - 3, 8)}pt; color: #777;
                   margin-top: 2em; }}
     """
+
+
+def write_pdf(book, path, base_pt):
     html = (
-        f"<html><head><style>{css}</style></head>"
-        f"<body>{part_html(book, part)}</body></html>"
+        f"<html><head><style>{pdf_css(base_pt)}</style></head>"
+        f"<body>{book_html(book)}</body></html>"
     )
     HTML(string=html).write_pdf(path)
+
+
+def page_count(book):
+    """Pages at the standard size — what the credit price is derived from.
+
+    A DOCX carries no reliable page count (pagination is a rendering
+    decision, and python-docx writes no `<Pages>` property), so the
+    standard PDF rendered from the same content is the honest proxy.
+    """
+    html = (
+        f"<html><head><style>{pdf_css(PDF_VARIANTS['pdf-standard'])}</style></head>"
+        f"<body>{book_html(book)}</body></html>"
+    )
+    return len(HTML(string=html).render().pages)
 
 
 def write_cover(book, path):
@@ -304,7 +350,7 @@ def write_cover(book, path):
 # --------------------------------------------------------------------------
 
 def generate(book, force=False):
-    book_dir = os.path.join(SEED_ROOT, book["slug"])
+    book_dir = os.path.join(SEED_ROOT, book["slug"], "whole")
     os.makedirs(book_dir, exist_ok=True)
 
     def emit(path, fn, *args):
@@ -315,19 +361,17 @@ def generate(book, force=False):
         print(f"  wrote: {os.path.relpath(path, REPO_ROOT)}")
 
     print(f"{book['title']}")
-    emit(os.path.join(book_dir, "cover.jpg"), lambda p: write_cover(book, p))
+    emit(os.path.join(SEED_ROOT, book["slug"], "cover.jpg"),
+         lambda p: write_cover(book, p))
+    emit(os.path.join(book_dir, "master.docx"), lambda p: write_docx(book, p))
+    emit(os.path.join(book_dir, "book.epub"), lambda p: write_epub(book, p))
+    for variant, size in PDF_VARIANTS.items():
+        emit(os.path.join(book_dir, f"{variant}.pdf"),
+             lambda p, s=size: write_pdf(book, p, s))
 
-    for part in book["parts"]:
-        part_dir = os.path.join(book_dir, part["slug"])
-        os.makedirs(part_dir, exist_ok=True)
-
-        emit(os.path.join(part_dir, "master.docx"),
-             lambda p, pt=part: write_docx(book, pt, p))
-        emit(os.path.join(part_dir, "part.epub"),
-             lambda p, pt=part: write_epub(book, pt, p))
-        for variant, size in PDF_VARIANTS.items():
-            emit(os.path.join(part_dir, f"{variant}.pdf"),
-                 lambda p, pt=part, s=size: write_pdf(book, pt, p, s))
+    # Printed so the value can be copied into the seed, which is where
+    # the price comes from.
+    print(f"  pages (standard): {page_count(book)}")
 
 
 def main():

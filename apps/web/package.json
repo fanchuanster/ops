@@ -14,6 +14,8 @@
     "//payload": "NEXT_RUNTIME=nodejs lets the Payload CLI resolve the D1 and R2 bindings through wrangler's local Miniflare, the same way next dev does.",
     "payload": "NEXT_RUNTIME=nodejs payload",
     "seed": "NEXT_RUNTIME=nodejs payload run src/seed/seed.ts",
+    "//seed:remote": "Seeds the LIVE catalog. npm run seed always targets local D1 by design; see scripts/seed-remote.ts. Idempotent \u2014 matched on slug.",
+    "seed:remote": "SEED_TARGET=remote NEXT_RUNTIME=nodejs payload run scripts/seed-remote.ts",
     "//create-admin": "Bootstraps an administrator. Payload only shows its create-first-user screen while the users table is empty, so this is the way in once any reader exists.",
     "create-admin": "NEXT_RUNTIME=nodejs payload run scripts/create-admin.ts",
     "create-admin:remote": "ADMIN_TARGET=remote NEXT_RUNTIME=nodejs payload run scripts/create-admin.ts",
