@@ -61,7 +61,7 @@ export default async function FrontendLayout({ children }: { children: React.Rea
         {/* Only for a signed-out reader, and only when Google is set up.
             Rendering it otherwise would prompt someone who already has a
             session, or load Google's script for nothing. */}
-        {!user && isGoogleSignInConfigured() ? <GoogleOneTap next="/" /> : null}
+        {!user && isGoogleSignInConfigured() ? <GoogleOneTap /> : null}
 
         {children}
 

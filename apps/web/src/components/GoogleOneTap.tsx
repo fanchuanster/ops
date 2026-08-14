@@ -55,9 +55,36 @@ function loadGsi(): Promise<void> {
   })
 }
 
-export function GoogleOneTap({ next }: { next: string }) {
+/**
+ * Where to send the reader once One Tap signs them in.
+ *
+ * Derived from the page they are on, not passed in, because the useful
+ * answer is only known in the browser. The case that matters: a reader
+ * asks for something that needs an account, gets sent to
+ * `/login?next=/read/analects/1`, and accepts the prompt there — they
+ * should land on the chapter they asked for, not on the home page having
+ * forgotten why they signed in.
+ *
+ * Whatever this returns is still put through `safeNext` on the server,
+ * so a crafted `next` cannot turn the prompt into an open redirect.
+ */
+function destination(): string {
+  const params = new URLSearchParams(window.location.search)
+  const requested = params.get('next')
+  if (requested) return requested
+
+  const { pathname, search } = window.location
+  // Signing in *from* the sign-in page with nowhere in particular to go
+  // means the reader came here deliberately; the library is the sensible
+  // landing, and returning to /login would only bounce.
+  if (pathname === '/login' || pathname === '/sign-up') return '/'
+  return `${pathname}${search}`
+}
+
+export function GoogleOneTap() {
   useEffect(() => {
     let cancelled = false
+    const next = destination()
 
     async function start() {
       try {
@@ -123,7 +150,9 @@ export function GoogleOneTap({ next }: { next: string }) {
     return () => {
       cancelled = true
     }
-  }, [next])
+    // Runs once per mount. The destination is read from the URL at that
+    // moment, which is the moment the prompt is configured.
+  }, [])
 
   return null
 }
