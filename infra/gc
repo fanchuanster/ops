@@ -8,8 +8,8 @@
 # itself never has to exist outside this wrapper.
 #
 #   ./gc gcloud auth application-default login --no-launch-browser
-#   ./gc gcloud config set project my-project-first-296702
-#   ./gc gcloud projects describe my-project-first-296702
+#   ./gc gcloud config set project gen-lang-client-0021728111
+#   ./gc gcloud projects describe gen-lang-client-0021728111
 #
 # Credentials persist in .gcloud-home/ beside this script, which is
 # gitignored. Terraform reads them through GOOGLE_APPLICATION_CREDENTIALS

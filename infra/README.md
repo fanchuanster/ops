@@ -142,14 +142,27 @@ let the download limit under-count.
 
 ## State
 
-Local, and git-ignored: it holds resource ids and, for some resources, secret
-material.
+In R2, at `s3://noblesee/tf/terraform.tfstate` — see `backend.tf`. R2 speaks
+the S3 API, so the stock `s3` backend drives it with the AWS-specific checks
+turned off; `skip_s3_checksum` is the one you cannot omit, since Terraform
+otherwise sends integrity headers R2 rejects with an opaque 400.
 
-The Cloudflare-native answer is an S3-compatible backend on R2, but that has a
-bootstrapping problem — this configuration is what creates the buckets, so the
-state bucket cannot be one of them. When this moves beyond one operator, create
-a separate `noblesee-tfstate` bucket outside this config and add a backend
-block to `versions.tf`.
+Locking is native (`use_lockfile`), via a conditional PUT of
+`tf/terraform.tfstate.tflock`. There is no DynamoDB equivalent to arrange.
+
+`backend.tf` is a **partial** configuration: the endpoint embeds the Cloudflare
+account id and the keys are secrets, so `infra/tf` exports all three from the
+repo's `.env` as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+`AWS_ENDPOINT_URL_S3`. Bare `terraform` without those will fail to initialise
+rather than quietly fall back to a local file.
+
+State holds secret material — the Document AI service account key among it —
+so any local remnant (`terraform.tfstate.backup`) stays git-ignored.
+
+One hazard worth knowing: the state bucket is the artifacts bucket, which this
+same configuration manages. `terraform destroy` would therefore delete the
+bucket holding the state describing what it is deleting. Remove resources
+individually rather than destroying wholesale.
 
 ## Known drift
 
@@ -184,7 +197,7 @@ points Terraform at them.
 # Once. --no-launch-browser prints a URL to open elsewhere and waits for
 # the code, which is what you want on a machine with no browser.
 ./infra/gc gcloud auth application-default login --no-launch-browser
-./infra/gc gcloud auth application-default set-quota-project my-project-first-296702
+./infra/gc gcloud auth application-default set-quota-project gen-lang-client-0021728111
 
 cd infra
 cp terraform.tfvars.example terraform.tfvars   # set gcp_project, documentai_bucket
@@ -206,4 +219,5 @@ R2 and the OCR output is folded into the DOCX master.
 The service-account key is the one long-lived Google credential in the
 system, which is why the grants are as narrow as they are: run processors
 on the project, read and write objects in one bucket, nothing else. It
-lands in Terraform state, so state stays local and gitignored.
+lands in Terraform state, which is why state lives in the private R2 bucket
+rather than anywhere a repository could reach.

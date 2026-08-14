@@ -88,7 +88,7 @@ variable "email_dns_records" {
 variable "gcp_project" {
   description = "Google Cloud project id that owns the Document AI processor and the conversion bucket."
   type        = string
-  default     = "my-project-first-296702"
+  default     = "gen-lang-client-0021728111"
 }
 
 variable "documentai_location" {

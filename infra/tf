@@ -34,6 +34,27 @@ if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
     exit 1
 fi
 
+# The S3 backend on R2 — see backend.tf, which is a partial config.
+#
+# These arrive through the environment rather than through backend.tf so
+# that neither the account id (in the endpoint) nor the R2 keys are
+# committed. The backend reads AWS_* names because it is the AWS S3
+# backend; nothing here talks to AWS.
+if [ -z "${CLOUDFLARE_S3_ACCESS_KEY_ID:-}" ] || [ -z "${CLOUDFLARE_S3_SECRET_ACCESS_KEY:-}" ] \
+    || [ -z "${CLOUDFLARE_S3_ENDPOINTS:-}" ]; then
+    echo "infra/tf: R2 state backend needs CLOUDFLARE_S3_ACCESS_KEY_ID," >&2
+    echo "          CLOUDFLARE_S3_SECRET_ACCESS_KEY and CLOUDFLARE_S3_ENDPOINTS" >&2
+    echo "          in .env. Create an R2 API token in the Cloudflare dashboard." >&2
+    exit 1
+fi
+
+export AWS_ACCESS_KEY_ID="$CLOUDFLARE_S3_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$CLOUDFLARE_S3_SECRET_ACCESS_KEY"
+export AWS_ENDPOINT_URL_S3="$CLOUDFLARE_S3_ENDPOINTS"
+# A stray AWS profile or session token in the ambient environment would
+# be picked up ahead of these and sent to R2, which fails confusingly.
+unset AWS_PROFILE AWS_SESSION_TOKEN AWS_DEFAULT_PROFILE 2>/dev/null || true
+
 # Google credentials, for the Document AI resources.
 #
 # gcloud is not installed on this host — it runs in a container, see

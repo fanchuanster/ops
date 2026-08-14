@@ -26,13 +26,15 @@ terraform {
     }
   }
 
-  # State is local for now.
+  # State lives in R2 — see backend.tf.
   #
-  # The obvious Cloudflare-native answer is an S3-compatible backend on
-  # R2, but that has a bootstrapping problem: this configuration is what
-  # creates the buckets, so the state bucket cannot be one of them. When
-  # this moves to a team, create a separate `noblesee-tfstate` bucket by
-  # hand (or in a tiny separate config) and point a backend block here.
-  # Until then, terraform.tfstate stays out of git — it holds resource
-  # ids and, for some resources, secret material.
+  # It is stored in the artifacts bucket, which this configuration also
+  # creates. The bootstrapping problem that argued for a separate bucket
+  # turned out to be a one-time cost rather than a standing one: the
+  # bucket already existed by the time the backend was added, so there
+  # was nothing to bootstrap. What remains is the destroy hazard
+  # documented in backend.tf.
+  #
+  # State still holds secret material — the Document AI service account
+  # key among it — so it stays out of git regardless of where it lives.
 }

@@ -42,11 +42,11 @@ email_dns_records = []
 #   gcloud auth application-default login
 #
 # Defaults to the existing project; override only for a separate one.
-# gcp_project = "my-project-first-296702"
+# gcp_project = "gen-lang-client-0021728111"
 
 # Bucket names are globally unique across all of Google Cloud, so this
 # needs a suffix nobody else has taken.
-documentai_bucket = "noblesee-conversion-296702"
+documentai_bucket = "noblesee-conversion-0021728111"
 
 # Default to Singapore, the nearest Document AI region to the APAC R2
 # bucket and the Tokyo D1. Change them together or batch jobs cross a
