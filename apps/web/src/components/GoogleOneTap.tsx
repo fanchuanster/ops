@@ -86,11 +86,19 @@ export function GoogleOneTap({ next }: { next: string }) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ credential: response.credential, next }),
             })
-            const body = (await result.json()) as { ok?: boolean; next?: string }
-            // A full navigation rather than a router refresh: the session
-            // arrived as a Set-Cookie header, and every server component
-            // on the page was rendered for a signed-out reader.
-            if (result.ok && body.ok) window.location.assign(body.next || next)
+            const body = (await result.json()) as { ok?: boolean; next?: string; message?: string }
+            if (result.ok && body.ok) {
+              // A full navigation rather than a router refresh: the session
+              // arrived as a Set-Cookie header, and every server component
+              // on the page was rendered for a signed-out reader.
+              window.location.assign(body.next || next)
+              return
+            }
+            // Not thrown and not shown to the reader — One Tap failing
+            // should leave the page alone. But it must not fail silently
+            // either: a prompt that appears, is accepted, and does
+            // nothing is the hardest kind of bug to report.
+            console.warn('[NobleSee] One Tap sign-in was refused:', body.message ?? result.status)
           },
           // Chrome has moved One Tap onto FedCM; without this the prompt
           // is silently suppressed in current versions.

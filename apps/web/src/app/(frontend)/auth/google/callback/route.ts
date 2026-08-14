@@ -130,8 +130,49 @@ export async function GET(request: Request) {
   const session = await sessionForGoogleProfile(verified.profile)
   if (!session.ok) return fail(origin, session.message)
 
-  const response = NextResponse.redirect(new URL(next, origin))
+  const response = handOff(new URL(next, origin).toString())
   response.headers.append('Set-Cookie', session.cookie)
   expireRoundTripCookies(response, url.protocol === 'https:')
   return response
+}
+
+/**
+ * Land the reader on their destination with the session actually applied.
+ *
+ * A plain redirect does not work here, and the reason is subtle. Payload
+ * refuses to read its auth cookie on a request whose `Sec-Fetch-Site` is
+ * `cross-site` — a sensible CSRF defence, on by default whenever `csrf`
+ * is configured. Arriving back from accounts.google.com makes the whole
+ * navigation chain cross-site, and a server redirect does not reset it,
+ * so the first page after sign-in renders signed-out however good the
+ * cookie is. The reader sees a "Sign in" link and concludes it failed.
+ *
+ * A navigation the page starts itself is same-origin, so this returns a
+ * one-line document that immediately replaces itself. The cookie is set
+ * on this response and honoured on the next.
+ *
+ * `location.replace` keeps the interstitial out of history, so Back does
+ * not walk into a spent authorization code. The meta refresh is the
+ * fallback for a reader with JavaScript disabled.
+ */
+function handOff(target: string): NextResponse {
+  // Escaped for both contexts: the attribute, and a script body where a
+  // literal `</script>` in the path would end the element early.
+  const attr = target.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+  const js = JSON.stringify(target).replace(/</g, '\\u003c')
+
+  return new NextResponse(
+    `<!doctype html><meta charset="utf-8"><title>Signing you in…</title>` +
+      `<meta http-equiv="refresh" content="0;url=${attr}">` +
+      `<p>Signing you in… <a href="${attr}">Continue</a></p>` +
+      `<script>location.replace(${js})</script>`,
+    {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        // Holds a fresh session cookie and must never be served to
+        // anyone else, or from the back button.
+        'Cache-Control': 'no-store',
+      },
+    },
+  )
 }

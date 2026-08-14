@@ -51,19 +51,34 @@ export async function GET(request: Request) {
   return response
 }
 
+/**
+ * Refuse, and say why in the log.
+ *
+ * The reader gets a deliberately vague message — a sign-in endpoint that
+ * explains precisely which check failed is a sign-in endpoint that helps
+ * an attacker tune their next attempt. The operator gets the reason, in
+ * the Worker log, where debugging a flow that spans Google, a browser
+ * and a Worker is otherwise guesswork. Reason codes only: no credential,
+ * no address, nothing worth having if the logs leak.
+ */
+function refuse(reason: string, message: string, status: number) {
+  console.warn(`one-tap refused: ${reason}`)
+  return NextResponse.json({ ok: false, message }, { status })
+}
+
 export async function POST(request: Request) {
   const url = new URL(request.url)
   const origin = url.origin
 
   const config = googleOAuthConfig(origin)
-  if (!config) return NextResponse.json({ ok: false, message: 'Not configured.' }, { status: 404 })
+  if (!config) return refuse('not_configured', 'Not configured.', 404)
 
   // A cross-site form post cannot set this header to our origin, and a
   // cross-site fetch that tries is stopped before it arrives. Belt and
   // braces alongside the nonce.
   const requestOrigin = request.headers.get('origin')
   if (requestOrigin && requestOrigin !== origin) {
-    return NextResponse.json({ ok: false, message: 'Bad origin.' }, { status: 403 })
+    return refuse(`bad_origin:${requestOrigin}`, 'Bad origin.', 403)
   }
 
   let credential: unknown
@@ -73,11 +88,11 @@ export async function POST(request: Request) {
     credential = body.credential
     next = safeNext(typeof body.next === 'string' ? body.next : null)
   } catch {
-    return NextResponse.json({ ok: false, message: 'Bad request.' }, { status: 400 })
+    return refuse('unparseable_body', 'Bad request.', 400)
   }
 
   if (typeof credential !== 'string' || !credential) {
-    return NextResponse.json({ ok: false, message: 'Bad request.' }, { status: 400 })
+    return refuse('no_credential', 'Bad request.', 400)
   }
 
   const nonce = request.headers
@@ -88,9 +103,10 @@ export async function POST(request: Request) {
     ?.slice(ONE_TAP_NONCE_COOKIE.length + 1)
 
   if (!nonce) {
-    return NextResponse.json(
-      { ok: false, message: 'That sign-in could not be matched to your browser.' },
-      { status: 400 },
+    return refuse(
+      'no_nonce_cookie',
+      'That sign-in could not be matched to your browser.',
+      400,
     )
   }
 
@@ -99,10 +115,11 @@ export async function POST(request: Request) {
   let claims: Record<string, unknown>
   try {
     claims = await verifyGoogleIdTokenSignature(credential)
-  } catch {
-    return NextResponse.json(
-      { ok: false, message: 'Google sign-in failed. Please try again.' },
-      { status: 400 },
+  } catch (error) {
+    return refuse(
+      `bad_signature:${(error as Error).message}`,
+      'Google sign-in failed. Please try again.',
+      400,
     )
   }
 
@@ -113,15 +130,19 @@ export async function POST(request: Request) {
     now: new Date(),
   })
   if (!verified.ok) {
-    return NextResponse.json(
-      { ok: false, message: SIGN_IN_REFUSAL_MESSAGES[verified.reason] },
-      { status: 403 },
+    // The nonce is the check most likely to fail for a reason that is our
+    // fault rather than an attack, so it is worth being able to tell the
+    // difference in a log.
+    return refuse(
+      `claims:${verified.reason}`,
+      SIGN_IN_REFUSAL_MESSAGES[verified.reason],
+      403,
     )
   }
 
   const session = await sessionForGoogleProfile(verified.profile)
   if (!session.ok) {
-    return NextResponse.json({ ok: false, message: session.message }, { status: 403 })
+    return refuse('session', session.message, 403)
   }
 
   const response = NextResponse.json({ ok: true, next })

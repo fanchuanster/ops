@@ -8,7 +8,14 @@
  */
 
 import config from '@payload-config'
-import { generatePayloadCookie, getFieldsToSign, getPayload, jwtSign } from 'payload'
+import {
+  createLocalReq,
+  generatePayloadCookie,
+  getFieldsToSign,
+  getPayload,
+  jwtSign,
+} from 'payload'
+import { addSessionToUser } from 'payload/shared'
 
 import {
   SIGN_IN_REFUSAL_MESSAGES,
@@ -113,10 +120,21 @@ export async function sessionForGoogleProfile(
   // Payload's own session, issued without a password — the reader has
   // just proved who they are to Google, which is the whole point.
   const collectionConfig = payload.collections['users'].config
+
+  // Payload 3 authenticates against a server-side session, not the JWT
+  // alone: the token carries a `sid` and `payload.auth` looks it up in
+  // the user's `sessions`. A token without one verifies as a signature
+  // and is then rejected as a login — which looks exactly like a
+  // successful sign-in that does not stick. `login` does this same call;
+  // minting a token by hand has to do it too.
+  const req = await createLocalReq({}, payload)
+  const { sid } = await addSessionToUser({ collectionConfig, payload, req, user: user as never })
+
   const fieldsToSign = getFieldsToSign({
     collectionConfig,
     email: user.email,
     user: { ...user, collection: 'users' } as never,
+    ...(sid ? { sid } : {}),
   })
   const { token } = await jwtSign({
     fieldsToSign,
