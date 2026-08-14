@@ -41,13 +41,15 @@ email_dns_records = []
 # Authenticate separately; the provider reads the environment:
 #   gcloud auth application-default login
 #
-gcp_project = "noblesee-123456"
+# Defaults to the existing project; override only for a separate one.
+# gcp_project = "my-project-first-296702"
 
 # Bucket names are globally unique across all of Google Cloud, so this
 # needs a suffix nobody else has taken.
-documentai_bucket = "noblesee-conversion-123456"
+documentai_bucket = "noblesee-conversion-296702"
 
-# Both default sensibly; set them together if you change either, so the
-# batch job is not reading across regions.
-# documentai_location = "eu"
-# gcs_location        = "EU"
+# Default to Singapore, the nearest Document AI region to the APAC R2
+# bucket and the Tokyo D1. Change them together or batch jobs cross a
+# region twice.
+# documentai_location = "asia-southeast1"
+# gcs_location        = "ASIA-SOUTHEAST1"

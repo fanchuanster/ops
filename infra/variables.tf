@@ -88,17 +88,22 @@ variable "email_dns_records" {
 variable "gcp_project" {
   description = "Google Cloud project id that owns the Document AI processor and the conversion bucket."
   type        = string
+  default     = "my-project-first-296702"
 }
 
 variable "documentai_location" {
   description = <<-EOT
-    Document AI multi-region. Fixed for a processor's life — changing it
-    replaces the processor. `eu` keeps documents in Europe; `us` is the
-    other multi-region. Enterprise Document OCR is also available in
-    several single regions.
+    Where Document AI runs. Fixed for a processor's life — changing it
+    replaces the processor.
+
+    Defaults to Singapore because the rest of the system is in APAC: the
+    R2 bucket is `APAC` and D1 serves from Tokyo. Enterprise Document OCR
+    is not offered in Tokyo, and Singapore is the nearest place it is —
+    every batch job moves a whole book each way, so the hop is worth
+    keeping short.
   EOT
   type        = string
-  default     = "eu"
+  default     = "asia-southeast1"
 
   validation {
     condition = contains([
@@ -110,9 +115,13 @@ variable "documentai_location" {
 }
 
 variable "gcs_location" {
-  description = "Location for the conversion bucket. Keep it with the processor so batch jobs are not cross-region."
+  description = <<-EOT
+    Location for the conversion bucket. Keep it on the processor's region:
+    batch reads its input and writes its output here, so a mismatch means
+    every page crosses a region twice for no reason.
+  EOT
   type        = string
-  default     = "EU"
+  default     = "ASIA-SOUTHEAST1"
 }
 
 variable "documentai_bucket" {
