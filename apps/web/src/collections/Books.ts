@@ -237,6 +237,15 @@ export const Books: CollectionConfig = {
       },
     },
     {
+      name: 'estimatedPages',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description:
+          'What the monthly quota was charged for this book, read from the file at upload. A real page count needs the book rendered, which happens far too late to decide whether to start converting — see domain/uploadQuota.ts. Replaced by pageCount once conversion finishes.',
+      },
+    },
+    {
       name: 'priceCredits',
       type: 'number',
       index: true,
@@ -307,6 +316,16 @@ export const Books: CollectionConfig = {
           admin: { readOnly: true, description: 'The uploaded original in object storage.' },
         },
         { name: 'sourceFilename', type: 'text', admin: { readOnly: true } },
+        {
+          name: 'startedAt',
+          type: 'date',
+          index: true,
+          admin: {
+            readOnly: true,
+            description:
+              'When this book entered conversion. What the monthly quota counts by — a draft that never converted has cost nothing and is not charged.',
+          },
+        },
         { name: 'jobId', type: 'text', admin: { readOnly: true } },
         {
           name: 'message',

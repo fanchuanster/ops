@@ -10,7 +10,10 @@ import {
   canSubmitForReview,
 } from '../../../domain/moderation'
 import { isUploaderSelectableRights } from '../../../domain/rights'
+import { quotaMessage } from '../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../lib/auth'
+import { objectBucket } from '../../../lib/storage'
+import { checkQuotaFor } from '../../../lib/uploadQuota'
 
 /**
  * Confirming the details of an uploaded book.
@@ -95,6 +98,28 @@ export async function saveBookDetails(
     if (!decision.allowed) return { error: SUBMISSION_ERRORS[decision.reason] }
   }
 
+  // The monthly conversion allowance, checked at the moment conversion
+  // would start rather than at upload — a draft costs nothing, and
+  // refusing an upload for drafts the reader may never convert would
+  // charge them for a decision they have not made.
+  //
+  // Only for a book that has not already been through the pipeline: a
+  // reader correcting the details of a converted book is not asking for
+  // it to be converted again.
+  const alreadyConverting = book.conversion?.state !== 'draft'
+  if (!alreadyConverting) {
+    const quota = await checkQuotaFor(payload, {
+      userId: user.id,
+      pagesRequested: book.estimatedPages ?? 0,
+      isAdmin: Boolean(user.roles?.includes('admin')),
+    })
+    if (!quota.allowed) {
+      // The draft survives, deliberately. The book is not the problem;
+      // the month is.
+      return { error: quotaMessage(quota) ?? 'You have reached this month’s limit.' }
+    }
+  }
+
   try {
     await payload.update({
       collection: 'books',
@@ -111,7 +136,13 @@ export async function saveBookDetails(
         status: 'in_production',
         // Queued either way. A reader who is not asking for publication
         // still wants their EPUB.
-        conversion: { ...book.conversion, state: 'queued' },
+        conversion: {
+          ...book.conversion,
+          state: alreadyConverting ? book.conversion?.state : 'queued',
+          // Stamped once, when the book first enters the pipeline. This
+          // is what the monthly count is scoped by.
+          startedAt: book.conversion?.startedAt ?? new Date().toISOString(),
+        },
         ...(submit
           ? { review: { ...book.review, state: 'submitted', submittedAt: new Date().toISOString() } }
           : {}),
@@ -133,4 +164,77 @@ const SUBMISSION_ERRORS: Record<SubmissionBlockedReason, string> = {
   rights_undeclared:
     'Say where this book came from before submitting it. You are the only person who knows.',
   no_content: 'There is nothing to review yet.',
+}
+
+/**
+ * Replace the DOCX master with an edited one.
+ *
+ * The other half of what makes a draft a workspace. A conversion from a
+ * scan is a first pass — the uploader is the one who can see what the
+ * OCR misread — so they download the master, fix it, and send it back.
+ *
+ * The replacement becomes the new source and the book re-enters
+ * conversion, which regenerates the EPUB and the PDFs from it. It does
+ * *not* cost another slot against the monthly quota: this is the same
+ * book being corrected, and charging for a correction would discourage
+ * exactly the proofreading this project exists to do.
+ */
+export async function replaceMaster(
+  _prev: DetailsState,
+  formData: FormData,
+): Promise<DetailsState> {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Sign in first.' }
+
+  const bookId = Number(formData.get('bookId'))
+  if (!Number.isInteger(bookId)) return { error: 'Nothing to replace.' }
+
+  const file = formData.get('master')
+  if (!(file instanceof File) || file.size === 0) return { error: 'Choose a DOCX to upload.' }
+  if (file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    return { error: 'The master has to be a DOCX.' }
+  }
+
+  const payload = await getPayload({ config })
+  const book = await payload
+    .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+
+  const ownerId = typeof book?.owner === 'object' ? book?.owner?.id : book?.owner
+  if (!book || !ownerId || String(ownerId) !== String(user.id)) {
+    return { error: 'That book is not yours to edit.' }
+  }
+
+  const bucket = await objectBucket()
+  if (!bucket) return { error: 'Uploads are not available on this server yet.' }
+
+  // A new key rather than overwriting the old one, so a replacement that
+  // turns out worse than the original has not destroyed it.
+  const jobId = crypto.randomUUID()
+  const sourceKey = `conversion/${jobId}/input/source.docx`
+  try {
+    await bucket.put(sourceKey, await file.arrayBuffer(), {
+      httpMetadata: { contentType: file.type },
+    })
+    await payload.update({
+      collection: 'books',
+      id: bookId,
+      data: {
+        conversion: {
+          ...book.conversion,
+          state: 'queued',
+          sourceKey,
+          sourceFilename: file.name,
+          jobId,
+          message: null,
+        },
+      },
+      overrideAccess: true,
+    })
+  } catch {
+    return { error: 'Could not replace the master. Please try again.' }
+  }
+
+  revalidatePath(`/account/books/${bookId}`)
+  return {}
 }

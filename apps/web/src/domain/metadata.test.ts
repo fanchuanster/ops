@@ -10,12 +10,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  fromAppXml,
   fromCoreXml,
   fromFilename,
   fromPdfText,
   fromPlainText,
   mergeMetadata,
   normalizeLanguage,
+  pdfPageCount,
 } from './metadata'
 
 describe('DOCX core properties', () => {
@@ -175,5 +177,35 @@ describe('language normalisation', () => {
     for (const code of ['ja', 'fr', '', 'xx', undefined]) {
       expect(normalizeLanguage(code)).toBeUndefined()
     }
+  })
+})
+
+describe('page counts stated by the file', () => {
+  it('takes the page tree root count, not an intermediate node', () => {
+    // A PDF may nest page-tree nodes, each with its own smaller /Count.
+    expect(pdfPageCount('/Type /Pages /Count 12 ... /Type /Pages /Count 342')).toBe(342)
+  })
+
+  it('falls back to counting page objects when there is no /Count', () => {
+    expect(pdfPageCount('/Type /Page\n/Type /Page\n/Type /Page ')).toBe(3)
+  })
+
+  it('is undefined for a PDF that says nothing', () => {
+    expect(pdfPageCount('%PDF-1.7 noise')).toBeUndefined()
+  })
+
+  it('reads Word statistics from app.xml', () => {
+    expect(
+      fromAppXml('<Properties><Pages>342</Pages><CharactersWithSpaces>91000</CharactersWithSpaces></Properties>'),
+    ).toEqual({ pageCount: 342, characters: 91000 })
+  })
+
+  it('is empty for a generator that writes no statistics', () => {
+    // python-docx and most libraries write no page count at all.
+    expect(fromAppXml('<Properties><Application>python-docx</Application></Properties>')).toEqual({})
+  })
+
+  it('ignores a zero page count rather than treating it as measured', () => {
+    expect(fromAppXml('<Properties><Pages>0</Pages></Properties>')).toEqual({})
   })
 })

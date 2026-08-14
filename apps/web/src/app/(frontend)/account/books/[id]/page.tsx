@@ -4,8 +4,11 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
+import { MasterFile } from '../../../../../components/MasterFile'
+import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../../../lib/auth'
 import { getCollections } from '../../../../../lib/catalog'
+import { usageThisMonth } from '../../../../../lib/uploadQuota'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Book details' }
@@ -39,6 +42,10 @@ export default async function BookDetailsPage({
 
   const collections = await getCollections()
   const draft = book.conversion?.state === 'draft'
+  const readable = (book.artifacts ?? []).some((a) => a.format === 'epub')
+  const hasMaster = (book.artifacts ?? []).some((a) => a.format === 'docx')
+  const isAdmin = Boolean(user.roles?.includes('admin'))
+  const usage = isAdmin ? null : await usageThisMonth(payload, user.id)
 
   return (
     <>
@@ -51,6 +58,26 @@ export default async function BookDetailsPage({
           We read these from <strong>{book.conversion?.sourceFilename ?? 'your file'}</strong>.
           Correct anything that is wrong — files are often vague about themselves — then choose
           what happens next.
+        </p>
+      ) : null}
+
+      {readable ? (
+        <p className="book-actions">
+          <a className="book-actions__read" href={`/read/${book.slug}`}>
+            Read it
+          </a>
+          <span className="hint">
+            Private to you. Nobody else can open this, whatever the link.
+          </span>
+        </p>
+      ) : null}
+
+      {usage && draft ? (
+        <p className="hint">
+          {`This month you have converted ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books and ${usage.pages} of ${MONTHLY_PAGE_LIMIT} pages.`}
+          {book.estimatedPages
+            ? ` This one looks like about ${book.estimatedPages} pages.`
+            : ' We could not tell how long this one is, so it counts as one book and no pages.'}
         </p>
       ) : null}
 
@@ -70,6 +97,10 @@ export default async function BookDetailsPage({
         }}
         collections={collections.map((c) => ({ id: Number(c.id), title: c.title }))}
       />
+
+      {/* Only once the book has been through the pipeline: there is
+          nothing to correct until something has been generated. */}
+      {draft ? null : <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />}
     </>
   )
 }

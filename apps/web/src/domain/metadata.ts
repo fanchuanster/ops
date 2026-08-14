@@ -22,6 +22,10 @@ export interface ExtractedMetadata {
   author?: string
   description?: string
   language?: string
+  /** Pages, when the file states them outright. */
+  pageCount?: number
+  /** Characters of text, when it states those instead. */
+  characters?: number
 }
 
 /** Titles longer than this are a paragraph that ended up in the wrong field. */
@@ -137,6 +141,47 @@ export function fromPdfText(raw: string): ExtractedMetadata {
 }
 
 /**
+ * A PDF's page count, from the page tree root.
+ *
+ * `/Type /Pages … /Count n` is written by every producer and sits near
+ * the trailer, which is inside the window already being scanned. The
+ * largest `/Count` wins: a PDF may have intermediate page-tree nodes
+ * with their own smaller counts, and the root's is the total.
+ */
+export function pdfPageCount(raw: string): number | undefined {
+  const counts = [...raw.matchAll(/\/Count\s+(\d+)/g)]
+    .map((match) => Number(match[1]))
+    .filter((n) => Number.isFinite(n) && n > 0)
+
+  if (counts.length > 0) return Math.max(...counts)
+
+  // No page tree in the window — fall back to counting page objects,
+  // which works on the small hand-written PDFs that have no /Count.
+  const objects = raw.match(/\/Type\s*\/Page[^s]/g)
+  return objects && objects.length > 0 ? objects.length : undefined
+}
+
+/**
+ * DOCX statistics, from `docProps/app.xml`.
+ *
+ * Word writes a real page count here. python-docx and most other
+ * generators do not, so this is often absent — which is why the quota
+ * treats an unmeasurable book as zero pages and lets the upload count
+ * catch it instead.
+ */
+export function fromAppXml(xml: string): Pick<ExtractedMetadata, 'pageCount' | 'characters'> {
+  const number = (name: string) => {
+    const found = xml.match(new RegExp(`<${name}>(\\d+)</${name}>`, 'i'))
+    const value = found ? Number(found[1]) : NaN
+    return Number.isFinite(value) && value > 0 ? value : undefined
+  }
+  return dropEmpty({
+    pageCount: number('Pages'),
+    characters: number('CharactersWithSpaces') ?? number('Characters'),
+  }) as Pick<ExtractedMetadata, 'pageCount' | 'characters'>
+}
+
+/**
  * One `/Key (value)` or `/Key <hex>` entry from a PDF dictionary.
  *
  * Both forms are legal and both are common: producers that write
@@ -218,13 +263,18 @@ export function fromFilename(filename: string): ExtractedMetadata {
  * dictionary.
  */
 export function mergeMetadata(...sources: ExtractedMetadata[]): ExtractedMetadata {
-  const merged: ExtractedMetadata = {}
+  const merged: Record<string, unknown> = {}
   for (const source of sources) {
-    for (const [key, value] of Object.entries(source) as [keyof ExtractedMetadata, string][]) {
-      if (!merged[key] && value) merged[key] = value
+    for (const [key, value] of Object.entries(source)) {
+      // `=== undefined` rather than falsy: the fields are no longer all
+      // strings, and a page count of 0 is a value we would want to keep
+      // if anything ever produced one.
+      if (merged[key] === undefined && value !== undefined && value !== '') {
+        merged[key] = value
+      }
     }
   }
-  return merged
+  return merged as ExtractedMetadata
 }
 
 /** The catalog's language codes. Anything unrecognised is left unset. */

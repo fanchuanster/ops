@@ -91,6 +91,10 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
         author: suggested.author,
         description: suggested.description,
         ...(suggested.language ? { language: suggested.language as 'zh-Hant' } : {}),
+        // What the quota will be charged if this draft is converted.
+        // Recorded now because the file is in hand now; the real count
+        // replaces it when conversion finishes.
+        estimatedPages: suggested.estimatedPages ?? undefined,
         // `unknown` until the reader says otherwise, and `unknown` is
         // exactly what blocks submission — so the question cannot be
         // skipped by never answering it.

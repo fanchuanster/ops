@@ -17,12 +17,15 @@
 
 import {
   type ExtractedMetadata,
+  fromAppXml,
   fromCoreXml,
   fromFilename,
   fromPdfText,
   fromPlainText,
   mergeMetadata,
+  pdfPageCount,
 } from '../domain/metadata'
+import { estimatePages } from '../domain/uploadQuota'
 
 /**
  * How much of a PDF to scan for metadata.
@@ -38,32 +41,57 @@ const PDF_SCAN_BYTES = 512 * 1024
 /** A DOCX entry bigger than this is not a properties file. */
 const MAX_ZIP_ENTRY = 1024 * 1024
 
-export async function extractMetadata(
-  file: File,
-): Promise<ExtractedMetadata> {
+/** Text long enough to measure without reading a whole book into memory. */
+const TEXT_SAMPLE = 4 * 1024 * 1024
+
+export interface Extraction extends ExtractedMetadata {
+  /**
+   * What the quota is charged against, before anything is rendered.
+   *
+   * Null when the file says nothing about its own length — which the
+   * quota treats as zero pages rather than a refusal, because the
+   * upload count still catches it.
+   */
+  estimatedPages: number | null
+}
+
+export async function extractMetadata(file: File): Promise<Extraction> {
   const byFilename = fromFilename(file.name)
+  let found: ExtractedMetadata = {}
 
   try {
     const type = file.type
     if (type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      const core = await readZipEntry(file, 'docProps/core.xml')
-      return mergeMetadata(core ? fromCoreXml(core) : {}, byFilename)
-    }
-
-    if (type === 'application/pdf') {
-      return mergeMetadata(fromPdfText(await readPdfEnds(file)), byFilename)
-    }
-
-    if (type.startsWith('text/')) {
-      const head = await file.slice(0, 8 * 1024).text()
-      return mergeMetadata(fromPlainText(head), byFilename)
+      const [core, app] = await Promise.all([
+        readZipEntry(file, 'docProps/core.xml'),
+        readZipEntry(file, 'docProps/app.xml'),
+      ])
+      found = mergeMetadata(core ? fromCoreXml(core) : {}, app ? fromAppXml(app) : {})
+    } else if (type === 'application/pdf') {
+      const raw = await readPdfEnds(file)
+      found = mergeMetadata(fromPdfText(raw), { pageCount: pdfPageCount(raw) })
+    } else if (type.startsWith('text/')) {
+      const text = await file.slice(0, TEXT_SAMPLE).text()
+      // Extrapolate when the file was longer than the sample, so a huge
+      // text upload is not charged as a small one.
+      const ratio = file.size > TEXT_SAMPLE ? file.size / TEXT_SAMPLE : 1
+      found = mergeMetadata(fromPlainText(text), {
+        characters: Math.round(text.length * ratio),
+      })
     }
   } catch {
     // A corrupt zip, a truncated PDF, a decode failure. The filename is
     // still worth something and the reader can fix the rest.
   }
 
-  return byFilename
+  const metadata = mergeMetadata(found, byFilename)
+  return {
+    ...metadata,
+    estimatedPages: estimatePages({
+      pdfPageCount: metadata.pageCount ?? null,
+      characters: metadata.characters ?? null,
+    }),
+  }
 }
 
 /**

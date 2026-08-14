@@ -4,6 +4,7 @@ import * as migration_20260813_183717_add_book_level_and_review from './20260813
 import * as migration_20260813_191556_add_google_id from './20260813_191556_add_google_id';
 import * as migration_20260814_025455_add_avatar_url from './20260814_025455_add_avatar_url';
 import * as migration_20260814_050000_books_credits_and_uploads from './20260814_050000_books_credits_and_uploads';
+import * as migration_20260814_150000_upload_quota from './20260814_150000_upload_quota';
 
 export const migrations = [
   {
@@ -35,5 +36,10 @@ export const migrations = [
     up: migration_20260814_050000_books_credits_and_uploads.up,
     down: migration_20260814_050000_books_credits_and_uploads.down,
     name: '20260814_050000_books_credits_and_uploads'
+  },
+  {
+    up: migration_20260814_150000_upload_quota.up,
+    down: migration_20260814_150000_upload_quota.down,
+    name: '20260814_150000_upload_quota'
   },
 ];
