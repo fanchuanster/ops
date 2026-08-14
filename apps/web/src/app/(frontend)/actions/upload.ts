@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { LEVEL_IDS } from '../../../domain/levels'
+import { isUploaderSelectableRights } from '../../../domain/rights'
 import { getCurrentUser } from '../../../lib/auth'
 import { objectBucket } from '../../../lib/storage'
 
@@ -45,20 +46,6 @@ const ACCEPTED = new Map<string, string>([
 /** Large enough for a scanned book, small enough to bound a Worker. */
 const MAX_BYTES = 64 * 1024 * 1024
 
-/**
- * Rights an uploader may claim for their own material.
- *
- * `user_owned` says "I have a copy". It never clears public
- * distribution — see domain/rights.ts — which is exactly why it is safe
- * to let the uploader pick it.
- */
-export const UPLOADER_RIGHTS = [
-  { value: 'user_owned', label: 'I own a copy of this book (stays private to me)' },
-  { value: 'public_domain', label: 'It is in the public domain' },
-  { value: 'permission_granted', label: 'I have the rights holder’s permission' },
-  { value: 'licensed', label: 'It is licensed for redistribution' },
-] as const
-
 export async function uploadBook(_prev: UploadState, formData: FormData): Promise<UploadState> {
   const user = await getCurrentUser()
   if (!user) return { error: 'Sign in to upload a book.' }
@@ -78,7 +65,7 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
   if (!title) return { error: 'Give the book a title.' }
 
   const rightsStatus = String(formData.get('rightsStatus') || '')
-  if (!UPLOADER_RIGHTS.some((option) => option.value === rightsStatus)) {
+  if (!isUploaderSelectableRights(rightsStatus)) {
     return { error: 'Say where this book came from.' }
   }
 

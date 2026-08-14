@@ -35,7 +35,14 @@ import {
 } from './levels'
 import { canPublishToLibrary, canSubmitForReview, requiresAdmin } from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
-import { canAccessArtifact, canReadOnline, effectiveRightsStatus, isPubliclyDistributable } from './rights'
+import {
+  UPLOADER_RIGHTS,
+  canAccessArtifact,
+  canReadOnline,
+  effectiveRightsStatus,
+  isPubliclyDistributable,
+  isUploaderSelectableRights,
+} from './rights'
 
 const NOW = new Date('2026-08-12T12:00:00Z')
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000)
@@ -572,5 +579,39 @@ describe('reading online is free of the account requirement', () => {
     expect(canReadOnline({ book, userId: 'owner-1', ownerId: 'owner-1' })).toEqual({
       allowed: true,
     })
+  })
+})
+
+describe('what an uploader may claim about their own file', () => {
+  it('offers only statuses that are safe for an uploader to pick', () => {
+    expect(UPLOADER_RIGHTS.map((o) => o.value).sort()).toEqual([
+      'licensed',
+      'permission_granted',
+      'public_domain',
+      'user_owned',
+    ])
+  })
+
+  it('never offers unknown or restricted', () => {
+    // `unknown` is excluded because the uploader is the one person who
+    // can answer, and accepting "don't know" defers it to someone with
+    // less information. `restricted` because nobody uploads a book in
+    // order to declare it undistributable.
+    for (const value of ['unknown', 'restricted']) {
+      expect(isUploaderSelectableRights(value)).toBe(false)
+    }
+  })
+
+  it('rejects anything that is not one of the offered values', () => {
+    for (const junk of ['', 'admin', null, undefined, 42, {}]) {
+      expect(isUploaderSelectableRights(junk)).toBe(false)
+    }
+  })
+
+  it('offers user_owned, which can never clear public distribution', () => {
+    // Safe to offer precisely because owning a copy is not a right to
+    // publish it to everyone else.
+    expect(isUploaderSelectableRights('user_owned')).toBe(true)
+    expect(isPubliclyDistributable('user_owned')).toBe(false)
   })
 })

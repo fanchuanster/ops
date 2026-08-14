@@ -101,6 +101,36 @@ function restrictiveness(status: RightsStatus): number {
   }
 }
 
+/**
+ * The rights an uploader may claim for their own material.
+ *
+ * A deliberate subset, and the omissions are the point. `unknown` is
+ * missing because the uploader is the one person who knows where their
+ * file came from, and this is the single moment in the flow when the
+ * question is easy to answer — accepting "don't know" here just defers
+ * it to someone with less information. `restricted` is missing because
+ * nobody uploads a book in order to declare it undistributable.
+ *
+ * `user_owned` is safe to offer precisely because it never clears
+ * public distribution: a reader owning a copy confers no right to
+ * publish it to everyone else (CLAUDE.md section 6.1).
+ *
+ * Lives here rather than beside the upload action because a `'use
+ * server'` module may only export async functions — Next rewrites every
+ * other export into an action reference, and a client component that
+ * imports one gets a function where it expected data.
+ */
+export const UPLOADER_RIGHTS = [
+  { value: 'user_owned', label: 'I own a copy of this book (stays private to me)' },
+  { value: 'public_domain', label: 'It is in the public domain' },
+  { value: 'permission_granted', label: 'I have the rights holder’s permission' },
+  { value: 'licensed', label: 'It is licensed for redistribution' },
+] as const satisfies readonly { value: RightsStatus; label: string }[]
+
+export function isUploaderSelectableRights(value: unknown): value is RightsStatus {
+  return UPLOADER_RIGHTS.some((option) => option.value === value)
+}
+
 export function isPubliclyDistributable(status: RightsStatus): boolean {
   return PUBLICLY_DISTRIBUTABLE.has(status)
 }

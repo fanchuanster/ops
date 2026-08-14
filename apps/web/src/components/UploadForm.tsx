@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react'
 
-import { UPLOADER_RIGHTS, uploadBook, type UploadState } from '../app/(frontend)/actions/upload'
+import { uploadBook, type UploadState } from '../app/(frontend)/actions/upload'
+import { UPLOADER_RIGHTS } from '../domain/rights'
 
 /**
  * The conversion portal's one form.
