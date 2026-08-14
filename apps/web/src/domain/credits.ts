@@ -51,6 +51,8 @@ export type CreditReason =
   | 'unlock'
   /** Any delivery after the first, at the flat resend price. */
   | 'resend'
+  /** Paid to an uploader when a reader sends their book. */
+  | 'uploader_share'
   | 'adjustment'
 
 /**

@@ -54,6 +54,7 @@ export const CreditLedger: CollectionConfig = {
         { label: 'Monthly grant — away', value: 'monthly_inactive' },
         { label: 'Unlocked a book', value: 'unlock' },
         { label: 'Sent a book again', value: 'resend' },
+        { label: 'Share of a reader sending your book', value: 'uploader_share' },
         { label: 'Manual adjustment', value: 'adjustment' },
       ],
     },

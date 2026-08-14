@@ -4,6 +4,10 @@ import React from 'react'
 
 import { KindleSettings } from '../../../components/KindleSettings'
 import {
+  SHARE_LICENSED,
+  SHARE_PUBLIC_DOMAIN,
+} from '../../../domain/uploaderShare'
+import {
   ACTIVE_MONTH_GRANT,
   INACTIVE_MONTH_GRANT,
   MAX_BOOK_PRICE,
@@ -22,6 +26,7 @@ export default async function AccountPage() {
   const user = await getCurrentUser()
   if (!user) return null
 
+  const pendingShare = user.creditSharePoints ?? 0
   const payload = await getPayload({ config })
   const ledger = await payload.find({
     collection: 'credit-ledger',
@@ -48,7 +53,16 @@ export default async function AccountPage() {
         </li>
         <li>{`Sending a book you already have costs ${RESEND_PRICE} credit.`}</li>
         <li>{`You get ${ACTIVE_MONTH_GRANT} credits for any month you sign in, and ${INACTIVE_MONTH_GRANT} for a month you are away.`}</li>
+        <li>
+          {`Upload a book and you earn a share of what readers spend sending it — ${SHARE_PUBLIC_DOMAIN}% for a public-domain text you digitised, ${SHARE_LICENSED}% for one you wrote or hold a licence to.`}
+        </li>
       </ul>
+
+      {pendingShare > 0 ? (
+        <p className="hint">
+          {`You have earned ${pendingShare} hundredths of a credit from readers sending your books. It becomes a whole credit at 100 — nothing is lost on the way.`}
+        </p>
+      ) : null}
 
       {ledger.docs.length > 0 ? (
         <table className="ledger">
@@ -93,5 +107,6 @@ const LEDGER_LABEL: Record<string, string> = {
   monthly_inactive: 'Monthly credits (away)',
   unlock: 'Unlocked a book',
   resend: 'Sent again',
+  uploader_share: 'Someone sent your book',
   adjustment: 'Adjustment',
 }

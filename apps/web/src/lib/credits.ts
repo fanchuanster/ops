@@ -23,6 +23,7 @@ import {
   monthKey,
   totalCredits,
 } from '../domain/credits'
+import { settleShare, shareForDelivery } from '../domain/uploaderShare'
 
 export interface CreditMovement {
   delta: number
@@ -198,4 +199,78 @@ export async function recordEntitlement(
     data: { user: Number(userId), book: Number(bookId), creditsPaid },
     overrideAccess: true,
   })
+}
+
+/**
+ * Pay an uploader their share of a delivery someone else paid for.
+ *
+ * Called after the reader has been charged, and only then — the share
+ * is a fraction of credits that actually moved, so paying it before the
+ * charge succeeded would create credits out of nothing.
+ *
+ * Never throws. A share that cannot be recorded must not fail the
+ * delivery the reader already paid for; the loss is one fraction of one
+ * credit, and the book still arrives.
+ */
+export async function payUploaderShare(
+  payload: Payload,
+  {
+    bookId,
+    creditsSpent,
+    paidBy,
+  }: {
+    bookId: string | number
+    creditsSpent: number
+    /** The reader who paid, so an uploader is never paid by themselves. */
+    paidBy: string | number
+  },
+): Promise<void> {
+  try {
+    if (creditsSpent <= 0) return
+
+    const book = await payload.findByID({
+      collection: 'books',
+      id: bookId,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const ownerId = typeof book.owner === 'object' ? book.owner?.id : book.owner
+
+    // No uploader, or the uploader is the one sending it. Their own
+    // delivery is free anyway, so this is belt and braces.
+    if (!ownerId || String(ownerId) === String(paidBy)) return
+
+    const points = shareForDelivery({
+      creditsSpent,
+      rightsStatus: book.rightsStatus,
+      hasUploader: true,
+    })
+    if (points <= 0) return
+
+    const owner = await payload.findByID({
+      collection: 'users',
+      id: ownerId,
+      overrideAccess: true,
+    })
+
+    const settled = settleShare({ carry: owner.creditSharePoints ?? 0, points })
+
+    // The carry always moves; the balance only when a whole credit has
+    // accumulated. Written together so the two cannot disagree about
+    // what has been paid.
+    await payload.update({
+      collection: 'users',
+      id: ownerId,
+      data: { creditSharePoints: settled.carry },
+      overrideAccess: true,
+    })
+
+    if (settled.credits > 0) {
+      await applyCredits(payload, ownerId, [
+        { delta: settled.credits, reason: 'uploader_share', bookId },
+      ])
+    }
+  } catch {
+    // See above: never at the cost of the delivery.
+  }
 }

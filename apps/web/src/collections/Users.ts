@@ -148,6 +148,17 @@ export const Users: CollectionConfig = {
       },
     },
     {
+      name: 'creditSharePoints',
+      type: 'number',
+      defaultValue: 0,
+      admin: {
+        readOnly: true,
+        description:
+          'Hundredths of a credit earned from readers sending this uploader’s books, not yet worth a whole credit. A third of a 1-credit book is 0.33 — paid as whole credits that is nothing, forever — so shares accumulate here and pay out on crossing 100. See domain/uploaderShare.ts.',
+      },
+      access: { create: () => false, update: () => false },
+    },
+    {
       name: 'creditsGrantedThrough',
       type: 'text',
       admin: {

@@ -255,7 +255,7 @@ export async function chargeForDelivery(
     isResend: boolean
   },
 ): Promise<void> {
-  const { applyCredits, recordEntitlement } = await import('./credits')
+  const { applyCredits, payUploaderShare, recordEntitlement } = await import('./credits')
 
   if (cost > 0) {
     await applyCredits(payload, userId, [
@@ -274,6 +274,11 @@ export async function chargeForDelivery(
     data: { user: Number(userId), book: Number(bookId), format, creditsPaid: cost },
     overrideAccess: true,
   })
+
+  // The uploader's cut, after the reader's credits have actually moved.
+  // A share is a fraction of what was spent, so paying it any earlier
+  // would be creating credits from a charge that might not have landed.
+  await payUploaderShare(payload, { bookId, creditsSpent: cost, paidBy: userId })
 }
 
 /**

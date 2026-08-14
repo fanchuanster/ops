@@ -8,6 +8,7 @@ import { ConversionProgress } from '../../../../../components/ConversionProgress
 import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { UPLOADER_RIGHTS } from '../../../../../domain/rights'
+import { shareDescription } from '../../../../../domain/uploaderShare'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../../../lib/auth'
 import { getCollections } from '../../../../../lib/catalog'
@@ -51,6 +52,7 @@ export default async function BookDetailsPage({
   const usage = isAdmin ? null : await usageThisMonth(payload, user.id)
   const state = book.conversion?.state ?? 'none'
   const rightsDeclared = UPLOADER_RIGHTS.some((o) => o.value === book.rightsStatus)
+  const share = shareDescription(book.rightsStatus)
 
   return (
     <>
@@ -101,6 +103,8 @@ export default async function BookDetailsPage({
         collections={collections.map((c) => ({ id: Number(c.id), title: c.title }))}
         submitLabel={draft ? 'Convert this book' : 'Save changes'}
       />
+
+      {share && book.visibility === 'public' ? <p className="hint">{share}</p> : null}
 
       <ConversionProgress state={state} message={book.conversion?.message} />
 
