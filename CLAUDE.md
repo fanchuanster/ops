@@ -345,8 +345,18 @@ code.
 Kubernetes / AWS EKS remains a possible future target. Do not
 prematurely introduce Kubernetes-specific complexity into the MVP.
 
-PaddleOCR is the OCR engine feeding the conversion services (see section
-8, OCR, for the fuller evaluation). The conversion service is
+OCR runs on **Google Document AI**, over its REST API, provisioned by
+`infra/documentai.tf`. PaddleOCR was the engine until 2026-08-14 and the
+implementation behind `app/ocr/base.py` remains; what changed is where
+the compute happens. OCR cannot run on a Worker — 128 MB of memory and
+five minutes of CPU against a model needing more of both — and calling a
+hosted service turns that compute into an HTTP request, which a Worker is
+billed almost nothing for. Batch processing, not online: online caps a
+request at 15 pages, batch takes 500.
+
+PDF rendering is deferred. EPUB is the primary format and the DOCX master
+is the source of truth; the three PDF variants are a future addition, not
+a gap in the current pipeline. The conversion service is
 deliberately standalone and platform-agnostic — it talks to the web
 application over HTTP and knows nothing about the frontend.
 

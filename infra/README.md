@@ -157,3 +157,45 @@ The apex `noblesee.com` record still points at the retired Cloudflare Tunnel
 and is **not** managed here. `cloudflare_workers_custom_domain` creates and
 owns that record, so it will be replaced at step 3 above. Until then the apex
 resolves to a tunnel with nothing behind it.
+
+
+## Document AI (OCR)
+
+OCR is the one stage that cannot run on a Worker — 128 MB of memory and
+five minutes of CPU, against a model that needs more of both — so it runs
+on Google Document AI and becomes an HTTP call, which a Worker is billed
+almost nothing for.
+
+`documentai.tf` provisions an `OCR_PROCESSOR`, a private bucket for batch
+input and output, a service account with the two narrow roles it needs,
+and the Document AI service agent's access to that bucket.
+
+Batch rather than online: online caps a request at 15 pages, so a
+300-page book would be twenty calls to orchestrate; batch takes 500 in
+one operation. Batch answers into the bucket rather than inline, which is
+why the bucket exists.
+
+```bash
+gcloud auth application-default login          # the provider reads the environment
+
+cd infra
+cp terraform.tfvars.example terraform.tfvars   # set gcp_project, documentai_bucket
+./tf apply
+
+# Into the Worker, once:
+terraform output -raw documentai_service_account_key |
+  (cd ../apps/web && ./cf npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY)
+```
+
+Then set the non-secret values as Worker vars, from `terraform output`:
+`DOCUMENT_AI_PROCESSOR`, `DOCUMENT_AI_LOCATION`, `DOCUMENT_AI_BUCKET`.
+
+The bucket is private with public access *prevented*, not merely unset:
+readers' private uploads pass through it. Objects are deleted after seven
+days — nothing there is a record of anything, since the source stays in
+R2 and the OCR output is folded into the DOCX master.
+
+The service-account key is the one long-lived Google credential in the
+system, which is why the grants are as narrow as they are: run processors
+on the project, read and write objects in one bucket, nothing else. It
+lands in Terraform state, so state stays local and gitignored.

@@ -78,3 +78,44 @@ variable "email_dns_records" {
   }))
   default = []
 }
+
+# --- Google Cloud, for Document AI OCR -----------------------------------
+#
+# Separate from everything above: these describe a second cloud. The
+# Cloudflare side needs none of them, and `terraform plan` will not ask
+# for them unless the Document AI resources are in scope.
+
+variable "gcp_project" {
+  description = "Google Cloud project id that owns the Document AI processor and the conversion bucket."
+  type        = string
+}
+
+variable "documentai_location" {
+  description = <<-EOT
+    Document AI multi-region. Fixed for a processor's life — changing it
+    replaces the processor. `eu` keeps documents in Europe; `us` is the
+    other multi-region. Enterprise Document OCR is also available in
+    several single regions.
+  EOT
+  type        = string
+  default     = "eu"
+
+  validation {
+    condition = contains([
+      "us", "eu", "asia-south1", "asia-southeast1", "australia-southeast1",
+      "europe-west2", "europe-west3", "northamerica-northeast1",
+    ], var.documentai_location)
+    error_message = "Not a location Enterprise Document OCR is offered in."
+  }
+}
+
+variable "gcs_location" {
+  description = "Location for the conversion bucket. Keep it with the processor so batch jobs are not cross-region."
+  type        = string
+  default     = "EU"
+}
+
+variable "documentai_bucket" {
+  description = "Globally unique name for the private conversion bucket."
+  type        = string
+}

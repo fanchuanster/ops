@@ -6,6 +6,24 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.0"
     }
+
+    # OCR runs on Document AI, which is the one part of this system that
+    # is not on Cloudflare. See documentai.tf for why.
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 6.0"
+    }
+
+    # For exactly one resource: google_project_service_identity, which
+    # creates the Document AI service agent. Batch OCR writes its output
+    # as that agent rather than as the caller, so the agent needs access
+    # to the bucket — and granting IAM to an agent that has not been
+    # created yet is how a first `apply` fails. The GA provider has no
+    # equivalent resource.
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 6.0"
+    }
   }
 
   # State is local for now.
