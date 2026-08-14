@@ -10,7 +10,6 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { checkDownloadLimit, type DownloadRecord } from './downloadLimit'
 import {
   KINDLE_SENDER_ADDRESS,
   checkKindleAddress,
@@ -23,6 +22,7 @@ import {
   decideGoogleSignIn,
   verifyGoogleClaims,
 } from './googleIdentity'
+import { readerAvatarHue, readerInitials, readerName } from './avatar'
 import {
   BOOK_LEVELS,
   DEFAULT_BROWSE_LEVEL,
@@ -36,7 +36,6 @@ import {
 import { canPublishToLibrary, canSubmitForReview, requiresAdmin } from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
 import { canAccessArtifact, effectiveRightsStatus, isPubliclyDistributable } from './rights'
-import { releaseState } from './stagedRelease'
 
 const NOW = new Date('2026-08-12T12:00:00Z')
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000)
@@ -87,93 +86,7 @@ describe('rights', () => {
   })
 })
 
-describe('download limit', () => {
-  const policy = { maxBooksPerWindow: 2, windowHours: 24 }
 
-  it('counts four formats of one book as a single slot', () => {
-    const history: DownloadRecord[] = ['epub', 'docx', 'pdf_standard', 'pdf_large'].map(() => ({
-      bookId: 'book-1',
-      at: hoursAgo(1),
-    }))
-    const decision = checkDownloadLimit('book-1', history, NOW, policy)
-    expect(decision.allowed).toBe(true)
-    // One distinct book consumed, so one slot remains of two.
-    expect(decision.remaining).toBe(1)
-  })
-
-  it('blocks a second distinct book once the limit is reached', () => {
-    const history: DownloadRecord[] = [
-      { bookId: 'book-1', at: hoursAgo(2) },
-      { bookId: 'book-2', at: hoursAgo(1) },
-    ]
-    const decision = checkDownloadLimit('book-3', history, NOW, policy)
-    expect(decision.allowed).toBe(false)
-    if (!decision.allowed) {
-      // The slot frees when the oldest book ages out, not 24h from now.
-      expect(decision.retryAfter.toISOString()).toBe(
-        new Date(hoursAgo(2).getTime() + 24 * 60 * 60 * 1000).toISOString(),
-      )
-    }
-  })
-
-  it('still allows a book already counted in the window, even at the limit', () => {
-    const history: DownloadRecord[] = [
-      { bookId: 'book-1', at: hoursAgo(2) },
-      { bookId: 'book-2', at: hoursAgo(1) },
-    ]
-    const decision = checkDownloadLimit('book-1', history, NOW, policy)
-    expect(decision.allowed).toBe(true)
-    if (decision.allowed) expect(decision.alreadyCounted).toBe(true)
-  })
-
-  it('rolls old downloads out of the window', () => {
-    const history: DownloadRecord[] = [
-      { bookId: 'book-1', at: hoursAgo(25) },
-      { bookId: 'book-2', at: hoursAgo(30) },
-    ]
-    expect(checkDownloadLimit('book-3', history, NOW, policy).allowed).toBe(true)
-  })
-})
-
-describe('staged release', () => {
-  const config = { enabled: true, unlockDelayHours: 24 }
-  const progress = (entries: [number, Date][]) => ({ startedAt: new Map(entries) })
-
-  it('always opens the first part', () => {
-    expect(releaseState(1, progress([]), config, NOW)).toEqual({ state: 'open' })
-  })
-
-  it('opens everything when staging is disabled', () => {
-    expect(
-      releaseState(5, progress([]), { enabled: false, unlockDelayHours: 24 }, NOW),
-    ).toEqual({ state: 'open' })
-  })
-
-  it('makes the next part wait, and says when it opens', () => {
-    const state = releaseState(2, progress([[1, hoursAgo(6)]]), config, NOW)
-    expect(state.state).toBe('waiting')
-    if (state.state === 'waiting') {
-      expect(state.opensAt.toISOString()).toBe(
-        new Date(hoursAgo(6).getTime() + 24 * 60 * 60 * 1000).toISOString(),
-      )
-    }
-  })
-
-  it('opens the next part once the delay has elapsed', () => {
-    expect(releaseState(2, progress([[1, hoursAgo(25)]]), config, NOW)).toEqual({ state: 'open' })
-  })
-
-  it('locks a part whose predecessor was never started', () => {
-    expect(releaseState(3, progress([[1, hoursAgo(48)]]), config, NOW)).toEqual({
-      state: 'locked',
-      reason: 'previous_part_not_started',
-    })
-  })
-
-  it('keeps a part open once the reader has started it', () => {
-    expect(releaseState(2, progress([[2, hoursAgo(1)]]), config, NOW)).toEqual({ state: 'open' })
-  })
-})
 
 describe('password policy', () => {
   it('accepts a password at the minimum length', () => {
@@ -523,6 +436,37 @@ describe('google sign-in', () => {
     ).toEqual({ action: 'refuse', reason: 'linked_to_other_account' })
   })
 
+  it('takes the profile picture when Google sends a usable one', () => {
+    const result = verify({ picture: 'https://lh3.googleusercontent.com/a/abc123=s96-c' })
+    expect(result.ok && result.profile.avatarUrl).toBe(
+      'https://lh3.googleusercontent.com/a/abc123=s96-c',
+    )
+  })
+
+  it('refuses a picture that is not plainly an https URL', () => {
+    // The token is signed, so this is defence in depth rather than the
+    // load-bearing check — but nothing that is not https should ever
+    // reach an <img src>.
+    for (const picture of [
+      'javascript:alert(1)',
+      'data:image/svg+xml,<svg onload="alert(1)"/>',
+      'http://lh3.googleusercontent.com/a/abc',
+      'not a url',
+      '',
+      42,
+      null,
+    ]) {
+      const result = verify({ picture })
+      expect(result.ok && result.profile.avatarUrl).toBeUndefined()
+    }
+  })
+
+  it('signs in fine when Google sends no picture at all', () => {
+    const result = verify({ picture: undefined })
+    expect(result.ok).toBe(true)
+    expect(result.ok && result.profile.avatarUrl).toBeUndefined()
+  })
+
   it('has a reader-facing message for every refusal', () => {
     for (const key of [
       'email_unverified',
@@ -535,6 +479,60 @@ describe('google sign-in', () => {
       'no_email',
     ] as const) {
       expect(SIGN_IN_REFUSAL_MESSAGES[key]).toBeTruthy()
+    }
+  })
+})
+
+describe('reader name and initials', () => {
+  it('prefers the display name', () => {
+    expect(readerName({ email: 'reader@example.com', displayName: 'Wen Dong' })).toBe('Wen Dong')
+  })
+
+  it('falls back to the local part rather than the whole address', () => {
+    // The header is on screen constantly; the full address is not for it.
+    expect(readerName({ email: 'reader@example.com' })).toBe('reader')
+    expect(readerName({ email: 'reader@example.com', displayName: '   ' })).toBe('reader')
+    expect(readerName({ email: 'reader@example.com', displayName: null })).toBe('reader')
+  })
+
+  it('takes two initials from a two-part name and one otherwise', () => {
+    expect(readerInitials({ email: 'a@b.com', displayName: 'Wen Dong' })).toBe('WD')
+    expect(readerInitials({ email: 'a@b.com', displayName: 'Ada' })).toBe('A')
+    // First and last, so a middle name does not displace the surname.
+    expect(readerInitials({ email: 'a@b.com', displayName: 'Ada King Lovelace' })).toBe('AL')
+  })
+
+  it('keeps a whole CJK character rather than splitting one', () => {
+    expect(readerInitials({ email: 'a@b.com', displayName: '王守仁' })).toBe('王')
+  })
+
+  it('does not return half a surrogate pair', () => {
+    // string[0] on an astral character yields a lone surrogate, which
+    // renders as a replacement box.
+    const initials = readerInitials({ email: 'a@b.com', displayName: '𠮷田' })
+    expect([...initials]).toHaveLength(1)
+    expect(initials).toBe('𠮷')
+  })
+
+  it('falls back to the address when there is no name', () => {
+    expect(readerInitials({ email: 'reader@example.com' })).toBe('R')
+  })
+
+  it('gives the same colour for the same reader every time', () => {
+    const identity = { email: 'reader@example.com' }
+    expect(readerAvatarHue(identity)).toBe(readerAvatarHue({ email: ' Reader@Example.COM ' }))
+  })
+
+  it('does not change colour when the display name changes', () => {
+    const hue = readerAvatarHue({ email: 'reader@example.com', displayName: 'Before' })
+    expect(readerAvatarHue({ email: 'reader@example.com', displayName: 'After' })).toBe(hue)
+  })
+
+  it('keeps the hue clear of the site accent', () => {
+    for (const email of ['a@b.com', 'reader@example.com', 'x@y.z', '\u738b@example.com']) {
+      const hue = readerAvatarHue({ email })
+      expect(hue).toBeGreaterThanOrEqual(80)
+      expect(hue).toBeLessThan(360)
     }
   })
 })

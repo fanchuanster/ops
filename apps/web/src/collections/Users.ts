@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
 import { KINDLE_DOMAINS, KINDLE_SENDER_ADDRESS, checkKindleAddress } from '../domain/kindle'
+import { SIGNUP_GRANT } from '../domain/credits'
 import { checkPassword } from '../domain/password'
 
 /**
@@ -106,6 +107,55 @@ export const Users: CollectionConfig = {
         // `overrideAccess: true`. Nothing a reader can reach may touch
         // it — being able to write your own googleId is being able to
         // claim someone else's Google identity.
+        create: () => false,
+        update: () => false,
+      },
+    },
+    {
+      name: 'avatarUrl',
+      type: 'text',
+      label: 'Profile picture',
+      admin: {
+        readOnly: true,
+        description:
+          'A path on this site (/avatar?v=…), never Google’s URL. The picture is fetched once at sign-in and stored in R2 so readers’ browsers never call googleusercontent.com — see lib/avatars.ts. Re-checked on each sign-in, since Google changes the source URL when the reader changes their photo. Readers who registered with a password have none, and get initials instead.',
+      },
+      access: {
+        // Same reasoning as googleId: written only by the sign-in path,
+        // which uses `overrideAccess: true`. A reader who could set this
+        // could point it at any URL on the internet and have every page
+        // they appear on fetch it.
+        create: () => false,
+        update: () => false,
+      },
+    },
+    {
+      name: 'credits',
+      type: 'number',
+      // Not `required`: the default supplies it, and marking it required
+      // would make every `payload.create({ collection: 'users' })` in the
+      // codebase have to pass a balance it has no business choosing.
+      defaultValue: SIGNUP_GRANT,
+      admin: {
+        description:
+          'Spendable balance. The credit-ledger collection is the account of how it got here; this is the number the delivery check reads, because summing a ledger per request would be a table scan. Only lib/credits.ts may move it.',
+      },
+      access: {
+        // A reader who could write their own balance would not need to
+        // read anything ever again.
+        create: () => false,
+        update: () => false,
+      },
+    },
+    {
+      name: 'creditsGrantedThrough',
+      type: 'text',
+      admin: {
+        readOnly: true,
+        description:
+          'YYYY-MM of the last month granted. Accrual is lazy — it runs when the reader signs in — and this is what stops a month being paid twice. See domain/credits.ts.',
+      },
+      access: {
         create: () => false,
         update: () => false,
       },

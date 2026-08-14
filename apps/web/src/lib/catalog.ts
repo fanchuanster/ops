@@ -84,14 +84,22 @@ export async function getBookBySlug(slug: string) {
   return result.docs[0] ?? null
 }
 
-export async function getPartsForBook(bookId: string | number) {
+/**
+ * The books a reader uploaded, whatever state they are in.
+ *
+ * Access overridden and filtered by owner here, because a reader's own
+ * private conversions are exactly what the Books access rule hides from
+ * the public catalog — this is the one view that is meant to see them.
+ */
+export async function getBooksOwnedBy(userId: string | number, limit = 100) {
   const payload = await getPayload({ config })
   const result = await payload.find({
-    collection: 'parts',
-    where: { book: { equals: bookId }, status: { equals: 'published' } },
-    sort: 'order',
-    limit: 500,
-    overrideAccess: false,
+    collection: 'books',
+    where: { owner: { equals: userId } },
+    sort: '-createdAt',
+    limit,
+    depth: 1,
+    overrideAccess: true,
   })
   return result.docs
 }

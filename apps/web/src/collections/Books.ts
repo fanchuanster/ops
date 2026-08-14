@@ -7,6 +7,7 @@ import {
   REVIEW_STATES,
   canPublishToLibrary,
 } from '../domain/moderation'
+import { priceInCredits } from '../domain/credits'
 import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 
 /**
@@ -61,6 +62,19 @@ const enforcePublicationReview: CollectionBeforeChangeHook = ({ data, originalDo
   return data
 }
 
+/**
+ * The price follows the page count; nobody sets it by hand.
+ *
+ * Derived on write rather than computed on read so that what a reader
+ * was charged is a recorded fact rather than a re-derivation that could
+ * change under them when the rule changes. The rule itself is in
+ * `domain/credits.ts`.
+ */
+const priceFromPageCount: CollectionBeforeChangeHook = ({ data, originalDoc }) => {
+  const pages = data?.pageCount ?? originalDoc?.pageCount
+  return { ...data, priceCredits: priceInCredits(pages) }
+}
+
 const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {
   not_submitted: 'it has not been submitted for review.',
   awaiting_review: 'its submission is still awaiting review.',
@@ -70,8 +84,13 @@ const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {
 }
 
 /**
- * A Book is the bibliographic record. Its readable content lives in
- * Parts; its rights status gates everything beneath it.
+ * A Book is the whole work: one record, one DOCX master, one set of
+ * generated formats.
+ *
+ * Books used to be split into Parts, each separately released and
+ * separately downloadable. That is gone as of 2026-08-14 — a book is
+ * kept whole, as it was written. What the split bought was staged
+ * release, and what replaced it is the credit price below.
  *
  * The rights options are derived from the domain module rather than
  * restated here, so the vocabulary cannot drift between the CMS and the
@@ -90,7 +109,7 @@ export const Books: CollectionConfig = {
     read: readBooks,
   },
   hooks: {
-    beforeChange: [enforcePublicationReview],
+    beforeChange: [enforcePublicationReview, priceFromPageCount],
   },
   fields: [
     { name: 'title', type: 'text', required: true, index: true },
@@ -209,18 +228,89 @@ export const Books: CollectionConfig = {
       ],
     },
     {
-      name: 'stagedRelease',
-      type: 'group',
+      name: 'pageCount',
+      type: 'number',
+      index: true,
+      admin: {
+        description:
+          'Pages in the DOCX master — the measure the price is derived from. Set by the conversion pipeline, or by hand for books entered in the admin. Left empty, the book costs the minimum: a reader is not charged for our missing metadata.',
+      },
+    },
+    {
+      name: 'priceCredits',
+      type: 'number',
+      index: true,
+      admin: {
+        readOnly: true,
+        description:
+          'Derived from pageCount on every save and shown to readers as the book’s price. Never edit directly — set pageCount instead.',
+      },
+    },
+    {
+      name: 'artifacts',
+      type: 'array',
+      admin: {
+        description:
+          'Object-storage keys for the generated formats. Never public URLs: these are streamed through the application after an authorization decision.',
+      },
       fields: [
-        { name: 'enabled', type: 'checkbox', defaultValue: false },
         {
-          name: 'unlockDelayHours',
-          type: 'number',
-          defaultValue: 24,
-          admin: {
-            condition: (_, siblingData) => Boolean(siblingData?.enabled),
-            description: 'Per-reader delay before the next part opens.',
-          },
+          name: 'format',
+          type: 'select',
+          required: true,
+          options: [
+            { label: 'DOCX (editable master)', value: 'docx' },
+            { label: 'EPUB 3', value: 'epub' },
+            { label: 'PDF — Standard', value: 'pdf_standard' },
+            { label: 'PDF — Large', value: 'pdf_large' },
+            { label: 'PDF — Extra Large', value: 'pdf_xl' },
+          ],
+        },
+        { name: 'storageKey', type: 'text', required: true },
+        { name: 'bytes', type: 'number' },
+        { name: 'checksum', type: 'text' },
+        {
+          name: 'downloadable',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: { description: 'The DOCX master is normally NOT reader-downloadable.' },
+        },
+      ],
+    },
+    {
+      name: 'conversion',
+      type: 'group',
+      admin: {
+        description:
+          'Progress of a reader upload through the production pipeline. Library books entered by staff stay at "none".',
+      },
+      fields: [
+        {
+          name: 'state',
+          type: 'select',
+          // Defaulted rather than required, so a book created without a
+          // conversion group at all — every library book — is valid.
+          defaultValue: 'none',
+          index: true,
+          options: [
+            { label: 'Not a conversion', value: 'none' },
+            { label: 'Uploaded, queued', value: 'queued' },
+            { label: 'Converting', value: 'converting' },
+            { label: 'Ready', value: 'ready' },
+            { label: 'Failed', value: 'failed' },
+          ],
+        },
+        {
+          name: 'sourceKey',
+          type: 'text',
+          admin: { readOnly: true, description: 'The uploaded original in object storage.' },
+        },
+        { name: 'sourceFilename', type: 'text', admin: { readOnly: true } },
+        { name: 'jobId', type: 'text', admin: { readOnly: true } },
+        {
+          name: 'message',
+          type: 'textarea',
+          admin: { description: 'Shown to the uploader when a conversion fails.' },
         },
       ],
     },

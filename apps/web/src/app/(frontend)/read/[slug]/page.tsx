@@ -1,0 +1,77 @@
+import config from '@payload-config'
+import { notFound } from 'next/navigation'
+import { getPayload } from 'payload'
+import React from 'react'
+
+import { Reader } from '../../../../components/Reader'
+import { getCurrentUser } from '../../../../lib/auth'
+import { authorizeReading, markBookStarted } from '../../../../lib/authorizeDownload'
+import { getBookBySlug } from '../../../../lib/catalog'
+
+export const dynamic = 'force-dynamic'
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const book = await getBookBySlug(slug)
+  return { title: book ? `Reading ${book.title}` : 'Not found' }
+}
+
+/**
+ * Reading a book, whole.
+ *
+ * No sign-in, no credits, no limit. Credits pay for taking a book away
+ * to a device; they never pay for reading, and this page is the reason
+ * the whole project exists. A reader who arrives with no account and no
+ * balance still gets every word.
+ *
+ * Signing in adds exactly one thing here: the book is recorded as
+ * started, so it appears in their history.
+ */
+export default async function ReadPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+
+  const book = await getBookBySlug(slug)
+  if (!book) notFound()
+
+  const payload = await getPayload({ config })
+  const user = await getCurrentUser()
+
+  const decision = await authorizeReading({
+    payload,
+    bookId: book.id,
+    userId: user?.id ?? null,
+  })
+
+  if (!decision.allowed) {
+    return (
+      <main className="page auth-page">
+        <h1>Not available to read</h1>
+        <p className="notice">
+          {decision.refusal.reason === 'format_unavailable'
+            ? 'No EPUB edition has been generated for this book yet.'
+            : 'This book is not available to read online.'}
+        </p>
+        <p>
+          <a href={`/books/${slug}`}>← Back to {book.title}</a>
+        </p>
+      </main>
+    )
+  }
+
+  if (user) await markBookStarted(payload, { userId: user.id, bookId: book.id })
+
+  return (
+    <main className="reader-page">
+      <nav className="reader-nav">
+        <a href={`/books/${slug}`}>← {book.title}</a>
+      </nav>
+
+      <Reader
+        epubUrl={`/read/${slug}/epub`}
+        bookTitle={book.title}
+        partTitle={book.author ?? ''}
+        progressKey={`noblesee-position-${slug}`}
+      />
+    </main>
+  )
+}

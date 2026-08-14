@@ -6,10 +6,10 @@
  * and the clock; these modules decide. See rights.ts for why.
  */
 export * from './rights'
-export * from './downloadLimit'
-export * from './stagedRelease'
+export * from './credits'
 export * from './password'
 export * from './kindle'
 export * from './levels'
 export * from './moderation'
 export * from './googleIdentity'
+export * from './avatar'

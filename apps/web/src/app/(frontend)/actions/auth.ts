@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { checkPassword } from '../../../domain/password'
+import { accrueMonthlyCredits, grantSignupCredits } from '../../../lib/credits'
 import { safeNext } from '../../../lib/auth'
 
 /**
@@ -41,6 +42,10 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
     })
     if (!result.token) return { error: 'Email or password is incorrect.' }
     ;(await cookies()).set(`${payload.config.cookiePrefix}-token`, result.token, COOKIE_OPTIONS)
+    // Signing in is what pays the monthly grant — there is no cron.
+    // Never throws, so a grant that cannot be recorded does not cost
+    // the reader their session. See lib/credits.ts.
+    if (result.user?.id) await accrueMonthlyCredits(payload, result.user.id)
   } catch {
     // Deliberately identical whether the address is unknown or the
     // password is wrong: distinguishing them tells an attacker which
@@ -64,8 +69,9 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (problem) return { error: problem.message }
 
   const payload = await getPayload({ config })
+  let createdId: string | number | undefined
   try {
-    await payload.create({
+    const created = await payload.create({
       collection: 'users',
       data: {
         email,
@@ -77,6 +83,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
       },
       overrideAccess: true,
     })
+    createdId = created.id
   } catch (error) {
     const message = error instanceof Error ? error.message : ''
     if (/duplicate|unique|already/i.test(message)) {
@@ -84,6 +91,10 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
     }
     return { error: 'Could not create the account. Check the address and try again.' }
   }
+
+  // The opening balance, and the accrual baseline that stops this
+  // month also being paid later as a backdated absent one.
+  if (createdId) await grantSignupCredits(payload, createdId)
 
   const result = await payload.login({ collection: 'users', data: { email, password } })
   if (result.token) {

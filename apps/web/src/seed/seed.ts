@@ -22,13 +22,6 @@ import { LEVEL_IDS, type BookLevel } from '../domain/levels'
 
 type FormatKey = 'docx' | 'epub' | 'pdf_standard' | 'pdf_large' | 'pdf_xl'
 
-interface SeedPart {
-  title: string
-  order: number
-  /** Prefix in object storage; the five artifacts hang off it. */
-  keyPrefix: string
-}
-
 interface SeedBook {
   slug: string
   title: string
@@ -39,8 +32,10 @@ interface SeedBook {
   description: string
   collections: string[]
   level: BookLevel
-  stagedRelease?: { enabled: boolean; unlockDelayHours: number }
-  parts: SeedPart[]
+  /** Pages in the DOCX master. The credit price is derived from it. */
+  pageCount: number
+  /** Prefix in object storage; the five artifacts hang off it. */
+  keyPrefix: string
 }
 
 /** Filenames are fixed per format, so only the prefix varies per part. */
@@ -97,7 +92,8 @@ const BOOKS: SeedBook[] = [
       'One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge’s 1891 translation, which is in the public domain, alongside the original Chinese text.',
     collections: ['chinese-classics', 'philosophy-wisdom'],
     level: 'normal',
-    parts: [{ title: 'Chapter 1 / 第一章', order: 1, keyPrefix: 'books/4/parts/11' }],
+    pageCount: 12,
+    keyPrefix: 'books/4/parts/11',
   },
   {
     slug: 'analects',
@@ -110,20 +106,17 @@ const BOOKS: SeedBook[] = [
       'The recorded sayings of Confucius and his disciples, compiled by later followers — among the most influential works in Chinese thought on learning, character, and how to live well. This edition presents James Legge’s 1893 translation, which is in the public domain, alongside the original Chinese.',
     collections: ['chinese-classics', 'personal-development'],
     level: 'essential',
-    // Multi-part, so staged release is exercised by real seed data.
-    stagedRelease: { enabled: true, unlockDelayHours: 24 },
-    parts: [
-      { title: 'Book I — 學而 (Xue Er)', order: 1, keyPrefix: 'books/18/parts/20' },
-      { title: 'Book II — 為政 (Wei Zheng)', order: 2, keyPrefix: 'books/18/parts/26' },
-      { title: 'Book III — 八佾 (Ba Yi)', order: 3, keyPrefix: 'books/18/parts/32' },
-    ],
+    // Enough pages to cost more than the minimum, so a fresh install
+    // exercises a real price rather than everything costing 1.
+    pageCount: 96,
+    keyPrefix: 'books/18/parts/20',
   },
 ]
 
-function artifactsFor(part: SeedPart) {
+function artifactsFor(spec: SeedBook) {
   return (Object.keys(ARTIFACT_FILES) as FormatKey[]).map((format) => ({
     format,
-    storageKey: `${part.keyPrefix}/${ARTIFACT_FILES[format]}`,
+    storageKey: `${spec.keyPrefix}/${ARTIFACT_FILES[format]}`,
     // The editable master is an editorial artifact, not a reader
     // download — it is the source of truth and stays internal.
     downloadable: format !== 'docx',
@@ -157,7 +150,7 @@ async function seed() {
     console.log(`${existing.docs[0] ? 'updated' : 'created'} collection: ${spec.title}`)
   }
 
-  // --- books and their parts -----------------------------------------
+  // --- books ---------------------------------------------------------
   for (const spec of BOOKS) {
     const existing = await payload.find({
       collection: 'books',
@@ -182,46 +175,24 @@ async function seed() {
       // seed books differ and the level filter has something real to do
       // on a fresh install.
       level: LEVEL_IDS[spec.level],
+      pageCount: spec.pageCount,
+      artifacts: artifactsFor(spec),
       // Library content entered by staff, not a reader submission —
       // there is nothing to review. See domain/moderation.ts.
       review: { state: 'unsubmitted' as const },
       status: 'published' as const,
-      stagedRelease: spec.stagedRelease ?? { enabled: false, unlockDelayHours: 24 },
       collections: spec.collections
         .map((slug) => collectionIds.get(slug))
         .filter((id): id is number => id !== undefined),
     }
 
-    const book = existing.docs[0]
-      ? await payload.update({ collection: 'books', id: existing.docs[0].id, data })
-      : await payload.create({ collection: 'books', data })
+    if (existing.docs[0]) {
+      await payload.update({ collection: 'books', id: existing.docs[0].id, data })
+    } else {
+      await payload.create({ collection: 'books', data })
+    }
 
     console.log(`${existing.docs[0] ? 'updated' : 'created'} book: ${spec.title}`)
-
-    for (const part of spec.parts) {
-      // Matched on (book, order): a part's title may be re-edited, its
-      // position in the book is what identifies it.
-      const existingPart = await payload.find({
-        collection: 'parts',
-        where: { and: [{ book: { equals: book.id } }, { order: { equals: part.order } }] },
-        limit: 1,
-      })
-
-      const partData = {
-        title: part.title,
-        book: book.id,
-        order: part.order,
-        status: 'published' as const,
-        artifacts: artifactsFor(part),
-      }
-
-      if (existingPart.docs[0]) {
-        await payload.update({ collection: 'parts', id: existingPart.docs[0].id, data: partData })
-      } else {
-        await payload.create({ collection: 'parts', data: partData })
-      }
-      console.log(`  part ${part.order}: ${part.title}`)
-    }
   }
 
   console.log('Seed complete.')

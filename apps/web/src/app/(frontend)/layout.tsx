@@ -1,7 +1,7 @@
 import React from 'react'
 
+import { AccountLink } from '../../components/AccountLink'
 import { GoogleOneTap } from '../../components/GoogleOneTap'
-import { ThemeToggle } from '../../components/ThemeToggle'
 import { getCurrentUser } from '../../lib/auth'
 import { isGoogleSignInConfigured } from '../../lib/googleOAuth'
 import './styles.css'
@@ -34,10 +34,7 @@ export default async function FrontendLayout({ children }: { children: React.Rea
   const user = await getCurrentUser()
 
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-      </head>
+    <html lang="en">
       <body>
         <header className="site-header">
           <div className="site-header__inner">
@@ -49,11 +46,16 @@ export default async function FrontendLayout({ children }: { children: React.Rea
               <a href="/collections">Collections</a>
               <a href="/about">About</a>
               {user ? (
-                <a href="/account">{user.displayName || 'Account'}</a>
+                <AccountLink
+                  identity={{
+                    email: user.email,
+                    displayName: user.displayName,
+                    avatarUrl: user.avatarUrl,
+                  }}
+                />
               ) : (
                 <a href="/login">Sign in</a>
               )}
-              <ThemeToggle />
             </nav>
           </div>
         </header>

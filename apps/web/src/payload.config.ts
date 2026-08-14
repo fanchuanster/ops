@@ -8,10 +8,11 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { buildConfig } from 'payload'
 
 import { BookCollections } from './collections/BookCollections'
+import { CreditLedger } from './collections/CreditLedger'
 import { Downloads } from './collections/Downloads'
+import { Entitlements } from './collections/Entitlements'
 import { Books } from './collections/Books'
 import { Media } from './collections/Media'
-import { Parts } from './collections/Parts'
 import { ReadingProgress } from './collections/ReadingProgress'
 import { Users } from './collections/Users'
 
@@ -56,7 +57,16 @@ export default buildConfig({
       titleSuffix: '— NobleSee',
     },
   },
-  collections: [Users, Media, Books, Parts, BookCollections, Downloads, ReadingProgress],
+  collections: [
+    Users,
+    Media,
+    Books,
+    BookCollections,
+    Downloads,
+    Entitlements,
+    CreditLedger,
+    ReadingProgress,
+  ],
   editor: lexicalEditor(),
   db: sqliteD1Adapter({
     binding: env.DB,

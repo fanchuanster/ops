@@ -1,23 +1,22 @@
 import type { CollectionConfig } from 'payload'
 
 /**
- * The download ledger.
+ * The delivery ledger: one row per book actually sent to a device.
  *
- * One row per authorized download. This is what `checkDownloadLimit`
- * reads: it counts *distinct books* in a rolling window, so recording
- * every file is correct and cheap — five formats of one book are five
- * rows but one slot.
+ * It used to feed the rolling 24-hour limit, which is gone — credits
+ * are the gate now (domain/credits.ts). What it feeds instead is the
+ * reader's own history, and the audit question "was this book really
+ * delivered, and when".
  *
- * Readers can see their own history and nobody else's. Nothing here is
- * writable through the API: rows are created only by the download route
- * after it has authorized the request, so a client cannot forge or
- * erase its own history to escape the limit.
+ * Readers can see their own rows and nobody else's. Nothing here is
+ * writable through the API: rows are created only after the delivery
+ * path has authorized and charged for the send.
  */
 export const Downloads: CollectionConfig = {
   slug: 'downloads',
   admin: {
     useAsTitle: 'format',
-    defaultColumns: ['user', 'book', 'part', 'format', 'createdAt'],
+    defaultColumns: ['user', 'book', 'format', 'creditsPaid', 'createdAt'],
     group: 'Administration',
   },
   access: {
@@ -33,14 +32,17 @@ export const Downloads: CollectionConfig = {
     delete: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
   },
   indexes: [
-    // The limit check is always "this user, recently", so the ledger is
-    // queried on both together.
+    // Always read as "this reader's history, newest first".
     { fields: ['user', 'createdAt'] },
   ],
   fields: [
     { name: 'user', type: 'relationship', relationTo: 'users', required: true, index: true },
     { name: 'book', type: 'relationship', relationTo: 'books', required: true, index: true },
-    { name: 'part', type: 'relationship', relationTo: 'parts', required: true },
     { name: 'format', type: 'text', required: true },
+    {
+      name: 'creditsPaid',
+      type: 'number',
+      admin: { description: 'What this particular send cost — the book price, or the resend rate.' },
+    },
   ],
 }

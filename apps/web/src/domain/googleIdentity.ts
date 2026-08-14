@@ -21,6 +21,7 @@ export interface GoogleClaims {
   email?: unknown
   email_verified?: unknown
   name?: unknown
+  picture?: unknown
 }
 
 /** A verified Google identity, once the claims have passed. */
@@ -30,6 +31,27 @@ export interface GoogleProfile {
   email: string
   emailVerified: boolean
   displayName?: string
+  /** Google's profile picture, if it gave us a usable one. */
+  avatarUrl?: string
+}
+
+/**
+ * Accept a profile picture URL only if it is plainly an https URL.
+ *
+ * The claim arrives inside a token we have already established Google
+ * signed, so this is not the load-bearing check — it is a refusal to
+ * put an arbitrary string into an `<img src>` on the strength of "the
+ * envelope was genuine". `https:` only, so a `data:` or `javascript:`
+ * value can never reach the attribute even if one day the token does
+ * not come from where we think it does.
+ */
+function usableAvatarUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value) return undefined
+  try {
+    return new URL(value).protocol === 'https:' ? value : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export type ClaimsResult =
@@ -116,6 +138,7 @@ export function verifyGoogleClaims({
       // Anything other than a literal true is treated as unverified.
       emailVerified: claims.email_verified === true,
       displayName: typeof claims.name === 'string' ? claims.name.trim() : undefined,
+      avatarUrl: usableAvatarUrl(claims.picture),
     },
   }
 }

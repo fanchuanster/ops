@@ -12,9 +12,10 @@
  *   2. Generous line-height and a measure capped in `ch`, so a line
  *      never runs longer than the eye can track back from.
  *
- * Colour is defined light-first on bare :root, redefined under
- * prefers-color-scheme for system-dark, and again under [data-theme] so
- * an explicit toggle wins in both directions.
+ * One palette, light. There was a three-state light/auto/dark control
+ * until 2026-08-14; it is gone, and with it the pre-paint script that
+ * replayed the choice before first render. These books are set on paper
+ * and read like paper.
  */
 
 :root {
@@ -27,6 +28,13 @@
   --accent: #7a5c2e;
   --accent-soft: #f0e7d6;
 
+  /* Confirmation green. Deliberately its own token rather than reusing
+     the accent: "done" is a different thing from "this is the action",
+     and the accent is already the reading-brown the site is built on. */
+  --done: #3f6b38;
+  --done-soft: #e6f1e2;
+  --done-rule: #a9c9a1;
+
   --font-serif: "Noto Serif TC", "Source Han Serif TC", "Songti TC", Songti SC,
     "SimSun", Georgia, "Times New Roman", serif;
   --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
@@ -35,30 +43,6 @@
   --measure: 34rem;
   --page: 68rem;
   --radius: 3px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #14120f;
-    --paper-raised: #1c1a16;
-    --ink: #e8e3d9;
-    --ink-soft: #a8a196;
-    --ink-faint: #77716a;
-    --rule: #2e2a24;
-    --accent: #c9a227;
-    --accent-soft: #2a2519;
-  }
-}
-
-:root[data-theme="dark"] {
-  --paper: #14120f;
-  --paper-raised: #1c1a16;
-  --ink: #e8e3d9;
-  --ink-soft: #a8a196;
-  --ink-faint: #77716a;
-  --rule: #2e2a24;
-  --accent: #c9a227;
-  --accent-soft: #2a2519;
 }
 
 * {
@@ -136,6 +120,7 @@ h3 {
 
 .site-nav {
   display: flex;
+  align-items: center;
   gap: 1.25rem;
   margin-left: auto;
   font-family: var(--font-sans);
@@ -160,7 +145,7 @@ h3 {
   font-size: 0.8125rem;
 }
 
-.theme-toggle {
+.button-quiet {
   font: inherit;
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -172,9 +157,527 @@ h3 {
   cursor: pointer;
 }
 
-.theme-toggle:hover {
+.button-quiet:hover {
   color: var(--ink);
   border-color: var(--ink-faint);
+}
+
+/* Accessible name for something the eye already gets from an icon. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- the reader's own face --------------------------------------- */
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent-soft);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+
+.avatar--initials {
+  color: #fff;
+  /* The generated hue is mid-tone in both themes, so white sits on it
+     either way; a token would have to change with the theme and the
+     initials would stop being recognisably the same badge. */
+  letter-spacing: 0.02em;
+}
+
+.account-menu {
+  position: relative;
+  display: flex;
+}
+
+.account-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.15rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-soft);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.account-menu__trigger:hover,
+.account-menu__trigger[aria-expanded="true"] {
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+.account-menu__name {
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu__caret {
+  font-size: 0.6rem;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 34rem) {
+  /* The circle carries it on a narrow screen; the accessible name is
+     still there for anyone not reading it by eye. */
+  .account-menu__name,
+  .account-menu__caret {
+    display: none;
+  }
+
+  .account-menu__trigger {
+    padding: 0.15rem;
+  }
+}
+
+.account-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  z-index: 50;
+  min-width: 15rem;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--radius) * 3);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 12%);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+
+.account-menu__who {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.7rem 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 0.35rem;
+}
+
+.account-menu__whotext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.account-menu__whotext strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.account-menu__whotext span,
+.account-menu__whotext strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu__whotext span {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.account-menu__panel a,
+.account-menu__panel button {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.account-menu__panel a:hover,
+.account-menu__panel button:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.account-menu__panel form {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* --- account area ------------------------------------------------- */
+
+.account__body {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  gap: 3rem;
+  align-items: start;
+}
+
+@media (max-width: 48rem) {
+  .account__body {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+.account-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  position: sticky;
+  top: 1.5rem;
+}
+
+.account-nav a {
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+  border-left: 2px solid transparent;
+  text-decoration: none;
+  font-family: var(--font-sans);
+}
+
+.account-nav a strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.account-nav a span {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.account-nav a:hover {
+  background: var(--paper-raised);
+}
+
+.account-nav a:hover strong {
+  color: var(--ink);
+}
+
+.account-nav a[aria-current='page'] {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.account-nav a[aria-current='page'] strong {
+  color: var(--ink);
+}
+
+/* The balance, sat opposite the reader's name. */
+.account-balance {
+  margin: 0 0 0 auto;
+  text-align: right;
+  font-family: var(--font-sans);
+  line-height: 1.2;
+}
+
+.account-balance strong {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.account-balance span {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+}
+
+.ledger th,
+.ledger td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.ledger th {
+  color: var(--ink-faint);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.6875rem;
+}
+
+.ledger__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- history ------------------------------------------------------ */
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history__item {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+
+.history__kind {
+  flex: 0 0 4.5rem;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+.history__item--paid .history__kind {
+  color: var(--accent);
+}
+
+.history__item--sent .history__kind {
+  color: var(--done);
+}
+
+.history__what {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.history__what a {
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.history__what a:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+.history__what span {
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+}
+
+.history time {
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+/* --- my books ----------------------------------------------------- */
+
+.my-books {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.my-books__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.my-books__item h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.0625rem;
+}
+
+.my-books__item h3 a {
+  text-decoration: none;
+}
+
+.my-books__meta {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.pill {
+  flex: 0 0 auto;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.pill--ready,
+.pill--none {
+  border-color: var(--done-rule);
+  background: var(--done-soft);
+  color: var(--done);
+}
+
+.pill--failed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- upload form -------------------------------------------------- */
+
+.upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 32rem;
+  margin-top: 1.5rem;
+  font-family: var(--font-sans);
+}
+
+.upload-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.upload-form label > span {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.upload-form small {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.upload-form input[type='text'],
+.upload-form select {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink);
+}
+
+.upload-form__collections {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+
+.upload-form__collections legend {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 0 0.35rem;
+}
+
+.upload-form__collections > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.6rem;
+}
+
+.upload-form__check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* --- book page actions -------------------------------------------- */
+
+.book-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.book-actions__read {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 0.4rem 1.1rem;
+  text-decoration: none;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--ink);
+}
+
+.book-actions__read:hover {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+/* The price reads as a fact about the book, like its page count. */
+.meta__price {
+  color: var(--accent);
+}
+
+/* The same identity block, on the account page itself. */
+.account-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 2rem;
+}
+
+.account-identity div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.account-identity strong {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.account-identity span {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
 }
 
 /* --- home -------------------------------------------------------- */
@@ -850,6 +1353,23 @@ h3 {
 .send-to-kindle__button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/*
+ * Sent. Still a live button — a reader may genuinely want it again, on
+ * a second device or after deleting it — so it keeps its affordance
+ * rather than going flat and disabled. The confirm prompt is what
+ * catches the accidental second press.
+ */
+.send-to-kindle__button--sent {
+  background: var(--done-soft);
+  border-color: var(--done-rule);
+  color: var(--done);
+}
+
+.send-to-kindle__button--sent:hover:not(:disabled) {
+  border-color: var(--done);
+  color: var(--done);
 }
 
 .form-error,

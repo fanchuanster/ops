@@ -64,15 +64,10 @@ export function Reader({
   useEffect(() => setSettings(loadSettings()), [])
 
   const applyTheme = useCallback((rendition: Rendition, s: Settings) => {
-    const dark =
-      document.documentElement.dataset.theme === 'dark' ||
-      (!document.documentElement.dataset.theme &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches)
-
     rendition.themes.register('noblesee', {
       body: {
-        background: dark ? '#14120f' : '#fbf9f4',
-        color: dark ? '#e8e3d9' : '#23201b',
+        background: '#fbf9f4',
+        color: '#23201b',
         'font-family': s.serif
           ? '"Noto Serif TC", "Source Han Serif TC", "Songti TC", Georgia, serif'
           : '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
@@ -85,7 +80,7 @@ export function Reader({
         padding: '0 1.25rem',
       },
       p: { 'text-align': 'justify', 'text-justify': 'inter-ideograph' },
-      a: { color: dark ? '#c9a227' : '#7a5c2e' },
+      a: { color: '#7a5c2e' },
       'h1, h2, h3': { 'line-height': '1.35' },
     })
     rendition.themes.select('noblesee')
@@ -183,7 +178,7 @@ export function Reader({
         </div>
         <button
           type="button"
-          className="theme-toggle"
+          className="button-quiet"
           onClick={() => setPanelOpen((open) => !open)}
           aria-expanded={panelOpen}
         >

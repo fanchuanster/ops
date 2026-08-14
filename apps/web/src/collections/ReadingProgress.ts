@@ -1,18 +1,19 @@
 import type { CollectionConfig } from 'payload'
 
 /**
- * When each reader first opened each part.
+ * When each reader first opened each book.
  *
- * Staged release runs on a per-reader clock rather than a publication
- * date, so this is the clock. `startedAt` is written once and never
- * moved forward — otherwise re-opening a part would restart the delay
- * on the next one, which would punish re-reading.
+ * This was the clock staged release ran on. Staged release went with
+ * Parts, and the row survives it for a different reason: it is what
+ * "books I have read" on the account page is built from. `startedAt` is
+ * still written once and never moved forward, so it means "first
+ * opened" rather than "last opened".
  */
 export const ReadingProgress: CollectionConfig = {
   slug: 'reading-progress',
   admin: {
     useAsTitle: 'id',
-    defaultColumns: ['user', 'book', 'partOrder', 'startedAt'],
+    defaultColumns: ['user', 'book', 'startedAt'],
     group: 'Administration',
   },
   access: {
@@ -25,11 +26,10 @@ export const ReadingProgress: CollectionConfig = {
     update: () => false,
     delete: () => false,
   },
-  indexes: [{ fields: ['user', 'book'] }],
+  indexes: [{ fields: ['user', 'book'], unique: true }],
   fields: [
     { name: 'user', type: 'relationship', relationTo: 'users', required: true, index: true },
     { name: 'book', type: 'relationship', relationTo: 'books', required: true, index: true },
-    { name: 'partOrder', type: 'number', required: true },
     { name: 'startedAt', type: 'date', required: true },
   ],
 }

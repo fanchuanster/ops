@@ -24,6 +24,19 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { createReadStream, existsSync } from 'node:fs'
 import path from 'node:path'
 
+/**
+ * The bucket itself.
+ *
+ * Exported because artifacts are not the only thing that lives in it —
+ * mirrored avatars (`lib/avatars.ts`) need `put` and the object's
+ * content type, neither of which the artifact helpers below expose.
+ * Everything reaching for this still goes through a module that owns
+ * one kind of object; nothing calls it from a route handler.
+ */
+export async function objectBucket(): Promise<R2Bucket | null> {
+  return artifactBucket()
+}
+
 async function artifactBucket(): Promise<R2Bucket | null> {
   try {
     const { env } = await getCloudflareContext({ async: true })
