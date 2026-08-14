@@ -26,8 +26,21 @@ mkdir -p "$HERE/.gcloud-home"
 TTY=(-i)
 [ -t 0 ] && TTY=(-it)
 
+# Runs as the invoking user, not root.
+#
+# This matters more than it looks: a credential written by root inside
+# the container is root-owned on the host, and Terraform runs as you —
+# so it cannot read the very file it was told to use. Owning them also
+# keeps them yours rather than readable by anything running as root.
+#
+# CLOUDSDK_CONFIG rather than the default ~/.config/gcloud, because a
+# non-root uid cannot write to /root. HOME is somewhere writable for the
+# same reason.
 exec docker run --rm "${TTY[@]}" \
-    -v "$HERE/.gcloud-home:/root/.config/gcloud" \
+    -v "$HERE/.gcloud-home:/gcloud" \
     -v "$(cd "$HERE/.." && pwd):/repo" \
     -w /repo/infra \
+    -e CLOUDSDK_CONFIG=/gcloud \
+    -e HOME=/tmp \
+    -u "$(id -u):$(id -g)" \
     "$IMAGE" "$@"
