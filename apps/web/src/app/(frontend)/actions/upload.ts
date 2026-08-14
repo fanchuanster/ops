@@ -1,13 +1,12 @@
 'use server'
 
 import config from '@payload-config'
-import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { LEVEL_IDS } from '../../../domain/levels'
-import { isUploaderSelectableRights } from '../../../domain/rights'
 import { getCurrentUser } from '../../../lib/auth'
+import { extractMetadata } from '../../../lib/extractMetadata'
 import { objectBucket } from '../../../lib/storage'
 
 /**
@@ -17,20 +16,16 @@ import { objectBucket } from '../../../lib/storage'
  * PDF, a DOCX or plain text all converge on the same DOCX master and
  * from there on the same EPUB and PDF variants the library offers.
  *
- * Three rules are enforced here and are not negotiable:
+ * This step asks for **the file and nothing else**. Whatever the file
+ * already says about itself is read out of it (`lib/extractMetadata.ts`)
+ * and shown on the next page for the reader to correct — asking someone
+ * to retype a title their file already contains is the kind of friction
+ * that stops uploads happening at all.
  *
- *   1. **Private by default.** The book is created with
- *      `visibility: private` and an owner. Nothing an uploader can send
- *      puts a book in the public library; that needs an administrator's
- *      approval *and* a rights status that permits distribution, which
- *      `domain/moderation.ts` decides.
- *   2. **The uploader declares the rights.** They are the only person
- *      who knows where the file came from, and this is the one moment
- *      in the flow when the question is easy to answer. `unknown` is
- *      refused outright rather than accepted and quietly stuck.
- *   3. **Reading level and visibility are not theirs to set.** An
- *      uploader who could would walk their upload into the front of the
- *      library.
+ * The book is created as a draft: private, owned, rights `unknown`, and
+ * *not* queued for conversion. Nothing is converted and nothing can be
+ * submitted until the reader has seen the details and answered the
+ * rights question, which is the one thing no file can answer for them.
  */
 
 export type UploadState = { error?: string }
@@ -61,18 +56,10 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
     return { error: 'Upload a PDF, a DOCX, or a plain text file.' }
   }
 
-  const title = String(formData.get('title') || '').trim()
-  if (!title) return { error: 'Give the book a title.' }
-
-  const rightsStatus = String(formData.get('rightsStatus') || '')
-  if (!isUploaderSelectableRights(rightsStatus)) {
-    return { error: 'Say where this book came from.' }
-  }
-
-  const collectionIds = formData
-    .getAll('collections')
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value) && value > 0)
+  // Read before storing, so a file we cannot parse never becomes a book
+  // with nothing to show for it. Never throws; worst case is an empty
+  // suggestion and a form the reader fills in themselves.
+  const suggested = await extractMetadata(file)
 
   const payload = await getPayload({ config })
 
@@ -80,7 +67,7 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
   // a name the library might want, and two uploads of the same title
   // cannot collide.
   const jobId = crypto.randomUUID()
-  const slug = `${slugify(title) || 'book'}-${jobId.slice(0, 8)}`
+  const slug = `${slugify(suggested.title ?? '') || 'book'}-${jobId.slice(0, 8)}`
 
   const bucket = await objectBucket()
   if (!bucket) return { error: 'Uploads are not available on this server yet.' }
@@ -94,24 +81,29 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
     return { error: 'Could not store that file. Please try again.' }
   }
 
+  let bookId: string | number
   try {
-    await payload.create({
+    const created = await payload.create({
       collection: 'books',
       data: {
-        title,
+        title: suggested.title || file.name.replace(/\.[^.]+$/, ''),
         slug,
-        author: String(formData.get('author') || '').trim() || undefined,
-        rightsStatus: rightsStatus as 'user_owned',
+        author: suggested.author,
+        description: suggested.description,
+        ...(suggested.language ? { language: suggested.language as 'zh-Hant' } : {}),
+        // `unknown` until the reader says otherwise, and `unknown` is
+        // exactly what blocks submission — so the question cannot be
+        // skipped by never answering it.
+        rightsStatus: 'unknown',
         // Not the uploader's to choose. Both of these are what keep an
         // upload out of the public catalog.
         visibility: 'private',
         level: LEVEL_IDS.extensive,
-        status: 'in_production',
+        status: 'draft',
         owner: Number(user.id),
         review: { state: 'unsubmitted' },
-        collections: collectionIds,
         conversion: {
-          state: 'queued',
+          state: 'draft',
           sourceKey,
           sourceFilename: file.name,
           jobId,
@@ -119,12 +111,12 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
       },
       overrideAccess: true,
     })
+    bookId = created.id
   } catch {
     return { error: 'Could not start the conversion. Please try again.' }
   }
 
-  revalidatePath('/account/books')
-  redirect('/account/books')
+  redirect(`/account/books/${bookId}`)
 }
 
 function slugify(value: string): string {

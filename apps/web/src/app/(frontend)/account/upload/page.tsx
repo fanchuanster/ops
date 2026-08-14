@@ -1,14 +1,11 @@
 import React from 'react'
 
 import { UploadForm } from '../../../../components/UploadForm'
-import { getCollections } from '../../../../lib/catalog'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Upload a book' }
 
 export default async function UploadPage() {
-  const collections = await getCollections()
-
   return (
     <>
       <div className="section-head">
@@ -20,15 +17,17 @@ export default async function UploadPage() {
         editable DOCX master, and from that master you get the same things the library offers —
         a clean EPUB, PDFs in three sizes, and delivery to your Kindle.
       </p>
+      <p>
+        Just the file for now. We will read whatever it says about itself — title, author,
+        language — and show you the details to check before anything else happens.
+      </p>
       <p className="hint">
         Your upload is <strong>private to you</strong> and stays that way unless you ask for it to
         be published and an administrator approves it. Sending your own book to your own device is
         free — it is your book.
       </p>
 
-      <UploadForm
-        collections={collections.map((c) => ({ id: Number(c.id), title: c.title }))}
-      />
+      <UploadForm />
     </>
   )
 }

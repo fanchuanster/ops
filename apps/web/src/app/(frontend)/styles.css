@@ -553,6 +553,12 @@ h3 {
   color: var(--done);
 }
 
+.pill--draft {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
 .pill--failed {
   border-color: var(--accent);
   color: var(--accent);
@@ -584,6 +590,32 @@ h3 {
 .upload-form small {
   color: var(--ink-faint);
   font-size: 0.75rem;
+}
+
+.upload-form textarea {
+  font: inherit;
+  font-family: var(--font-serif);
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink);
+  resize: vertical;
+}
+
+/* Two ways out of the summary form. The private one reads as the
+   primary because keeping your own book to yourself is the normal
+   case, not the lesser one. */
+.upload-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.upload-form__actions button:first-child {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 .upload-form input[type='text'],

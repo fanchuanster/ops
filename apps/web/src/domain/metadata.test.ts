@@ -1,0 +1,179 @@
+/**
+ * Metadata extraction.
+ *
+ * Every case here came from a real shape these formats take. The junk
+ * filters especially: "Microsoft Word - chapter1.doc" is a title field
+ * Word writes by itself, and letting it through would fill the library
+ * with books named after the program that made them.
+ */
+
+import { describe, expect, it } from 'vitest'
+
+import {
+  fromCoreXml,
+  fromFilename,
+  fromPdfText,
+  fromPlainText,
+  mergeMetadata,
+  normalizeLanguage,
+} from './metadata'
+
+describe('DOCX core properties', () => {
+  it('reads title, author, description and language', () => {
+    expect(
+      fromCoreXml(`<?xml version="1.0"?><cp:coreProperties
+        xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:title>論語別裁</dc:title>
+        <dc:creator>南懷瑾</dc:creator>
+        <dc:description>A commentary.</dc:description>
+        <dc:language>zh-TW</dc:language>
+      </cp:coreProperties>`),
+    ).toEqual({
+      title: '論語別裁',
+      author: '南懷瑾',
+      description: 'A commentary.',
+      language: 'zh-Hant',
+    })
+  })
+
+  it('decodes XML entities', () => {
+    expect(fromCoreXml('<dc:title>Tom &amp; Jerry &#8212; a tale</dc:title>').title).toBe(
+      'Tom & Jerry — a tale',
+    )
+  })
+
+  it('falls back to lastModifiedBy when there is no creator', () => {
+    expect(fromCoreXml('<cp:lastModifiedBy>An Editor</cp:lastModifiedBy>').author).toBe(
+      'An Editor',
+    )
+  })
+
+  it('drops the junk Word writes by itself', () => {
+    for (const junk of [
+      'Microsoft Word - chapter1.doc',
+      'Untitled',
+      'untitled document',
+      'Document1',
+      'chapter1.docx',
+      '   ',
+      '---',
+    ]) {
+      expect(fromCoreXml(`<dc:title>${junk}</dc:title>`).title).toBeUndefined()
+    }
+  })
+
+  it('returns nothing rather than guessing from an empty file', () => {
+    expect(fromCoreXml('<cp:coreProperties/>')).toEqual({})
+  })
+})
+
+describe('PDF metadata', () => {
+  it('reads a literal Info dictionary string', () => {
+    const pdf = '/Title (The Analects) /Author (Confucius) /Subject (Sayings)'
+    expect(fromPdfText(pdf)).toMatchObject({
+      title: 'The Analects',
+      author: 'Confucius',
+      description: 'Sayings',
+    })
+  })
+
+  it('unescapes literal strings', () => {
+    expect(fromPdfText(String.raw`/Title (Poems \(1891\) \\ notes)`).title).toBe(
+      'Poems (1891) \\ notes',
+    )
+  })
+
+  it('decodes UTF-16BE hex strings, which is how CJK titles arrive', () => {
+    // FEFF BOM + 論語 (U+8AD6 U+8A9E)
+    expect(fromPdfText('/Title <FEFF8AD68A9E>').title).toBe('論語')
+  })
+
+  it('prefers XMP over the Info dictionary when both exist', () => {
+    // XMP is the one that gets updated when a file is re-saved.
+    const pdf = `
+      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">The Real Title</rdf:li></rdf:Alt></dc:title>
+      <dc:creator><rdf:Seq><rdf:li>The Real Author</rdf:li></rdf:Seq></dc:creator>
+      /Title (Stale Title) /Author (Stale Author)`
+    expect(fromPdfText(pdf)).toMatchObject({
+      title: 'The Real Title',
+      author: 'The Real Author',
+    })
+  })
+
+  it('takes the author from Info when XMP has only a title', () => {
+    const pdf = `<dc:title><rdf:Alt><rdf:li>A Title</rdf:li></rdf:Alt></dc:title>
+      /Author (An Author)`
+    expect(fromPdfText(pdf)).toMatchObject({ title: 'A Title', author: 'An Author' })
+  })
+
+  it('returns nothing for a PDF with no metadata', () => {
+    expect(fromPdfText('%PDF-1.7\nsome binary noise')).toEqual({})
+  })
+
+  it('ignores a malformed hex string rather than emitting mojibake', () => {
+    expect(fromPdfText('/Title <FEFF8AD>').title).toBeUndefined()
+  })
+})
+
+describe('plain text and Markdown', () => {
+  it('takes the first non-empty line', () => {
+    expect(fromPlainText('\n\n  The Analects  \n\nBook I...').title).toBe('The Analects')
+  })
+
+  it('strips a Markdown heading marker', () => {
+    expect(fromPlainText('# 道德經\n\nchapter one').title).toBe('道德經')
+  })
+
+  it('refuses a first line that is prose, rather than truncating it', () => {
+    // A truncated paragraph makes a confidently wrong title, which is
+    // worse than none — the reader skims past it.
+    expect(fromPlainText('x'.repeat(200)).title).toBeUndefined()
+  })
+
+  it('returns nothing for an empty file', () => {
+    expect(fromPlainText('   \n\n  ')).toEqual({})
+  })
+})
+
+describe('filename fallback', () => {
+  it('tidies separators', () => {
+    expect(fromFilename('tao_te-ching.pdf').title).toBe('tao te ching')
+  })
+
+  it('refuses a filename that says nothing', () => {
+    for (const name of ['scan001.pdf', 'untitled.docx', 'document.pdf']) {
+      expect(fromFilename(name).title).toBeUndefined()
+    }
+  })
+})
+
+describe('merging sources', () => {
+  it('fills each field from the first source that has it', () => {
+    expect(
+      mergeMetadata({ title: 'From XMP' }, { title: 'From Info', author: 'From Info' }),
+    ).toEqual({ title: 'From XMP', author: 'From Info' })
+  })
+
+  it('ignores empty values rather than letting them win', () => {
+    expect(mergeMetadata({ title: '' }, { title: 'Real' })).toEqual({ title: 'Real' })
+  })
+})
+
+describe('language normalisation', () => {
+  it('maps the regional variants onto the catalog codes', () => {
+    expect(normalizeLanguage('zh-TW')).toBe('zh-Hant')
+    expect(normalizeLanguage('zh_HK')).toBe('zh-Hant')
+    expect(normalizeLanguage('zh-CN')).toBe('zh-Hans')
+    expect(normalizeLanguage('en-GB')).toBe('en')
+  })
+
+  it('sends bare zh to Traditional, which is what this library mostly is', () => {
+    expect(normalizeLanguage('zh')).toBe('zh-Hant')
+  })
+
+  it('leaves an unrecognised language unset rather than guessing', () => {
+    for (const code of ['ja', 'fr', '', 'xx', undefined]) {
+      expect(normalizeLanguage(code)).toBeUndefined()
+    }
+  })
+})

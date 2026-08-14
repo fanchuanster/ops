@@ -9,6 +9,7 @@ export const metadata = { title: 'My books' }
 /** Where an upload is in the pipeline, in the uploader's words. */
 const CONVERSION_LABEL: Record<string, string> = {
   none: 'Ready',
+  draft: 'Check the details',
   queued: 'Waiting to be converted',
   converting: 'Converting',
   ready: 'Ready',
@@ -38,6 +39,8 @@ export default async function MyBooksPage() {
           {books.map((book) => {
             const state = book.conversion?.state ?? 'none'
             const ready = state === 'none' || state === 'ready'
+            // A draft has nothing to read yet; it has a question waiting.
+            const href = state === 'draft' ? `/account/books/${book.id}` : `/books/${book.slug}`
             const collections = (book.collections ?? [])
               .map((c) => (typeof c === 'object' && c ? c.title : null))
               .filter(Boolean)
@@ -46,7 +49,7 @@ export default async function MyBooksPage() {
               <li key={book.id} className="my-books__item">
                 <div>
                   <h3>
-                    {ready ? <a href={`/books/${book.slug}`}>{book.title}</a> : book.title}
+                    {ready || state === 'draft' ? <a href={href}>{book.title}</a> : book.title}
                   </h3>
                   <p className="my-books__meta">
                     {[

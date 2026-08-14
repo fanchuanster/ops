@@ -294,6 +294,7 @@ export const Books: CollectionConfig = {
           index: true,
           options: [
             { label: 'Not a conversion', value: 'none' },
+            { label: 'Uploaded, awaiting the uploader’s details', value: 'draft' },
             { label: 'Uploaded, queued', value: 'queued' },
             { label: 'Converting', value: 'converting' },
             { label: 'Ready', value: 'ready' },
