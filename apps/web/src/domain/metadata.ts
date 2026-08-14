@@ -97,36 +97,135 @@ export function bytesToBinaryString(bytes: Uint8Array): string {
 }
 
 /**
- * Repair text that is UTF-8 read as Latin-1.
+ * Decode a byte string that could be UTF-8, GBK or Big5.
  *
- * A PDF has to be read byte for byte — the hex strings carry raw bytes
- * and UTF-8 decoding would replace every invalid sequence with U+FFFD —
- * so the whole file is decoded as Latin-1. That is right for the bytes
- * and wrong for the text: a producer that writes 論語別裁 as UTF-8
- * inside a literal string, or an XMP packet (which is always UTF-8
- * XML), comes back as è«–èªžåˆ¥è£.
+ * A PDF is read one code unit per byte, so any text in it arrives as
+ * raw bytes and something has to decide what they meant. PDF's own
+ * answer — PDFDocEncoding, or UTF-16 with a byte-order mark — covers
+ * only the well-behaved producers. Chinese-language software routinely
+ * writes GBK or Big5 straight into a literal string, and those are
+ * exactly the books this library is for.
  *
- * Both are extremely common — between them they cover most Chinese
- * titles in the wild — so the string is turned back into the bytes it
- * came from and re-decoded strictly. Strictly is what makes this safe:
- * genuine Latin-1 text is almost never also valid multi-byte UTF-8, so
- * the decode throws and the original is kept.
+ * The order is not arbitrary:
+ *
+ *   1. **UTF-8, strictly.** It is self-validating — arbitrary bytes are
+ *      overwhelmingly unlikely to form valid multi-byte UTF-8 — so a
+ *      strict decode that succeeds is near-certainly right.
+ *   2. **GB18030 and Big5**, scored. Neither can fail: both decode
+ *      almost any byte sequence into *something*, so "did it decode" is
+ *      no evidence at all. What discriminates them is whether the
+ *      result looks like Chinese.
+ *
+ * A legacy decoding is only accepted if it produces real CJK where the
+ * bytes produced none, which is what keeps "Café Littéraire" from being
+ * reinterpreted as characters nobody wrote.
  */
 export function repairUtf8(value: string): string {
-  // Nothing outside ASCII, so nothing to repair.
+  // Nothing outside ASCII, so nothing to decide.
   if (!/[\u0080-\u00ff]/.test(value)) return value
-  // Anything above U+00FF did not come from a Latin-1 decode, so this
-  // string was already read correctly.
+  // Anything above U+00FF did not come from a byte-per-code-unit read,
+  // so this string was already decoded correctly by someone else.
   for (const character of value) {
     if (character.codePointAt(0)! > 0xff) return value
   }
 
   const bytes = Uint8Array.from(value, (character) => character.charCodeAt(0))
+
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
   } catch {
-    return value
+    // Not UTF-8. Fall through to the legacy Chinese encodings.
   }
+
+  let best = value
+  let bestScore = cjkScore(value)
+
+  // GB18030 before Big5 only as a tie-break: it is the mainland
+  // standard and by far the more common of the two.
+  for (const label of ['gb18030', 'big5']) {
+    let candidate: string
+    try {
+      candidate = new TextDecoder(label).decode(bytes)
+    } catch {
+      continue
+    }
+    if (!looksLikeChinese(candidate)) continue
+
+    const score = cjkScore(candidate)
+    if (score > bestScore) {
+      best = candidate
+      bestScore = score
+    }
+  }
+
+  return best
+}
+
+/**
+ * The most frequent Chinese characters, simplified and traditional.
+ *
+ * The decisive part of encoding detection, and the reason a range check
+ * alone is not enough: GBK and Big5 both turn almost any bytes into
+ * *valid* CJK, so "is this in the CJK block" cannot separate them. What
+ * separates them is that the right decoding produces characters people
+ * actually use. 南懷瑾 read with the wrong table gives 玭胔紷 — three
+ * real characters that essentially never occur in a name.
+ *
+ * Frequency-ordered lists of this length cover a large majority of
+ * running text in both scripts, which is far more signal than a title
+ * or an author's name needs.
+ */
+const COMMON_HAN = new Set(
+  '的一是不了在人有我他這個們中來上大為和國地到以說時要就出會可也你對生能而子那得於著下自之年過發後作里用道行所然家種事成方多經麼去法學如都同現當沒動面起看定天分還進好小部其些主樣理心她本前開但因只從想實日軍者意無力它與長把機十民第公此已工使情明性知全三又關點正業外將兩高間由問很最重並物手應戰向頭文體政美相見被利什二等產或新己制身果加西斯月話合回特代內信表化老給世位次度門任常先海通教兒原東聲提立及比員解水名真論處走義各入几口認條平系氣題活爾更別打女變四神總何電數安少報才結反受目太量再感建務做接必場件計管期市直德資命山金指克許統區保至隊形社便空決治展馬科司五基眼書非則聽白卻界達光放強即像難且權思王象完設式色路記南品住告類求據程北邊死張該交規萬取拉格望覺術領共確傳師觀清今切院讓識候帶導爭運笑飛風步改收根干造言聯持組每濟車親極林服快辦議往元英士證近失轉夫令準布始怎呢存未遠叫台單影具羅字愛擊流備兵連調深商算質團集百需價花黨華城石級整府離況亞請技際約示復病息究線似官火斷精滿支視消越器容照須九增研寫稱企八功吧培記懷瑾論語別裁道德經孔孟莊'
+)
+
+/**
+ * Whether a candidate decoding is Chinese text rather than an accident.
+ *
+ * The guard that stops European titles being reinterpreted. "München"
+ * as bytes contains 0xFC 0x6E, which is a perfectly valid GBK pair for
+ * 黱 — a real character, in the CJK block, that essentially nobody
+ * uses. Judged on the block alone that decoding wins and the title
+ * becomes "M黱chen".
+ *
+ * So at least half the CJK a decoding produces has to be characters
+ * from the common set. Real Chinese passes easily; bytes that merely
+ * happen to form legal pairs do not.
+ */
+function looksLikeChinese(value: string): boolean {
+  let common = 0
+  let han = 0
+  for (const character of value) {
+    const code = character.codePointAt(0)!
+    if (code >= 0x3400 && code <= 0x9fff) {
+      han += 1
+      if (COMMON_HAN.has(character)) common += 1
+    }
+  }
+  return han > 0 && common * 2 >= han
+}
+
+/**
+ * How much of a string reads as real Chinese.
+ *
+ * Common characters count for far more than merely being in the CJK
+ * block, because a wrong decoding lands in the block too. Replacement
+ * characters, the private-use area and stray controls count against —
+ * those only appear when a decoding is wrong.
+ */
+function cjkScore(value: string): number {
+  let score = 0
+  for (const character of value) {
+    const code = character.codePointAt(0)!
+    if (COMMON_HAN.has(character)) score += 6
+    else if (code >= 0x4e00 && code <= 0x9fff) score += 1
+    else if (code >= 0x3400 && code <= 0x4dbf) score -= 1
+    else if (code >= 0x3000 && code <= 0x303f) score += 1
+    else if (code === 0xfffd) score -= 4
+    else if (code >= 0xe000 && code <= 0xf8ff) score -= 4
+    else if (code < 0x20 && code !== 0x09 && code !== 0x0a) score -= 2
+  }
+  return score
 }
 
 function decodeXmlEntities(value: string): string {
@@ -182,13 +281,25 @@ export function fromPdfText(raw: string): ExtractedMetadata {
     /<dc:description>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i,
   ])
 
-  // Everything from a PDF goes through the repair: the file was decoded
-  // as Latin-1 to keep its bytes intact, so any UTF-8 text in it — a
-  // literal string, an XMP packet — arrives mis-decoded.
+  // Decoded together, not one field at a time.
+  //
+  // A file has one encoding, and an author's name is three characters —
+  // far too little to tell GBK from Big5, both of which turn any bytes
+  // into plausible-looking CJK. Judging title, author and subject as one
+  // string gives the detector more to go on and, more importantly,
+  // guarantees they agree: a book whose title decoded one way and whose
+  // author decoded another is obviously wrong to a reader even when
+  // each looks fine alone.
+  const [title, author, description] = repairTogether([
+    xmpTitle ?? clean(pdfString(raw, 'Title')),
+    xmpAuthor ?? clean(pdfString(raw, 'Author')),
+    clean(xmpDescription ?? pdfString(raw, 'Subject'), MAX_DESCRIPTION),
+  ])
+
   return dropEmpty({
-    title: repair(xmpTitle ?? clean(pdfString(raw, 'Title'))),
-    author: repair(xmpAuthor ?? clean(pdfString(raw, 'Author'))),
-    description: repair(clean(xmpDescription ?? pdfString(raw, 'Subject'), MAX_DESCRIPTION)),
+    title,
+    author,
+    description,
     language: normalizeLanguage(
       firstMatch(raw, [/<dc:language>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i]) ??
         pdfString(raw, 'Lang'),
@@ -287,9 +398,16 @@ function decodePdfHex(value: string): string | undefined {
   return repairUtf8(bytesToBinaryString(bytes))
 }
 
-/** `repairUtf8` that passes undefined through, for optional fields. */
-function repair(value: string | undefined): string | undefined {
-  return value === undefined ? undefined : repairUtf8(value)
+/**
+ * Repair several fields as one, so they cannot disagree about encoding.
+ *
+ * Joined with a newline, which is the same byte in every encoding
+ * considered, so the split afterwards is exact.
+ */
+export function repairTogether(values: (string | undefined)[]): (string | undefined)[] {
+  const present = values.map((value) => value ?? '')
+  const repaired = repairUtf8(present.join('\n')).split('\n')
+  return values.map((value, index) => (value === undefined ? undefined : repaired[index]))
 }
 
 /**

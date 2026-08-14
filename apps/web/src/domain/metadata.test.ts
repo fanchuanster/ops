@@ -19,6 +19,7 @@ import {
   mergeMetadata,
   normalizeLanguage,
   pdfPageCount,
+  repairTogether,
   repairUtf8,
 } from './metadata'
 
@@ -259,5 +260,47 @@ describe('byte strings', () => {
   it('handles a window larger than the call-stack chunk', () => {
     const big = new Uint8Array(70_000).fill(0xe8)
     expect(bytesToBinaryString(big)).toHaveLength(70_000)
+  })
+})
+
+describe('Chinese PDFs that are not UTF-8', () => {
+  // GBK and Big5 are what Chinese-language software writes into a PDF
+  // literal string, and they are exactly the books this library is for.
+  // Neither can fail to decode — both turn almost any bytes into valid
+  // CJK — so the detector has to judge whether the result is real
+  // Chinese, not merely Chinese-shaped.
+  const asBytes = (bytes: number[]) => bytesToBinaryString(new Uint8Array(bytes))
+
+  it('reads a GBK title and author', () => {
+    const title = asBytes([0xd5, 0x93, 0xd5, 0x5a, 0x84, 0x65, 0xb2, 0xc3]) // 論語別裁
+    const author = asBytes([0xc4, 0xcf, 0x91, 0xd1, 0xe8, 0xaa]) // 南懷瑾
+    expect(fromPdfText(`/Title (${title}) /Author (${author})`)).toMatchObject({
+      title: '論語別裁',
+      author: '南懷瑾',
+    })
+  })
+
+  it('reads a Big5 title', () => {
+    const title = asBytes([0xbd, 0xd7, 0xbb, 0x79, 0xa7, 0x4f, 0xb5, 0xf4]) // 論語別裁
+    expect(fromPdfText(`/Title (${title})`).title).toBe('論語別裁')
+  })
+
+  it('leaves European text alone rather than inventing Chinese', () => {
+    // The guard that matters: a legacy decoding is only preferred when
+    // it produces characters people actually use.
+    expect(repairUtf8('Café Littéraire')).toBe('Café Littéraire')
+    expect(repairUtf8('München')).toBe('München')
+  })
+
+  it('keeps title and author on the same encoding', () => {
+    // Three characters is far too little to tell GBK from Big5 alone,
+    // so the fields are judged together and must agree.
+    const [title, author] = repairTogether(['論語別裁', '南懷瑾'])
+    expect(title).toBe('論語別裁')
+    expect(author).toBe('南懷瑾')
+  })
+
+  it('passes undefined fields through untouched', () => {
+    expect(repairTogether(['x', undefined])).toEqual(['x', undefined])
   })
 })
