@@ -76,6 +76,59 @@ function firstMatch(source: string, patterns: RegExp[]): string | undefined {
   return undefined
 }
 
+/**
+ * Bytes as a string where every code unit *is* the byte.
+ *
+ * Deliberately not `TextDecoder('latin1')`. That label is an alias for
+ * **windows-1252** in the WHATWG encoding standard, not ISO-8859-1, and
+ * windows-1252 maps 0x80–0x9F onto typographic characters — 0x96
+ * becomes U+2013, an en dash. The decode is therefore not
+ * byte-preserving and cannot be reversed, which silently defeats the
+ * UTF-8 repair below on exactly the byte range CJK text uses most.
+ */
+export function bytesToBinaryString(bytes: Uint8Array): string {
+  let out = ''
+  // Chunked: spreading a large array into fromCharCode overflows the
+  // call stack, and a PDF window is up to a megabyte.
+  for (let i = 0; i < bytes.length; i += 8192) {
+    out += String.fromCharCode(...bytes.subarray(i, i + 8192))
+  }
+  return out
+}
+
+/**
+ * Repair text that is UTF-8 read as Latin-1.
+ *
+ * A PDF has to be read byte for byte — the hex strings carry raw bytes
+ * and UTF-8 decoding would replace every invalid sequence with U+FFFD —
+ * so the whole file is decoded as Latin-1. That is right for the bytes
+ * and wrong for the text: a producer that writes 論語別裁 as UTF-8
+ * inside a literal string, or an XMP packet (which is always UTF-8
+ * XML), comes back as è«–èªžåˆ¥è£.
+ *
+ * Both are extremely common — between them they cover most Chinese
+ * titles in the wild — so the string is turned back into the bytes it
+ * came from and re-decoded strictly. Strictly is what makes this safe:
+ * genuine Latin-1 text is almost never also valid multi-byte UTF-8, so
+ * the decode throws and the original is kept.
+ */
+export function repairUtf8(value: string): string {
+  // Nothing outside ASCII, so nothing to repair.
+  if (!/[\u0080-\u00ff]/.test(value)) return value
+  // Anything above U+00FF did not come from a Latin-1 decode, so this
+  // string was already read correctly.
+  for (const character of value) {
+    if (character.codePointAt(0)! > 0xff) return value
+  }
+
+  const bytes = Uint8Array.from(value, (character) => character.charCodeAt(0))
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return value
+  }
+}
+
 function decodeXmlEntities(value: string): string {
   return value
     .replace(/&lt;/g, '<')
@@ -129,10 +182,13 @@ export function fromPdfText(raw: string): ExtractedMetadata {
     /<dc:description>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i,
   ])
 
+  // Everything from a PDF goes through the repair: the file was decoded
+  // as Latin-1 to keep its bytes intact, so any UTF-8 text in it — a
+  // literal string, an XMP packet — arrives mis-decoded.
   return dropEmpty({
-    title: xmpTitle ?? clean(pdfString(raw, 'Title')),
-    author: xmpAuthor ?? clean(pdfString(raw, 'Author')),
-    description: clean(xmpDescription ?? pdfString(raw, 'Subject'), MAX_DESCRIPTION),
+    title: repair(xmpTitle ?? clean(pdfString(raw, 'Title'))),
+    author: repair(xmpAuthor ?? clean(pdfString(raw, 'Author'))),
+    description: repair(clean(xmpDescription ?? pdfString(raw, 'Subject'), MAX_DESCRIPTION)),
     language: normalizeLanguage(
       firstMatch(raw, [/<dc:language>[\s\S]*?<rdf:li[^>]*>([\s\S]*?)<\/rdf:li>/i]) ??
         pdfString(raw, 'Lang'),
@@ -226,7 +282,14 @@ function decodePdfHex(value: string): string | undefined {
     return text
   }
 
-  return new TextDecoder('latin1').decode(bytes)
+  // No byte-order mark. PDFDocEncoding in theory, but producers that
+  // write CJK here almost always mean UTF-8, so the repair decides.
+  return repairUtf8(bytesToBinaryString(bytes))
+}
+
+/** `repairUtf8` that passes undefined through, for optional fields. */
+function repair(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : repairUtf8(value)
 }
 
 /**

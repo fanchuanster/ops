@@ -654,6 +654,96 @@ h3 {
   gap: 0.4rem;
 }
 
+/* --- the conversion pipeline -------------------------------------- */
+
+.pipeline {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.pipeline h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+}
+
+.pipeline__stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pipeline__stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius);
+  border-left: 2px solid transparent;
+  font-family: var(--font-sans);
+  /* Stages not yet reached are quiet but not invisible: the point is to
+     show the whole road, including the part still ahead. */
+  color: var(--ink-faint);
+}
+
+.pipeline__stage--done {
+  color: var(--ink-soft);
+}
+
+.pipeline__stage--current {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--ink);
+}
+
+.pipeline__mark {
+  flex: 0 0 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.pipeline__stage--done .pipeline__mark {
+  background: var(--done-soft);
+  border-color: var(--done-rule);
+  color: var(--done);
+}
+
+.pipeline__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pipeline__text strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.pipeline__text span {
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.submit-review {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.submit-review h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
 /* --- a draft's master file ---------------------------------------- */
 
 .master {

@@ -4,7 +4,10 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
+import { ConversionProgress } from '../../../../../components/ConversionProgress'
 import { MasterFile } from '../../../../../components/MasterFile'
+import { SubmitForReview } from '../../../../../components/SubmitForReview'
+import { UPLOADER_RIGHTS } from '../../../../../domain/rights'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../../../lib/auth'
 import { getCollections } from '../../../../../lib/catalog'
@@ -46,6 +49,8 @@ export default async function BookDetailsPage({
   const hasMaster = (book.artifacts ?? []).some((a) => a.format === 'docx')
   const isAdmin = Boolean(user.roles?.includes('admin'))
   const usage = isAdmin ? null : await usageThisMonth(payload, user.id)
+  const state = book.conversion?.state ?? 'none'
+  const rightsDeclared = UPLOADER_RIGHTS.some((o) => o.value === book.rightsStatus)
 
   return (
     <>
@@ -87,8 +92,6 @@ export default async function BookDetailsPage({
           title: book.title,
           originalTitle: book.originalTitle ?? '',
           author: book.author ?? '',
-          translator: book.translator ?? '',
-          description: book.description ?? '',
           language: book.language ?? '',
           rightsStatus: book.rightsStatus,
           collections: (book.collections ?? [])
@@ -96,11 +99,24 @@ export default async function BookDetailsPage({
             .filter(Number.isFinite),
         }}
         collections={collections.map((c) => ({ id: Number(c.id), title: c.title }))}
+        submitLabel={draft ? 'Convert this book' : 'Save changes'}
       />
 
+      <ConversionProgress state={state} message={book.conversion?.message} />
+
       {/* Only once the book has been through the pipeline: there is
-          nothing to correct until something has been generated. */}
-      {draft ? null : <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />}
+          nothing to correct, and nothing to judge, until something has
+          been generated. */}
+      {draft ? null : (
+        <>
+          <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />
+          <SubmitForReview
+            bookId={Number(book.id)}
+            reviewState={book.review?.state ?? 'unsubmitted'}
+            rightsDeclared={rightsDeclared}
+          />
+        </>
+      )}
     </>
   )
 }

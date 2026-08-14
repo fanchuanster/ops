@@ -12,10 +12,12 @@ import { UPLOADER_RIGHTS } from '../domain/rights'
  * editable, because file metadata is frequently wrong and the reader is
  * the one who can tell. Nothing here is authoritative until they say so.
  *
- * Two submits, one form. The difference is only whether the reader is
- * asking for the book to go into the public library; both convert it.
- * The private option is first and unqualified, because keeping your own
- * book to yourself is the normal case, not the lesser one.
+ * One button, deliberately. It briefly offered "convert privately" and
+ * "convert and submit for review" side by side, which asked the reader
+ * to decide about publication before they had seen a single converted
+ * page. Converting is the only thing to do here; submitting for review
+ * is offered later, on the finished book, when there is something to
+ * judge.
  */
 
 const LANGUAGES = [
@@ -31,8 +33,6 @@ export interface EditableBook {
   title: string
   originalTitle: string
   author: string
-  translator: string
-  description: string
   language: string
   rightsStatus: string
   collections: number[]
@@ -41,9 +41,12 @@ export interface EditableBook {
 export function BookDetailsForm({
   book,
   collections,
+  submitLabel = 'Convert this book',
 }: {
   book: EditableBook
   collections: { id: number; title: string }[]
+  /** "Convert" for a draft; "Save changes" once it has been converted. */
+  submitLabel?: string
 }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(saveBookDetails, {})
 
@@ -71,17 +74,15 @@ export function BookDetailsForm({
           defaultValue={book.originalTitle}
           maxLength={200}
         />
-        <small>For example 道德經. Leave empty if it is the same as the title.</small>
+        <small>
+          Only when the title above is a translation or a romanisation. If the title is already
+          in the original script, leave this empty — it is not a second copy of it.
+        </small>
       </label>
 
       <label>
         <span>Author</span>
         <input type="text" name="author" defaultValue={book.author} maxLength={200} />
-      </label>
-
-      <label>
-        <span>Translator</span>
-        <input type="text" name="translator" defaultValue={book.translator} maxLength={200} />
       </label>
 
       <label>
@@ -93,11 +94,6 @@ export function BookDetailsForm({
             </option>
           ))}
         </select>
-      </label>
-
-      <label>
-        <span>Description</span>
-        <textarea name="description" defaultValue={book.description} rows={4} maxLength={2000} />
       </label>
 
       <label>
@@ -138,11 +134,8 @@ export function BookDetailsForm({
       ) : null}
 
       <div className="upload-form__actions">
-        <button type="submit" name="intent" value="convert" className="button-quiet" disabled={pending}>
-          {pending ? 'Saving…' : 'Convert and keep private'}
-        </button>
-        <button type="submit" name="intent" value="submit" className="button-quiet" disabled={pending}>
-          Convert and submit for review
+        <button type="submit" className="button-quiet" disabled={pending}>
+          {pending ? 'Saving…' : submitLabel}
         </button>
       </div>
 

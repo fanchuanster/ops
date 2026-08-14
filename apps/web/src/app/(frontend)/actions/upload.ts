@@ -89,7 +89,6 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
         title: suggested.title || file.name.replace(/\.[^.]+$/, ''),
         slug,
         author: suggested.author,
-        description: suggested.description,
         ...(suggested.language ? { language: suggested.language as 'zh-Hant' } : {}),
         // What the quota will be charged if this draft is converted.
         // Recorded now because the file is in hand now; the real count

@@ -22,6 +22,7 @@ import {
   fromFilename,
   fromPdfText,
   fromPlainText,
+  bytesToBinaryString,
   mergeMetadata,
   pdfPageCount,
 } from '../domain/metadata'
@@ -95,24 +96,27 @@ export async function extractMetadata(file: File): Promise<Extraction> {
 }
 
 /**
- * Both ends of a PDF as a latin1 string.
+ * Both ends of a PDF, one code unit per byte.
  *
- * Decoded as latin1 rather than UTF-8 on purpose: this is binary, and
- * UTF-8 decoding would replace every invalid sequence with U+FFFD,
- * corrupting the hex strings the parser needs to read byte for byte.
+ * Not UTF-8 decoded: this is binary, and UTF-8 decoding replaces every
+ * invalid sequence with U+FFFD, destroying the hex strings the parser
+ * reads byte for byte. Not `TextDecoder('latin1')` either — that label
+ * means windows-1252, which is lossy across 0x80–0x9F and cannot be
+ * reversed, so any UTF-8 text in the file could never be repaired.
+ * See `bytesToBinaryString`.
  */
 async function readPdfEnds(file: File): Promise<string> {
-  const decoder = new TextDecoder('latin1')
-
   if (file.size <= PDF_SCAN_BYTES * 2) {
-    return decoder.decode(await file.arrayBuffer())
+    return bytesToBinaryString(new Uint8Array(await file.arrayBuffer()))
   }
 
   const [head, tail] = await Promise.all([
     file.slice(0, PDF_SCAN_BYTES).arrayBuffer(),
     file.slice(file.size - PDF_SCAN_BYTES).arrayBuffer(),
   ])
-  return decoder.decode(head) + decoder.decode(tail)
+  return (
+    bytesToBinaryString(new Uint8Array(head)) + bytesToBinaryString(new Uint8Array(tail))
+  )
 }
 
 /**

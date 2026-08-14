@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  bytesToBinaryString,
   fromAppXml,
   fromCoreXml,
   fromFilename,
@@ -18,6 +19,7 @@ import {
   mergeMetadata,
   normalizeLanguage,
   pdfPageCount,
+  repairUtf8,
 } from './metadata'
 
 describe('DOCX core properties', () => {
@@ -207,5 +209,55 @@ describe('page counts stated by the file', () => {
 
   it('ignores a zero page count rather than treating it as measured', () => {
     expect(fromAppXml('<Properties><Pages>0</Pages></Properties>')).toEqual({})
+  })
+})
+
+describe('CJK text that arrives mis-decoded', () => {
+  // A PDF must be read one code unit per byte so the hex strings stay
+  // intact, which means any UTF-8 text in it arrives wrong. These are
+  // the three ways a producer really writes 論語別裁, and two of them
+  // depend on the repair.
+  const asBytes = (value: string) =>
+    bytesToBinaryString(new TextEncoder().encode(value))
+
+  it('repairs UTF-8 bytes written into a literal string', () => {
+    const pdf = `/Title (${asBytes('論語別裁')}) /Author (${asBytes('南懷瑾')})`
+    expect(fromPdfText(pdf)).toMatchObject({ title: '論語別裁', author: '南懷瑾' })
+  })
+
+  it('repairs an XMP packet, which is always UTF-8 XML', () => {
+    const pdf = `<dc:title><rdf:Alt><rdf:li>${asBytes('論語別裁')}</rdf:li></rdf:Alt></dc:title>`
+    expect(fromPdfText(pdf).title).toBe('論語別裁')
+  })
+
+  it('still reads the UTF-16BE hex form, which was never broken', () => {
+    expect(fromPdfText('/Title <FEFF8AD68A9E>').title).toBe('論語')
+  })
+
+  it('leaves genuine Latin-1 text alone', () => {
+    // é is a single code unit that is not valid UTF-8 on its own, so the
+    // strict decode throws and the original survives.
+    expect(repairUtf8('Café Littéraire')).toBe('Café Littéraire')
+  })
+
+  it('leaves text that was already read correctly alone', () => {
+    expect(repairUtf8('論語別裁')).toBe('論語別裁')
+    expect(repairUtf8('plain ascii')).toBe('plain ascii')
+  })
+})
+
+describe('byte strings', () => {
+  it('preserves every byte, unlike TextDecoder("latin1")', () => {
+    // 0x96 is the trap: windows-1252 — which is what the "latin1" label
+    // actually selects — turns it into U+2013, and the byte is lost.
+    const bytes = new Uint8Array([0x00, 0x7f, 0x80, 0x96, 0x9f, 0xff])
+    const encoded = bytesToBinaryString(bytes)
+    expect([...encoded].map((c) => c.charCodeAt(0))).toEqual([...bytes])
+    expect(new TextDecoder('latin1').decode(bytes).charCodeAt(3)).toBe(0x2013)
+  })
+
+  it('handles a window larger than the call-stack chunk', () => {
+    const big = new Uint8Array(70_000).fill(0xe8)
+    expect(bytesToBinaryString(big)).toHaveLength(70_000)
   })
 })

@@ -64,18 +64,11 @@ export async function saveBookDetails(
   if (!title) return { error: 'Give the book a title.' }
 
   const rightsStatus = String(formData.get('rightsStatus') || '')
-  const submit = String(formData.get('intent') || '') === 'submit'
 
-  // Rights may be left unanswered while a book is a draft — but not
-  // while asking for it to be published.
+  // May be left unanswered here. It is only load-bearing when the reader
+  // asks for the book to be published, which is a separate act.
   if (rightsStatus && !isUploaderSelectableRights(rightsStatus)) {
     return { error: 'Say where this book came from.' }
-  }
-  if (submit && !rightsStatus) {
-    return {
-      error:
-        'Say where this book came from before submitting it. You are the only person who knows.',
-    }
   }
 
   const collectionIds = formData
@@ -84,19 +77,6 @@ export async function saveBookDetails(
     .filter((value) => Number.isInteger(value) && value > 0)
 
   const language = String(formData.get('language') || '')
-
-  if (submit) {
-    // The domain decides whether a submission is even possible; this
-    // action only supplies the state and acts on the answer.
-    const decision = canSubmitForReview({
-      reviewState: book.review?.state ?? 'unsubmitted',
-      rightsStatus: rightsStatus as 'user_owned',
-      // There is always a source file — an upload cannot exist without
-      // one — and the generated formats do not need to exist yet.
-      hasContent: true,
-    })
-    if (!decision.allowed) return { error: SUBMISSION_ERRORS[decision.reason] }
-  }
 
   // The monthly conversion allowance, checked at the moment conversion
   // would start rather than at upload — a draft costs nothing, and
@@ -127,9 +107,12 @@ export async function saveBookDetails(
       data: {
         title,
         author: String(formData.get('author') || '').trim() || null,
-        translator: String(formData.get('translator') || '').trim() || null,
         originalTitle: String(formData.get('originalTitle') || '').trim() || null,
-        description: String(formData.get('description') || '').trim() || null,
+        // Translator and description are not on this form. They stay
+        // editable in the admin, but an uploader confirming a scan has
+        // nothing useful to say about either, and every field that is
+        // not worth filling in is a field that makes the ones that are
+        // look optional too.
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collections: collectionIds,
@@ -143,9 +126,6 @@ export async function saveBookDetails(
           // is what the monthly count is scoped by.
           startedAt: book.conversion?.startedAt ?? new Date().toISOString(),
         },
-        ...(submit
-          ? { review: { ...book.review, state: 'submitted', submittedAt: new Date().toISOString() } }
-          : {}),
       },
       overrideAccess: true,
     })
@@ -154,7 +134,62 @@ export async function saveBookDetails(
   }
 
   revalidatePath('/account/books')
-  redirect('/account/books')
+  revalidatePath(`/account/books/${bookId}`)
+  redirect(`/account/books/${bookId}`)
+}
+
+/**
+ * Ask for a converted book to be considered for the public library.
+ *
+ * Separate from confirming the details, and offered only once there is
+ * a converted book to look at — asking someone to decide about
+ * publication before they have seen a single converted page is asking
+ * them to guess.
+ *
+ * Approval is not the only gate. An administrator saying yes means the
+ * book belongs in the library; it is not a finding that it is legally
+ * distributable, which is what the rights status decides separately
+ * (domain/moderation.ts).
+ */
+export async function submitForReview(
+  _prev: DetailsState,
+  formData: FormData,
+): Promise<DetailsState> {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Sign in first.' }
+
+  const bookId = Number(formData.get('bookId'))
+  if (!Number.isInteger(bookId)) return { error: 'Nothing to submit.' }
+
+  const payload = await getPayload({ config })
+  const book = await payload
+    .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+
+  const ownerId = typeof book?.owner === 'object' ? book?.owner?.id : book?.owner
+  if (!book || !ownerId || String(ownerId) !== String(user.id)) {
+    return { error: 'That book is not yours to submit.' }
+  }
+
+  const decision = canSubmitForReview({
+    reviewState: book.review?.state ?? 'unsubmitted',
+    rightsStatus: book.rightsStatus,
+    // The generated formats exist by the time this is offered.
+    hasContent: true,
+  })
+  if (!decision.allowed) return { error: SUBMISSION_ERRORS[decision.reason] }
+
+  await payload.update({
+    collection: 'books',
+    id: bookId,
+    data: {
+      review: { ...book.review, state: 'submitted', submittedAt: new Date().toISOString() },
+    },
+    overrideAccess: true,
+  })
+
+  revalidatePath(`/account/books/${bookId}`)
+  return {}
 }
 
 /** What a blocked submission should tell the uploader. */
