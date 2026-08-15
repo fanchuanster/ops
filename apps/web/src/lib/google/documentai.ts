@@ -229,7 +229,7 @@ export async function collectOcrPages({
   encodedKey: string
   bucket: string
   outputPrefix: string
-}): Promise<OcrPage[]> {
+}): Promise<{ pages: OcrPage[]; pageCount: number }> {
   const token = await googleAccessToken(encodedKey)
   const names = (await listObjects(token, bucket, outputPrefix)).filter((name) =>
     name.endsWith('.json'),
@@ -246,5 +246,9 @@ export async function collectOcrPages({
     pages.push(...pagesFromShard(shard))
   }
 
-  return orderPages(pages)
+  // Counted before the blank ones are dropped. A blank verso is still a
+  // page of the book, and the count is what the credit price derives
+  // from — so counting only pages with text on them would under-charge
+  // every book with plates, part-title pages or a blank last leaf.
+  return { pages: orderPages(pages), pageCount: pages.length }
 }

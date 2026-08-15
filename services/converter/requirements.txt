@@ -1,40 +1,16 @@
-# PDF parsing and page rasterization. Ships its own MuPDF, so no poppler
-# or system libraries are needed.
-pymupdf>=1.28
+# Everything: the service, plus the local OCR engine.
+#
+# This is what a developer or an editor installs — the CLI still reads
+# scanned PDFs locally (`app/ocr`, `pipeline/structure.py`), which is the
+# path that reconstructs a book from OCR *geometry* and finds headings,
+# verse and footnotes from where a line sits on the page.
+#
+# The deployed service installs `requirements-service.txt` instead. Books
+# arriving through the portal are read by Google Document AI and reach
+# this service as text, so the container needs none of the below.
+-r requirements-service.txt
 
 # OCR. paddlepaddle is the runtime; paddleocr is the model pipeline.
 # See app/ocr/paddle.py for why oneDNN is disabled by default.
 paddlepaddle>=3.3
 paddleocr>=3.7
-
-# The editable master.
-python-docx>=1.2
-
-# Pillow is pulled in by paddleocr, but the OCR backend reads page
-# dimensions with it directly, so it is a real dependency here.
-pillow>=10
-
-# The AI correction stage talks to an OpenAI-compatible endpoint over
-# plain HTTP; no provider SDK is needed for one endpoint.
-httpx>=0.28
-
-# Reads XAI_API_KEY from the repo-root .env for local CLI runs. In a
-# container the environment is set directly and no .env exists.
-python-dotenv>=1.0
-
-# The reader-facing formats. ebooklib writes valid EPUB 3; WeasyPrint
-# renders the PDF variants from the same HTML, with no browser and no
-# display needed — which is what makes this service deployable somewhere
-# small. See app/pdf/builder.py for why not Playwright.
-ebooklib>=0.18
-weasyprint>=62
-
-# The asynchronous job API (CLAUDE.md section 13). A scanned book takes
-# hours, so the request must not wait for it.
-fastapi>=0.115
-uvicorn[standard]>=0.32
-pydantic>=2.9
-
-# R2 over the S3 API. This service is not a Worker and so has no
-# binding; it is the one component that legitimately holds a key.
-boto3>=1.35

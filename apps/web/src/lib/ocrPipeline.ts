@@ -236,7 +236,7 @@ export async function advanceRunningOcr(payload: Payload, config: OcrConfig): Pr
       return true
     }
 
-    const pages = await collectOcrPages({
+    const { pages, pageCount } = await collectOcrPages({
       encodedKey: config.encodedKey,
       bucket: config.bucket,
       outputPrefix: prefix,
@@ -255,11 +255,10 @@ export async function advanceRunningOcr(payload: Payload, config: OcrConfig): Pr
       return true
     }
 
-    const document = buildOcrDocument({
-      bookId: book.id,
-      pages,
-      pageCount: pages.length,
-    })
+    // `pageCount` is every page the engine saw; `pages` is only those
+    // with text on them. Passing the latter for both would lose every
+    // blank page in the book.
+    const document = buildOcrDocument({ bookId: book.id, pages, pageCount })
 
     const key = ocrTextKey(book.id)
     const bucket = await objectBucket()
