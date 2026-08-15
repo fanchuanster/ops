@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import React from 'react'
 
+import { RequestFormat } from '../../../../components/RequestFormat'
 import { SendToKindleButton } from '../../../../components/SendToKindleButton'
 import { priceInCredits } from '../../../../domain/credits'
 import { isKindleDeliverableFormat } from '../../../../domain/kindle'
@@ -159,6 +160,22 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
             </span>
           </div>
         )}
+
+        {/* Only once there is a master to render from, and only for a
+            signed-in reader — the action requires an account, so
+            offering the buttons to anyone else would be offering a
+            button that answers "sign in first". */}
+        {reader && readable ? (
+          <RequestFormat
+            bookId={Number(book.id)}
+            existingFormats={artifacts.map((a) => a.format)}
+            pendingFormats={
+              Array.isArray(book.conversion?.pendingFormats)
+                ? (book.conversion.pendingFormats as string[])
+                : []
+            }
+          />
+        ) : null}
 
         <p className="notice" style={{ marginTop: '2rem' }}>
           Reading is free and unlimited — no account needed. Credits pay only for sending a book

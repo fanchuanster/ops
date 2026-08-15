@@ -34,7 +34,7 @@ import { getPayload } from 'payload'
 
 import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
 import { OCR_FORMAT_VERSION } from '../../../../domain/ocr'
-import { claimableAs, completedState, inProgressState } from '../../../../domain/pipeline'
+import { claimFor, completedState, inProgressState } from '../../../../domain/pipeline'
 import { advanceOcrPipeline } from '../../../../lib/ocrPipeline'
 
 export const dynamic = 'force-dynamic'
@@ -114,63 +114,89 @@ export async function GET(request: Request) {
   await advanceOcrPipeline(payload)
 
   for (const state of CLAIMABLE) {
-    const kind = claimableAs(state)!
-
+    // More than one, because a `master_ready` book may be held back by
+    // review while the one behind it is cleared. Taking only the oldest
+    // would let a single unreviewed book block every other book's
+    // formats behind it — a head-of-line stall with no way out but an
+    // administrator noticing.
     const waiting = await payload.find({
       collection: 'books',
       where: { 'conversion.state': { equals: state } },
       sort: 'createdAt',
-      limit: 1,
+      limit: 10,
       depth: 0,
       overrideAccess: true,
     })
 
-    const book = waiting.docs[0]
-    if (!book) continue
+    for (const book of waiting.docs) {
+      const conversion = (book.conversion ?? {}) as Record<string, unknown>
 
-    // The claim is a compare-and-swap: conditional on the book still
-    // being in the state we found it in, so two converters polling at
-    // once cannot both take it. D1 has no row locking, and a plain
-    // read-then-write would hand the same book to both.
-    const claimed = await payload.update({
-      collection: 'books',
-      where: {
-        and: [{ id: { equals: book.id } }, { 'conversion.state': { equals: state } }],
-      },
-      data: { conversion: { ...book.conversion, state: inProgressState(kind) } },
-      overrideAccess: true,
-    })
+      // May this book run, and on what. The review gate lives in the
+      // domain layer — a book whose uploader has not had it approved
+      // yet is not refused here, it is simply not offered.
+      const work = claimFor({
+        state,
+        hasOwner: Boolean(book.owner),
+        reviewState: book.review?.state ?? 'unsubmitted',
+        pendingFormats: Array.isArray(conversion.pendingFormats)
+          ? (conversion.pendingFormats as unknown[])
+          : [],
+        existingFormats: (book.artifacts ?? []).map((artifact) => artifact.format),
+      })
+      if (!work) continue
 
-    // Lost the race. Move on rather than retrying — the poller comes
-    // back shortly, and retrying here makes the handler unbounded.
-    if (claimed.docs.length === 0) continue
+      const { kind, formats } = work
 
-    return NextResponse.json({
-      job: {
-        job_id: book.conversion?.jobId ?? String(book.id),
-        book_id: String(book.id),
-        // What the converter is being asked to do. Phase 1 builds the
-        // DOCX master from OCR text; phase 2 builds reader formats from
-        // that master. See domain/pipeline.ts.
-        kind,
-        ocr_format_version: OCR_FORMAT_VERSION,
-        // Phase 1 reads one of these two. `ocr_key` is the OCR text;
-        // it is absent for a DOCX or plain-text upload, which needed no
-        // OCR and whose original is the text.
-        ocr_key: book.conversion?.ocrKey ?? null,
-        source_key: book.conversion?.sourceKey,
-        // Phase 2 reads the master, which phase 1 attached.
-        master_key:
-          (book.artifacts ?? []).find((artifact) => artifact.format === 'docx')?.storageKey ?? null,
-        title: book.title,
-        author: book.author ?? null,
-        // Never true for a reader's upload. Every book that reaches this
-        // endpoint is one, so this is a constant rather than a field —
-        // making it configurable here would be making it possible to get
-        // wrong (CLAUDE.md section 6.1).
-        allow_third_party_ai: false,
-      },
-    })
+      // The claim is a compare-and-swap: conditional on the book still
+      // being in the state we found it in, so two converters polling at
+      // once cannot both take it. D1 has no row locking, and a plain
+      // read-then-write would hand the same book to both.
+      const claimed = await payload.update({
+        collection: 'books',
+        where: {
+          and: [{ id: { equals: book.id } }, { 'conversion.state': { equals: state } }],
+        },
+        data: { conversion: { ...book.conversion, state: inProgressState(kind) } },
+        overrideAccess: true,
+      })
+
+      // Lost the race. Move on rather than retrying — the poller comes
+      // back shortly, and retrying here makes the handler unbounded.
+      if (claimed.docs.length === 0) continue
+
+      return NextResponse.json({
+        job: {
+          job_id: book.conversion?.jobId ?? String(book.id),
+          book_id: String(book.id),
+          // What the converter is being asked to do. Phase 1 builds the
+          // DOCX master from OCR text; phase 2 builds reader formats from
+          // that master. See domain/pipeline.ts.
+          kind,
+          // Which formats phase 2 should produce. Empty for phase 1.
+          // Sent explicitly rather than left to the converter's
+          // judgement: what a book needs depends on what it already has
+          // and what a reader asked for, and only this side knows both.
+          formats,
+          ocr_format_version: OCR_FORMAT_VERSION,
+          // Phase 1 reads one of these two. `ocr_key` is the OCR text;
+          // it is absent for a DOCX or plain-text upload, which needed no
+          // OCR and whose original is the text.
+          ocr_key: book.conversion?.ocrKey ?? null,
+          source_key: book.conversion?.sourceKey,
+          // Phase 2 reads the master, which phase 1 attached.
+          master_key:
+            (book.artifacts ?? []).find((artifact) => artifact.format === 'docx')?.storageKey ??
+            null,
+          title: book.title,
+          author: book.author ?? null,
+          // Never true for a reader's upload. Every book that reaches this
+          // endpoint is one, so this is a constant rather than a field —
+          // making it configurable here would be making it possible to get
+          // wrong (CLAUDE.md section 6.1).
+          allow_third_party_ai: false,
+        },
+      })
+    }
   }
 
   return NextResponse.json({ job: null })
@@ -269,7 +295,16 @@ export async function POST(request: Request) {
       // is what prices the book. Null leaves whatever is there, which
       // for a new book means the minimum — the right way to fail.
       ...(pageCount === null ? {} : { pageCount }),
-      conversion: { ...book.conversion, state: completedState(kind), message: null },
+      conversion: {
+        ...book.conversion,
+        state: completedState(kind),
+        message: null,
+        // Whatever was asked for has now been built. Cleared on phase 2
+        // only: a phase 1 completion has not touched the formats, and
+        // clearing here would silently drop a request made while the
+        // master was being rebuilt.
+        ...(kind === 'formats' ? { pendingFormats: [] } : {}),
+      },
       // Only once a reader can actually read it. A DOCX master is not a
       // readable edition, so phase 1 finishing does not publish
       // anything.

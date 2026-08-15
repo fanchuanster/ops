@@ -8,6 +8,7 @@ import * as migration_20260814_150000_upload_quota from './20260814_150000_uploa
 import * as migration_20260814_155000_uploader_share from './20260814_155000_uploader_share';
 import * as migration_20260814_182000_cascade_book_deletes from './20260814_182000_cascade_book_deletes';
 import * as migration_20260815_051500_ocr_pipeline from './20260815_051500_ocr_pipeline';
+import * as migration_20260815_060000_pending_formats from './20260815_060000_pending_formats';
 
 export const migrations = [
   {
@@ -59,5 +60,10 @@ export const migrations = [
     up: migration_20260815_051500_ocr_pipeline.up,
     down: migration_20260815_051500_ocr_pipeline.down,
     name: '20260815_051500_ocr_pipeline'
+  },
+  {
+    up: migration_20260815_060000_pending_formats.up,
+    down: migration_20260815_060000_pending_formats.down,
+    name: '20260815_060000_pending_formats'
   },
 ];

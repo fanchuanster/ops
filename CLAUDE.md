@@ -391,9 +391,43 @@ where a failure restarts from. That last one is keyed on whether a DOCX
 artifact exists rather than on the state, because the state is what a
 failure loses and the artifact is the evidence that survived.
 
-PDF rendering is deferred. EPUB is the primary format and the DOCX master
-is the source of truth; the three PDF variants are a future addition, not
-a gap in the current pipeline. The conversion service is
+## Phase 2 waits for review
+
+Phase 2 does not start on its own for a reader's upload. A book sits at
+`master_ready` until an administrator has approved it, and only then is
+the EPUB generated — `reviewClearsFormats` in
+`apps/web/src/domain/pipeline.ts`. The reasoning is that generating an
+edition is a statement that the book is fit to read, and building it
+before anyone has looked at the master bakes the OCR damage into the
+edition. The two-phase split is exactly what makes waiting cheap.
+
+The gate is scoped to books that have an **owner**, identically to
+`enforcePublicationReview` in the Books collection. Library content
+entered by staff has no owner and no submission to review; requiring one
+would mean an editor could not convert a book without first submitting
+it to themselves.
+
+A consequence worth stating: review now happens *before* the reader-facing
+formats exist, so "is there anything to review?" means the DOCX master,
+not the EPUB.
+
+## EPUB on release, PDFs on request
+
+Phase 2 builds the EPUB and stops. The three PDF variants are rendered
+when a reader asks for one, through `requestFormat`, which records the
+request in `conversion.pendingFormats` and returns the book to
+`master_ready` for the converter's next poll. WeasyPrint is by a wide
+margin the slowest stage in the pipeline, and rendering three fixed-
+typography editions of every book — when EPUB is the point of the
+project — spent that time on files nobody opened.
+
+`formatsToBuild` decides what a phase 2 run produces, and its third case
+is the subtle one: when nothing has been requested but the book already
+has formats, it rebuilds *all* of them. That is a master edit, and
+regenerating only the EPUB would leave the PDFs rendering errors the
+edit removed.
+
+The conversion service is
 deliberately standalone and platform-agnostic — it talks to the web
 application over HTTP and knows nothing about the frontend.
 
@@ -958,6 +992,13 @@ A job now carries a `kind`, because there are two of them:
 
     kind: "master"    ocr_key (or source_key) → DOCX master
     kind: "formats"   master_key              → EPUB, PDF…
+
+A `formats` job also carries a **`formats` list** saying which editions
+to build. Absent means "all of them", which is what the CLI and the job
+API want; the web application always says explicitly, because what a
+book needs depends on what it already has and what a reader asked for,
+and only that side knows either. An empty list is a real instruction and
+is not read as "all".
 
 `ocr_key` is a JSON document in R2 — `books/{id}/ocr/pages.json`, shape
 and version in `apps/web/src/domain/ocr.ts` — holding the pages the

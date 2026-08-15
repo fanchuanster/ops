@@ -22,6 +22,9 @@
  * Framework-independent, like everything in `src/domain`.
  */
 
+import type { ArtifactFormat } from './conversion'
+import type { ReviewState } from './moderation'
+
 export const CONVERSION_STATES = [
   'none',
   'draft',
@@ -54,6 +57,133 @@ export function claimableAs(state: ConversionState): JobKind | null {
   if (state === 'ocr_ready') return 'master'
   if (state === 'master_ready') return 'formats'
   return null
+}
+
+/**
+ * What phase 2 builds when a book is first released.
+ *
+ * EPUB alone. CLAUDE.md section 10 makes it the primary reflowable
+ * format, and it is the one every reader needs; the PDF variants are
+ * three renderings of the same book that most readers will never open.
+ * Building all four on every release spent WeasyPrint's time — by far
+ * the slowest stage — on files nobody asked for.
+ */
+export const RELEASE_FORMATS: readonly ArtifactFormat[] = ['epub']
+
+/**
+ * Formats built only when somebody asks for one.
+ *
+ * The three PDF sizes. A reader picks the typography they want and that
+ * variant is rendered for them; the other two are not.
+ */
+export const ON_DEMAND_FORMATS: readonly ArtifactFormat[] = [
+  'pdf_standard',
+  'pdf_large',
+  'pdf_xl',
+]
+
+export function isOnDemandFormat(value: unknown): value is ArtifactFormat {
+  return typeof value === 'string' && ON_DEMAND_FORMATS.includes(value as ArtifactFormat)
+}
+
+/**
+ * Is this book cleared for its reader-facing formats to be built?
+ *
+ * Reader uploads wait for review; staff library content does not. The
+ * scoping is deliberately identical to `enforcePublicationReview` in
+ * the Books collection — a book is "reader-created" exactly when it has
+ * an owner. Requiring review of staff content would mean an editor
+ * could not convert a book without first submitting it to themselves.
+ *
+ * The gate exists because generating an edition is a statement that the
+ * book is fit to read. Building the EPUB before anyone has looked at
+ * the master means the OCR damage is baked into the edition, and the
+ * two-phase split (above) is precisely what makes waiting cheap.
+ */
+export function reviewClearsFormats({
+  hasOwner,
+  reviewState,
+}: {
+  hasOwner: boolean
+  reviewState: ReviewState
+}): boolean {
+  if (!hasOwner) return true
+  return reviewState === 'approved'
+}
+
+/**
+ * Which formats a phase 2 run should produce.
+ *
+ * Three cases, in order:
+ *
+ *   - Something was asked for → build exactly that.
+ *   - Nothing asked for, nothing built → the release set.
+ *   - Nothing asked for, formats already exist → rebuild them all.
+ *
+ * That last case is the one worth stating plainly: it is a master edit.
+ * The book already has an EPUB and perhaps two PDFs, all of them built
+ * from text an editor has since corrected. Rebuilding only the release
+ * set would leave those PDFs behind, still rendering the errors the
+ * edit removed — stale in a way nobody would notice until a reader
+ * opened one.
+ *
+ * `docx` is never in the answer. It is the input.
+ */
+export function formatsToBuild({
+  pendingFormats,
+  existingFormats,
+}: {
+  pendingFormats: readonly unknown[]
+  existingFormats: readonly unknown[]
+}): ArtifactFormat[] {
+  const pending = pendingFormats.filter(isOnDemandFormat)
+  if (pending.length > 0) return [...new Set(pending)]
+
+  const existing = existingFormats.filter(
+    (format): format is ArtifactFormat =>
+      isOnDemandFormat(format) || RELEASE_FORMATS.includes(format as ArtifactFormat),
+  )
+  return [...new Set([...RELEASE_FORMATS, ...existing])]
+}
+
+export interface ClaimCandidate {
+  state: ConversionState
+  /** Reader-created books need review; staff library content does not. */
+  hasOwner: boolean
+  reviewState: ReviewState
+  pendingFormats: readonly unknown[]
+  /** Formats the book already has, so a master edit rebuilds them all. */
+  existingFormats: readonly unknown[]
+}
+
+export interface ClaimedWork {
+  kind: JobKind
+  /** Empty for a `master` job, which produces the one thing it produces. */
+  formats: ArtifactFormat[]
+}
+
+/**
+ * What, if anything, a converter should be handed for this book.
+ *
+ * `claimableAs` above answers "which phase does this state belong to";
+ * this answers "may it run, and on what". They are separate because the
+ * first is a property of the state alone and stays testable as such,
+ * while the second needs the book's review and its artifacts.
+ */
+export function claimFor(candidate: ClaimCandidate): ClaimedWork | null {
+  const kind = claimableAs(candidate.state)
+  if (!kind) return null
+  if (kind === 'master') return { kind, formats: [] }
+
+  if (!reviewClearsFormats(candidate)) return null
+
+  return {
+    kind,
+    formats: formatsToBuild({
+      pendingFormats: candidate.pendingFormats,
+      existingFormats: candidate.existingFormats,
+    }),
+  }
 }
 
 /**
@@ -137,6 +267,22 @@ export const QUOTA_COUNTED_STATES: ConversionState[] = CONVERSION_STATES.filter(
  */
 export function retryStateFor({ hasMasterArtifact }: { hasMasterArtifact: boolean }): ConversionState {
   return hasMasterArtifact ? 'master_ready' : 'queued'
+}
+
+/**
+ * Is this book finished with phase 1 and waiting on a human?
+ *
+ * Distinct from `isInFlight`: nothing is running and nothing will start
+ * until somebody reviews it. The uploader should be told that, not
+ * shown a spinner — a progress bar that will never move on its own is
+ * worse than no progress bar.
+ */
+export function awaitingReview(candidate: {
+  state: ConversionState
+  hasOwner: boolean
+  reviewState: ReviewState
+}): boolean {
+  return candidate.state === 'master_ready' && !reviewClearsFormats(candidate)
 }
 
 /**

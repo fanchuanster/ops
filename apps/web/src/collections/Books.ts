@@ -333,6 +333,15 @@ export const Books: CollectionConfig = {
           ],
         },
         {
+          name: 'pendingFormats',
+          type: 'json',
+          admin: {
+            readOnly: true,
+            description:
+              'Formats a reader has asked for that have not been built yet. Empty means the next phase 2 run builds the release set (EPUB) — or, if the book already has formats, rebuilds all of them after a master edit.',
+          },
+        },
+        {
           name: 'sourceKey',
           type: 'text',
           admin: { readOnly: true, description: 'The uploaded original in object storage.' },

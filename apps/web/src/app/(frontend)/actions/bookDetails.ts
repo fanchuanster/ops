@@ -9,7 +9,7 @@ import {
   type SubmissionBlockedReason,
   canSubmitForReview,
 } from '../../../domain/moderation'
-import { isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
+import { hasMaster, isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
 import { isUploaderSelectableRights } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../lib/auth'
@@ -176,8 +176,13 @@ export async function submitForReview(
   const decision = canSubmitForReview({
     reviewState: book.review?.state ?? 'unsubmitted',
     rightsStatus: book.rightsStatus,
-    // The generated formats exist by the time this is offered.
-    hasContent: true,
+    // The DOCX master, not the EPUB. Review now comes *before* the
+    // reader-facing formats are built — that is the whole point of the
+    // gate — so requiring an EPUB here would mean no book could ever be
+    // submitted and none could ever be approved.
+    hasContent: hasMaster(
+      isConversionState(book.conversion?.state) ? book.conversion.state : 'none',
+    ),
   })
   if (!decision.allowed) return { error: SUBMISSION_ERRORS[decision.reason] }
 

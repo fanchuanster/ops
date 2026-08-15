@@ -24,7 +24,7 @@ from pathlib import Path
 from ..docx.builder import build_docx
 from ..epub import build_epub
 from ..models import Document
-from ..pdf import build_all_pdfs, page_count
+from ..pdf import PDF_VARIANTS, build_all_pdfs, build_pdf, page_count
 from ..sources.load import load_source
 from ..sources.ocr_json import page_count_of, read_ocr_json
 from ..storage.r2 import CONTENT_TYPES, ObjectStore, artifact_key
@@ -40,6 +40,29 @@ ARTIFACT_FILENAMES = {
     "pdf_large": "large.pdf",
     "pdf_xl": "xl.pdf",
 }
+
+# The same names, for the working directory. Separate from the storage
+# names only because these are scratch files; keeping them identical
+# avoids a second mapping to get wrong.
+PDF_FILENAMES = {variant: ARTIFACT_FILENAMES[variant] for variant in PDF_VARIANTS}
+
+# What phase 2 builds when the caller does not say. Everything — which
+# is what the CLI and the job API want, since an editor converting a
+# book locally asked for the whole set by running the command at all.
+ALL_READER_FORMATS = ("epub", *PDF_VARIANTS)
+
+
+def _wanted_formats(job: Job) -> set[str]:
+    """Which reader-facing formats this job should produce.
+
+    An empty list is not the same as no list. `None` means "the caller
+    did not say", which is the CLI, and gets everything; `[]` means the
+    caller said nothing was wanted, which would be a bug on the web
+    side but must not silently become "build all five".
+    """
+    if job.formats is None:
+        return set(ALL_READER_FORMATS)
+    return {fmt for fmt in job.formats if fmt in ALL_READER_FORMATS}
 
 
 def run(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
@@ -151,11 +174,31 @@ def run_formats_job(job: Job, store: ObjectStore | None, *, on_change=lambda job
 
             job.advance(JobState.FORMAT_GENERATION)
             on_change(job)
-            epub_path = build_epub(document, work / "book.epub", identifier=job.id)
-            pdfs = build_all_pdfs(document, work)
+
+            wanted = _wanted_formats(job)
+            produced: dict[str, Path] = {}
+
+            if "epub" in wanted:
+                produced["epub"] = build_epub(document, work / "book.epub", identifier=job.id)
+
+            # Rendered one at a time rather than through `build_all_pdfs`,
+            # because building three when one was asked for is the cost
+            # this whole path exists to avoid: WeasyPrint is the slowest
+            # stage in the pipeline by a wide margin.
+            for variant in PDF_VARIANTS:
+                if variant in wanted:
+                    produced[variant] = build_pdf(
+                        document,
+                        work / PDF_FILENAMES[variant],
+                        variant=variant,
+                    )
+
+            # Always, even when no PDF was built: the count is the book's
+            # length and prices it, and it must not depend on which
+            # formats happened to be requested.
             job.page_count = page_count(document)
 
-            for fmt, path in {"epub": epub_path, **pdfs}.items():
+            for fmt, path in produced.items():
                 key = artifact_key(job.book_id or job.id, ARTIFACT_FILENAMES[fmt])
                 store.upload(path, key, content_type=CONTENT_TYPES.get(path.suffix))
                 job.artifacts[fmt] = key

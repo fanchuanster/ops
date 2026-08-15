@@ -74,6 +74,13 @@ class Job:
     ocr_key: str | None = None
     # Phase 2 reads this.
     master_key: str | None = None
+    # Which reader-facing formats phase 2 should produce. None means all
+    # of them, which is what the CLI and the job API want; the web
+    # application always says explicitly, because what a book needs
+    # depends on what it already has and what a reader asked for, and
+    # only that side knows either. See `formatsToBuild` in
+    # `apps/web/src/domain/pipeline.ts`.
+    formats: list[str] | None = None
     title: str | None = None
     author: str | None = None
     # Whether this book may be sent to a third-party LLM for OCR

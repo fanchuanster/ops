@@ -16,8 +16,12 @@ import {
   completedState,
   hasMaster,
   inProgressState,
+  awaitingReview,
+  claimFor,
+  formatsToBuild,
   isConversionState,
   isInFlight,
+  reviewClearsFormats,
   needsOcrRun,
   retryStateFor,
   stateAfterMasterEdit,
@@ -164,5 +168,126 @@ describe('validating stored values', () => {
   it('rejects anything else', () => {
     expect(isConversionState('converting')).toBe(false)
     expect(isConversionState(null)).toBe(false)
+  })
+})
+
+describe('the review gate before phase 2', () => {
+  it('clears staff library content, which has no owner to review it', () => {
+    expect(reviewClearsFormats({ hasOwner: false, reviewState: 'unsubmitted' })).toBe(true)
+  })
+
+  it('holds a reader upload until it is approved', () => {
+    for (const reviewState of ['unsubmitted', 'submitted', 'rejected'] as const) {
+      expect(reviewClearsFormats({ hasOwner: true, reviewState })).toBe(false)
+    }
+    expect(reviewClearsFormats({ hasOwner: true, reviewState: 'approved' })).toBe(true)
+  })
+
+  it('offers no phase 2 work for a book still awaiting review', () => {
+    expect(
+      claimFor({
+        state: 'master_ready',
+        hasOwner: true,
+        reviewState: 'submitted',
+        pendingFormats: [],
+        existingFormats: [],
+      }),
+    ).toBeNull()
+  })
+
+  it('still offers phase 1, which review has nothing to say about', () => {
+    // The master is what gets reviewed. Gating its creation on review
+    // would be asking someone to approve a book nobody can read yet.
+    expect(
+      claimFor({
+        state: 'ocr_ready',
+        hasOwner: true,
+        reviewState: 'unsubmitted',
+        pendingFormats: [],
+        existingFormats: [],
+      }),
+    ).toEqual({ kind: 'master', formats: [] })
+  })
+
+  it('says a held book is awaiting review rather than in flight', () => {
+    const held = { state: 'master_ready' as const, hasOwner: true, reviewState: 'submitted' as const }
+    expect(awaitingReview(held)).toBe(true)
+    expect(isInFlight(held.state)).toBe(false)
+  })
+
+  it('does not call an approved book awaiting review', () => {
+    expect(
+      awaitingReview({ state: 'master_ready', hasOwner: true, reviewState: 'approved' }),
+    ).toBe(false)
+  })
+})
+
+describe('choosing which formats to build', () => {
+  it('builds only the release set for a new book', () => {
+    expect(formatsToBuild({ pendingFormats: [], existingFormats: [] })).toEqual(['epub'])
+  })
+
+  it('builds exactly what was asked for', () => {
+    expect(formatsToBuild({ pendingFormats: ['pdf_large'], existingFormats: ['epub'] })).toEqual([
+      'pdf_large',
+    ])
+  })
+
+  it('rebuilds everything the book already has when the master is edited', () => {
+    // The reason this matters: a PDF built from the old master still
+    // renders the errors the edit removed, and nothing would ever
+    // rebuild it if only the release set were regenerated.
+    const formats = formatsToBuild({
+      pendingFormats: [],
+      existingFormats: ['docx', 'epub', 'pdf_xl'],
+    })
+    expect(formats).toContain('epub')
+    expect(formats).toContain('pdf_xl')
+  })
+
+  it('never asks for the master, which is the input', () => {
+    expect(formatsToBuild({ pendingFormats: ['docx'], existingFormats: ['docx'] })).not.toContain(
+      'docx',
+    )
+  })
+
+  it('ignores junk in the stored list', () => {
+    expect(
+      formatsToBuild({ pendingFormats: ['pdf_large', 'mobi', null, 7], existingFormats: [] }),
+    ).toEqual(['pdf_large'])
+  })
+
+  it('does not repeat a format asked for twice', () => {
+    expect(
+      formatsToBuild({ pendingFormats: ['pdf_large', 'pdf_large'], existingFormats: [] }),
+    ).toEqual(['pdf_large'])
+  })
+})
+
+describe('what a converter is handed', () => {
+  it('asks for one PDF when one was requested', () => {
+    expect(
+      claimFor({
+        state: 'master_ready',
+        hasOwner: true,
+        reviewState: 'approved',
+        pendingFormats: ['pdf_standard'],
+        existingFormats: ['docx', 'epub'],
+      }),
+    ).toEqual({ kind: 'formats', formats: ['pdf_standard'] })
+  })
+
+  it('offers nothing for a resting book', () => {
+    for (const state of ['ready', 'draft', 'failed', 'formatting', 'none'] as const) {
+      expect(
+        claimFor({
+          state,
+          hasOwner: false,
+          reviewState: 'approved',
+          pendingFormats: [],
+          existingFormats: [],
+        }),
+      ).toBeNull()
+    }
   })
 })

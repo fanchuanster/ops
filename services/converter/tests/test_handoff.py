@@ -159,3 +159,54 @@ def test_reports_a_failure_with_its_phase():
     assert seen["kind"] == "formats"
     assert seen["state"] == "failed"
     assert seen["message"] == "the master could not be read"
+
+
+def test_formats_absent_means_build_everything():
+    """An older web application sends no `formats` at all.
+
+    None rather than an empty list, so the converter keeps producing the
+    whole set and the two sides may be deployed in either order.
+    """
+    from app.handoff.poller import _formats
+
+    assert _formats(None) is None
+    assert _formats("epub") is None
+    assert _formats({"epub": True}) is None
+
+
+def test_formats_list_is_taken_as_given():
+    from app.handoff.poller import _formats
+
+    assert _formats(["epub", "pdf_large"]) == ["epub", "pdf_large"]
+    # An empty list is a real instruction, not a missing one.
+    assert _formats([]) == []
+
+
+def test_formats_drops_non_strings():
+    from app.handoff.poller import _formats
+
+    assert _formats(["epub", 7, None]) == ["epub"]
+
+
+def test_wanted_formats_defaults_to_all():
+    from app.jobs.model import Job
+    from app.jobs.runner import ALL_READER_FORMATS, _wanted_formats
+
+    assert _wanted_formats(Job(source_key="x")) == set(ALL_READER_FORMATS)
+
+
+def test_wanted_formats_honours_an_explicit_empty_list():
+    """`[]` must not be read as "the caller said nothing"."""
+    from app.jobs.model import Job
+    from app.jobs.runner import _wanted_formats
+
+    assert _wanted_formats(Job(source_key="x", formats=[])) == set()
+
+
+def test_wanted_formats_ignores_names_we_do_not_build():
+    from app.jobs.model import Job
+    from app.jobs.runner import _wanted_formats
+
+    job = Job(source_key="x", formats=["epub", "mobi", "docx"])
+    # `docx` is the input to this phase, never its output.
+    assert _wanted_formats(job) == {"epub"}

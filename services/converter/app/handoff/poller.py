@@ -61,6 +61,20 @@ class PollerConfig:
         )
 
 
+def _formats(value: object) -> list[str] | None:
+    """The requested format list, or None when the server did not say.
+
+    The distinction matters: None means "build the usual set" and an
+    empty list means "the server asked for nothing". Only a list of
+    strings is accepted — anything else is treated as not said, because
+    guessing at a malformed instruction is how a book ends up with the
+    wrong editions attached to it.
+    """
+    if not isinstance(value, list):
+        return None
+    return [item for item in value if isinstance(item, str)]
+
+
 class Poller:
     def __init__(self, config: PollerConfig, store: ObjectStore | None) -> None:
         self._config = config
@@ -109,6 +123,10 @@ class Poller:
             kind=kind,
             ocr_key=job.get("ocr_key"),
             master_key=job.get("master_key"),
+            # Absent from an older web application, which built the whole
+            # set. None preserves exactly that, so the two sides may be
+            # deployed in either order.
+            formats=_formats(job.get("formats")),
             title=job.get("title"),
             author=job.get("author"),
             # Taken from the server's answer, never assumed here. The

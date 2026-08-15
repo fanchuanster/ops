@@ -30,8 +30,9 @@ const STAGES: Stage[] = [
   },
   {
     key: 'formats',
-    label: 'EPUB and PDFs',
-    detail: 'Generated from that master, and rebuilt whenever you correct it.',
+    label: 'EPUB',
+    detail:
+      'Generated from that master, and rebuilt whenever you correct it. PDFs are made when you ask for one.',
   },
   { key: 'ready', label: 'Ready', detail: 'Read it here, or send it to your e-reader.' },
 ]
@@ -86,15 +87,25 @@ export function ConversionProgress({
   state,
   message,
   queuedSince,
+  awaitingReview = false,
 }: {
   state: string
   message?: string | null
   /** When the book entered the pipeline, if it has. */
   queuedSince?: string | null
+  /**
+   * Phase 1 is finished and phase 2 is deliberately held until an
+   * administrator has looked at the master (`domain/pipeline.ts`).
+   */
+  awaitingReview?: boolean
 }) {
   const reached = REACHED[state] ?? 0
   const failed = state === 'failed'
+  // Never "stalled" while it is waiting on a person. The book is sitting
+  // in a state a converter may claim, so the timer would otherwise fire
+  // and blame the converter for a queue it was never offered.
   const stalled =
+    !awaitingReview &&
     AWAITING_CONVERTER.has(state) &&
     Boolean(queuedSince) &&
     Date.now() - new Date(queuedSince!).getTime() > STALE_AFTER_MS
@@ -125,6 +136,14 @@ export function ConversionProgress({
           )
         })}
       </ol>
+
+      {awaitingReview ? (
+        <p className="notice">
+          Your DOCX master is ready and waiting to be reviewed. The EPUB is generated once it is
+          approved — that way the edition is built from text somebody has actually looked at. You
+          can download the master and correct it in the meantime.
+        </p>
+      ) : null}
 
       {stalled ? (
         <p className="notice">
