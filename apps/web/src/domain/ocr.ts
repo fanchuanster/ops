@@ -196,3 +196,94 @@ export function characterCount(pages: readonly OcrPage[]): number {
     0,
   )
 }
+
+/*
+ * ---------------------------------------------------------------------
+ * The handoff between the two services
+ * ---------------------------------------------------------------------
+ *
+ * The pipeline is split at this boundary: the web application runs OCR,
+ * because Document AI is an HTTP call and a Worker is billed almost
+ * nothing for waiting on one; the converter turns the result into a DOCX
+ * master and an EPUB, because that is rendering and belongs where CPU is
+ * not metered by the millisecond.
+ *
+ * What crosses between them is this document, in R2. It is the *only*
+ * thing the converter needs from the OCR stage — deliberately, so the
+ * two services share a format rather than a database.
+ */
+
+/**
+ * Bumped when the shape below changes incompatibly.
+ *
+ * The converter checks it and refuses a document it does not understand.
+ * Without this, a format change would be discovered as a malformed book
+ * after an hour of rendering rather than as a refusal in the first
+ * second.
+ */
+export const OCR_FORMAT_VERSION = 1
+
+export interface OcrDocument {
+  version: number
+  bookId: string
+  /** Pages with content, in reading order. Blank pages are not included. */
+  pages: OcrPage[]
+  /** Pages the engine saw, including blank ones. The book's real length. */
+  pageCount: number
+}
+
+/**
+ * Where a book's OCR text lives.
+ *
+ * Under the book's own prefix, for the same reason artifacts are
+ * (`domain/conversion.ts`): everything belonging to a book is contained
+ * by a path that names it, so a key can be checked rather than trusted.
+ *
+ * Not under `conversion/`, which the R2 lifecycle rule sweeps after 30
+ * days. OCR output is expensive — it is the thing we paid Google for —
+ * and re-running it to recover from a storage rule would be the most
+ * annoying possible way to lose money.
+ */
+export function ocrTextKey(bookId: string | number): string {
+  return `books/${bookId}/ocr/pages.json`
+}
+
+/** Assemble the document the converter will read. */
+export function buildOcrDocument({
+  bookId,
+  pages,
+  pageCount,
+}: {
+  bookId: string | number
+  pages: readonly OcrPage[]
+  pageCount: number
+}): OcrDocument {
+  const ordered = orderPages(pages)
+  return {
+    version: OCR_FORMAT_VERSION,
+    bookId: String(bookId),
+    pages: ordered,
+    // The engine's own count when we have it, since blank pages are
+    // real pages of a real book and the price is per page.
+    pageCount: Math.max(pageCount, ordered.length),
+  }
+}
+
+/**
+ * Does this source need OCR at all?
+ *
+ * A DOCX or a plain text file already *is* text; sending it to an OCR
+ * engine would cost money to recover characters we were handed. Those go
+ * straight to the converter, which reads the original.
+ *
+ * PDFs always go through Document AI, including ones with a text layer.
+ * Telling a scanned PDF from a born-digital one reliably is its own
+ * problem, and Document AI reads the text layer when there is one — so
+ * the cost of being wrong in this direction is a little money, and in
+ * the other direction it is a book of empty pages.
+ */
+export function needsOcr(filename: string, mimeType?: string | null): boolean {
+  if (mimeType === 'application/pdf') return true
+  if (mimeType && mimeType !== 'application/octet-stream') return false
+  return /\.pdf$/i.test(filename.trim())
+}

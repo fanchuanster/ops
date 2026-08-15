@@ -33,8 +33,21 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
 import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
+import { OCR_FORMAT_VERSION } from '../../../../domain/ocr'
+import { claimableAs, completedState, inProgressState } from '../../../../domain/pipeline'
+import { advanceOcrPipeline } from '../../../../lib/ocrPipeline'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The states a converter may claim from, in the order they are offered.
+ *
+ * Phase 2 first. A book waiting on formats has already had money spent
+ * on its OCR and is one step from being readable; a book waiting on a
+ * master is not. Draining the near-finished work first is what stops a
+ * busy queue from accumulating half-built books.
+ */
+const CLAIMABLE = ['master_ready', 'ocr_ready'] as const
 
 async function converterSecret(): Promise<string | null> {
   try {
@@ -93,49 +106,79 @@ export async function GET(request: Request) {
 
   const payload = await getPayload({ config })
 
-  const queued = await payload.find({
-    collection: 'books',
-    where: { 'conversion.state': { equals: 'queued' } },
-    sort: 'createdAt',
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
+  // The converter's poll is the pipeline's clock. Nothing schedules OCR
+  // — no cron, no queue consumer — so this is where a queued book gets
+  // submitted to Document AI and a finished operation gets collected.
+  // Bounded to one step, and it never throws: failing to advance OCR
+  // must not stop a converter being handed work it could already do.
+  await advanceOcrPipeline(payload)
 
-  const book = queued.docs[0]
-  if (!book) return NextResponse.json({ job: null })
+  for (const state of CLAIMABLE) {
+    const kind = claimableAs(state)!
 
-  const claimed = await payload.update({
-    collection: 'books',
-    where: {
-      and: [{ id: { equals: book.id } }, { 'conversion.state': { equals: 'queued' } }],
-    },
-    data: { conversion: { ...book.conversion, state: 'converting' } },
-    overrideAccess: true,
-  })
+    const waiting = await payload.find({
+      collection: 'books',
+      where: { 'conversion.state': { equals: state } },
+      sort: 'createdAt',
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
 
-  // Lost the race to another converter. Returning null rather than
-  // retrying keeps this handler bounded; the poller comes back shortly.
-  if (claimed.docs.length === 0) return NextResponse.json({ job: null })
+    const book = waiting.docs[0]
+    if (!book) continue
 
-  return NextResponse.json({
-    job: {
-      job_id: book.conversion?.jobId ?? String(book.id),
-      book_id: String(book.id),
-      source_key: book.conversion?.sourceKey,
-      title: book.title,
-      author: book.author ?? null,
-      // Never true for a reader's upload. Every book that reaches this
-      // endpoint is one, so this is a constant rather than a field —
-      // making it configurable here would be making it possible to get
-      // wrong (CLAUDE.md section 6.1).
-      allow_third_party_ai: false,
-    },
-  })
+    // The claim is a compare-and-swap: conditional on the book still
+    // being in the state we found it in, so two converters polling at
+    // once cannot both take it. D1 has no row locking, and a plain
+    // read-then-write would hand the same book to both.
+    const claimed = await payload.update({
+      collection: 'books',
+      where: {
+        and: [{ id: { equals: book.id } }, { 'conversion.state': { equals: state } }],
+      },
+      data: { conversion: { ...book.conversion, state: inProgressState(kind) } },
+      overrideAccess: true,
+    })
+
+    // Lost the race. Move on rather than retrying — the poller comes
+    // back shortly, and retrying here makes the handler unbounded.
+    if (claimed.docs.length === 0) continue
+
+    return NextResponse.json({
+      job: {
+        job_id: book.conversion?.jobId ?? String(book.id),
+        book_id: String(book.id),
+        // What the converter is being asked to do. Phase 1 builds the
+        // DOCX master from OCR text; phase 2 builds reader formats from
+        // that master. See domain/pipeline.ts.
+        kind,
+        ocr_format_version: OCR_FORMAT_VERSION,
+        // Phase 1 reads one of these two. `ocr_key` is the OCR text;
+        // it is absent for a DOCX or plain-text upload, which needed no
+        // OCR and whose original is the text.
+        ocr_key: book.conversion?.ocrKey ?? null,
+        source_key: book.conversion?.sourceKey,
+        // Phase 2 reads the master, which phase 1 attached.
+        master_key:
+          (book.artifacts ?? []).find((artifact) => artifact.format === 'docx')?.storageKey ?? null,
+        title: book.title,
+        author: book.author ?? null,
+        // Never true for a reader's upload. Every book that reaches this
+        // endpoint is one, so this is a constant rather than a field —
+        // making it configurable here would be making it possible to get
+        // wrong (CLAUDE.md section 6.1).
+        allow_third_party_ai: false,
+      },
+    })
+  }
+
+  return NextResponse.json({ job: null })
 }
 
 interface CompletionBody {
   book_id?: unknown
+  kind?: unknown
   state?: unknown
   page_count?: unknown
   message?: unknown
@@ -184,6 +227,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
+  // Which phase finished. Defaulted to 'formats' so a converter that
+  // predates the two-phase split still lands a book on 'ready' rather
+  // than stalling it in a state it will never report again.
+  const kind = body.kind === 'master' ? 'master' : 'formats'
+
   // What the converter may attach, and only under this book's own
   // prefix. Decided in the domain layer so the containment rule is
   // testable without an HTTP request — domain/conversion.ts.
@@ -192,22 +240,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No usable artifacts.' }, { status: 400 })
   }
 
+  // Phase 1's whole output is the master. Without it there is nothing
+  // for phase 2 to read, and moving the book on would queue a rebuild
+  // from a file that does not exist.
+  if (kind === 'master' && !artifacts.some((artifact) => artifact.format === 'docx')) {
+    return NextResponse.json({ error: 'No DOCX master was reported.' }, { status: 400 })
+  }
+
   const pageCount = acceptPageCount(body.page_count)
+
+  // Phase 1 attaches the master to a book that has no formats yet;
+  // phase 2 replaces the formats of a book that already has a master.
+  // Merging rather than overwriting is what keeps the master attached
+  // across a rebuild — and what lets phase 2 run again after an edit
+  // without phase 1 running too.
+  const existing = book.artifacts ?? []
+  const merged = [
+    ...existing.filter((old) => !artifacts.some((fresh) => fresh.format === old.format)),
+    ...artifacts,
+  ]
 
   await payload.update({
     collection: 'books',
     id: bookId,
     data: {
-      artifacts,
+      artifacts: merged,
       // The price derives from this in a collection hook, so setting it
       // is what prices the book. Null leaves whatever is there, which
       // for a new book means the minimum — the right way to fail.
       ...(pageCount === null ? {} : { pageCount }),
-      conversion: { ...book.conversion, state: 'ready', message: null },
-      // Readable now, and still private to its owner. Publishing to the
-      // library is a separate act needing an administrator and a rights
-      // status that permits it — a finished conversion is not consent.
-      status: 'published',
+      conversion: { ...book.conversion, state: completedState(kind), message: null },
+      // Only once a reader can actually read it. A DOCX master is not a
+      // readable edition, so phase 1 finishing does not publish
+      // anything.
+      //
+      // Published here still means private to its owner: publishing to
+      // the library is a separate act needing an administrator and a
+      // rights status that permits it — a finished conversion is not
+      // consent.
+      ...(kind === 'formats' ? { status: 'published' as const } : {}),
     },
     overrideAccess: true,
   })

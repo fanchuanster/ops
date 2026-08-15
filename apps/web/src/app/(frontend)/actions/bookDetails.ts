@@ -9,6 +9,7 @@ import {
   type SubmissionBlockedReason,
   canSubmitForReview,
 } from '../../../domain/moderation'
+import { isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
 import { isUploaderSelectableRights } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../lib/auth'
@@ -227,9 +228,6 @@ export async function replaceMaster(
 
   const file = formData.get('master')
   if (!(file instanceof File) || file.size === 0) return { error: 'Choose a DOCX to upload.' }
-  if (file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    return { error: 'The master has to be a DOCX.' }
-  }
 
   const payload = await getPayload({ config })
   const book = await payload
@@ -241,29 +239,56 @@ export async function replaceMaster(
     return { error: 'That book is not yours to edit.' }
   }
 
+  const state = book.conversion?.state
+  const next = isConversionState(state) ? stateAfterMasterEdit(state) : null
+  if (!next) {
+    return { error: 'There is no master to replace yet. Wait for the conversion to finish.' }
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer())
+
+  // Checked by content rather than by `file.type`, which is whatever the
+  // browser guessed from the extension and is routinely empty. A file
+  // that is not really a DOCX otherwise fails deep inside the converter,
+  // minutes later, as an error about XML — where the person who could
+  // fix it will never see it. Every DOCX is a zip, and every zip starts
+  // `PK`.
+  if (bytes.length < 2 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    return { error: 'That does not look like a Word document.' }
+  }
+
   const bucket = await objectBucket()
   if (!bucket) return { error: 'Uploads are not available on this server yet.' }
 
   // A new key rather than overwriting the old one, so a replacement that
-  // turns out worse than the original has not destroyed it.
-  const jobId = crypto.randomUUID()
-  const sourceKey = `conversion/${jobId}/input/source.docx`
+  // turns out worse than the original has not destroyed it. Under the
+  // book's own prefix, which is the containment rule every artifact key
+  // obeys (domain/conversion.ts).
+  const storageKey = `books/${bookId}/book/master-${crypto.randomUUID()}.docx`
+
   try {
-    await bucket.put(sourceKey, await file.arrayBuffer(), {
-      httpMetadata: { contentType: file.type },
+    await bucket.put(storageKey, bytes, {
+      httpMetadata: {
+        contentType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      },
     })
+
     await payload.update({
       collection: 'books',
       id: bookId,
       data: {
-        conversion: {
-          ...book.conversion,
-          state: 'queued',
-          sourceKey,
-          sourceFilename: file.name,
-          jobId,
-          message: null,
-        },
+        // The master artifact now points at the corrected file. Other
+        // formats are left alone: they are about to be rebuilt from it,
+        // and removing them here would blank the book in the meantime.
+        artifacts: [
+          ...(book.artifacts ?? []).filter((artifact) => artifact.format !== 'docx'),
+          { format: 'docx' as const, storageKey, downloadable: false },
+        ],
+        // Phase 2, and only phase 2. This is the point of splitting
+        // production in two: a correction costs a rebuild of the
+        // formats, never a re-read of the pages (domain/pipeline.ts).
+        conversion: { ...book.conversion, state: next, message: null },
       },
       overrideAccess: true,
     })

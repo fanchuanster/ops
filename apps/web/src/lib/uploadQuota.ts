@@ -13,6 +13,7 @@
 
 import type { Payload } from 'payload'
 
+import { QUOTA_COUNTED_STATES } from '../domain/pipeline'
 import { type QuotaDecision, type QuotaUsage, checkUploadQuota } from '../domain/uploadQuota'
 
 /** Conversions started since the first of the current month, UTC. */
@@ -29,8 +30,10 @@ export async function usageThisMonth(
       and: [
         { owner: { equals: userId } },
         // Anything past `draft` has been through the pipeline, or is in
-        // it. A failed conversion still consumed the work.
-        { 'conversion.state': { in: ['queued', 'converting', 'ready', 'failed'] } },
+        // it. A failed conversion still consumed the work. Derived from
+        // the state list rather than spelled out here, so a new phase
+        // state cannot be forgotten and silently under-count.
+        { 'conversion.state': { in: QUOTA_COUNTED_STATES } },
         { 'conversion.startedAt': { greater_than_equal: monthStart.toISOString() } },
       ],
     },

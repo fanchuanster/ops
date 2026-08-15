@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
+import { retryStateFor } from '../../../domain/pipeline'
 import { getCurrentUser } from '../../../lib/auth'
 import { deleteObjects } from '../../../lib/storage'
 
@@ -112,10 +113,22 @@ export async function retryConversion(
     return { error: 'There is no source file to convert.' }
   }
 
+  // A book with a master got past phase 1, so whatever failed was the
+  // format generation. Restarting it from the beginning would ask
+  // Google to read pages we have already paid to read, and rebuild a
+  // master that is already sitting in storage.
+  const hasMasterArtifact = (book.artifacts ?? []).some((artifact) => artifact.format === 'docx')
+
   await payload.update({
     collection: 'books',
     id: bookId,
-    data: { conversion: { ...book.conversion, state: 'queued', message: null } },
+    data: {
+      conversion: {
+        ...book.conversion,
+        state: retryStateFor({ hasMasterArtifact }),
+        message: null,
+      },
+    },
     overrideAccess: true,
   })
 

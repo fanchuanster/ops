@@ -304,8 +304,30 @@ export const Books: CollectionConfig = {
           options: [
             { label: 'Not a conversion', value: 'none' },
             { label: 'Uploaded, awaiting the uploader’s details', value: 'draft' },
-            { label: 'Uploaded, queued', value: 'queued' },
-            { label: 'Converting', value: 'converting' },
+
+            // Phase 1 — original to DOCX master.
+            //
+            // Split at the OCR boundary: this application runs OCR (an
+            // HTTP call to Document AI, which a Worker is billed almost
+            // nothing to wait on), the converter builds the master from
+            // the text.
+            { label: '1. Queued for mastering', value: 'queued' },
+            { label: '1. Reading the pages (OCR)', value: 'ocr' },
+            { label: '1. Text ready, awaiting the converter', value: 'ocr_ready' },
+            { label: '1. Building the DOCX master', value: 'mastering' },
+
+            // The hinge. Phase 1 is done and the master exists; phase 2
+            // has not run, or needs running again.
+            //
+            // Re-enterable on purpose, and the reason the phases are
+            // separate states rather than one 'converting': the master
+            // is the source of truth and is always open to correction
+            // (CLAUDE.md sections 5 and 6.2). Every edit to it returns
+            // the book here, and the formats are rebuilt from it —
+            // without re-running OCR, which was the expensive part.
+            { label: '2. Master ready, formats to build', value: 'master_ready' },
+            { label: '2. Generating formats', value: 'formatting' },
+
             { label: 'Ready', value: 'ready' },
             { label: 'Failed', value: 'failed' },
           ],
@@ -327,6 +349,32 @@ export const Books: CollectionConfig = {
           },
         },
         { name: 'jobId', type: 'text', admin: { readOnly: true } },
+        {
+          name: 'ocrOperation',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description:
+              'The Document AI long-running operation. Batch OCR answers into a bucket minutes later, so this is what a later request polls — without it a restart loses a job we have already paid for.',
+          },
+        },
+        {
+          name: 'ocrOutputPrefix',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Where in the scratch bucket that operation writes its output.',
+          },
+        },
+        {
+          name: 'ocrKey',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description:
+              'The OCR text in R2, which is what the converter reads. Empty for a DOCX or text upload, which needs no OCR — the converter reads the original instead.',
+          },
+        },
         {
           name: 'message',
           type: 'textarea',

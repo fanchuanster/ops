@@ -17,11 +17,11 @@ interface Stage {
 
 const STAGES: Stage[] = [
   { key: 'uploaded', label: 'Uploaded', detail: 'Your file is stored and its details read.' },
-  { key: 'queued', label: 'Queued', detail: 'Waiting for a converter to collect it.' },
+  { key: 'queued', label: 'Queued', detail: 'Waiting for its turn.' },
   {
-    key: 'converting',
+    key: 'ocr',
     label: 'Reading the pages',
-    detail: 'OCR for a scan, then structure — headings, paragraphs, verse.',
+    detail: 'OCR for a scan. The slow part — minutes to hours for a long book.',
   },
   {
     key: 'master',
@@ -31,7 +31,7 @@ const STAGES: Stage[] = [
   {
     key: 'formats',
     label: 'EPUB and PDFs',
-    detail: 'Generated from that master: EPUB, and PDF in three sizes.',
+    detail: 'Generated from that master, and rebuilt whenever you correct it.',
   },
   { key: 'ready', label: 'Ready', detail: 'Read it here, or send it to your e-reader.' },
 ]
@@ -39,18 +39,38 @@ const STAGES: Stage[] = [
 /**
  * How far along a conversion state is.
  *
- * The middle stages are not separately reported — the converter moves
- * through them faster than anyone polls — so they are shown as one
- * block of work rather than pretending to a precision we do not have.
+ * One entry per state, because the pipeline now reports every stage
+ * separately. It did not always: the stages between "queued" and "ready"
+ * used to be one opaque `converting`, shown as a single block of work
+ * rather than claiming a precision we did not have. Splitting production
+ * into its two real phases (`domain/pipeline.ts`) made the precision
+ * real, so the display can stop rounding.
  */
 const REACHED: Record<string, number> = {
   draft: 0,
   queued: 1,
-  converting: 2,
+  ocr: 2,
+  // The text is read; what remains of phase 1 is building the master.
+  ocr_ready: 3,
+  mastering: 3,
+  // Phase 1 is done. The master exists and the formats are being built —
+  // which is also where a book sits after its master is corrected.
+  master_ready: 4,
+  formatting: 4,
   ready: 5,
   none: 5,
   failed: 2,
 }
+
+/**
+ * States that mean "a converter has to pick this up".
+ *
+ * OCR is run by this application, but nothing else is — and the
+ * converter's own polling is what drives even the OCR stages forward
+ * (`lib/ocrPipeline.ts`). So with no converter running, a book stalls
+ * wherever it is, and these are the places it stalls.
+ */
+const AWAITING_CONVERTER = new Set(['queued', 'ocr_ready', 'master_ready'])
 
 /**
  * How long a book may sit queued before the wait is worth explaining.
@@ -75,7 +95,7 @@ export function ConversionProgress({
   const reached = REACHED[state] ?? 0
   const failed = state === 'failed'
   const stalled =
-    state === 'queued' &&
+    AWAITING_CONVERTER.has(state) &&
     Boolean(queuedSince) &&
     Date.now() - new Date(queuedSince!).getTime() > STALE_AFTER_MS
 

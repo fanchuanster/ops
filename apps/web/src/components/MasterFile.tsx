@@ -31,23 +31,31 @@ export function MasterFile({ bookId, hasMaster }: { bookId: number; hasMaster: b
         <p className="hint">No master yet — it appears after conversion.</p>
       )}
 
-      <form action={action} className="master__replace">
-        <input type="hidden" name="bookId" value={bookId} />
-        <label>
-          <span>Upload a corrected master</span>
-          <input
-            type="file"
-            name="master"
-            accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            required
-          />
-          <small>The book is rebuilt from it. Does not count against your monthly limit.</small>
-        </label>
-        <button type="submit" className="button-quiet" disabled={pending}>
-          {pending ? 'Uploading…' : 'Replace and rebuild'}
-        </button>
-        {state.error ? <p className="form-error">{state.error}</p> : null}
-      </form>
+      {/* Only once there is one to replace. Offering the form before
+          then invites an upload the action can only refuse — there is
+          nothing yet for the formats to be rebuilt from. */}
+      {hasMaster ? (
+        <form action={action} className="master__replace">
+          <input type="hidden" name="bookId" value={bookId} />
+          <label>
+            <span>Upload a corrected master</span>
+            <input
+              type="file"
+              name="master"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              required
+            />
+            <small>
+              The EPUB and PDFs are rebuilt from it. The pages are not read again, so this is
+              quick and does not count against your monthly limit.
+            </small>
+          </label>
+          <button type="submit" className="button-quiet" disabled={pending}>
+            {pending ? 'Uploading…' : 'Replace and rebuild'}
+          </button>
+          {state.error ? <p className="form-error">{state.error}</p> : null}
+        </form>
+      ) : null}
     </section>
   )
 }

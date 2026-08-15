@@ -354,6 +354,43 @@ hosted service turns that compute into an HTTP request, which a Worker is
 billed almost nothing for. Batch processing, not online: online caps a
 request at 15 pages, batch takes 500.
 
+Because of that, **the pipeline is split at the OCR boundary**. The web
+application calls Document AI and writes the resulting text to R2; the
+converter reads that text and does the rendering. This is the one place
+the rule above ("do not turn the web application into the conversion
+pipeline") is deliberately bent, and only because OCR stopped being
+computation and became a fetch. Everything that is still computation is
+still the converter's.
+
+Nothing schedules the OCR stages. The converter already polls
+`GET /api/conversion` for work, and that poll is used as the clock —
+each one advances at most one book through OCR before answering
+(`apps/web/src/lib/ocrPipeline.ts`). No cron, no queue consumer, and
+nothing fires when no converter is running. The cost is that OCR does
+not progress while nothing is polling, which is harmless: nothing
+downstream could act on it if it did.
+
+## Two phases, joined at the master
+
+Production is two pipelines, not one:
+
+    Phase 1   original → DOCX master        expensive, run once
+    Phase 2   DOCX master → EPUB, PDF…      cheap, run whenever
+
+The split is what makes section 5's "the DOCX master is the source of
+truth" mean something. An editor corrects OCR damage in the master, or
+an uploader re-uploads a corrected one (section 6.2), and the book
+returns to `master_ready` — phase 2 runs again and phase 1 does not.
+Re-running phase 1 would pay Google a second time to re-read pages
+already read, and would discard the correction that prompted it.
+
+The states are in `apps/web/src/domain/pipeline.ts`, and every rule that
+follows from the split is a function there rather than a condition in a
+route: what a converter may claim, where a phase lands when it finishes,
+where a failure restarts from. That last one is keyed on whether a DOCX
+artifact exists rather than on the state, because the state is what a
+failure loses and the artifact is the evidence that survived.
+
 PDF rendering is deferred. EPUB is the primary format and the DOCX master
 is the source of truth; the three PDF variants are a future addition, not
 a gap in the current pipeline. The conversion service is
@@ -917,8 +954,25 @@ The endpoint authenticates with `CONVERTER_SECRET` and **fails closed**:
 with no secret configured it 404s as though it does not exist, so
 deploying ahead of the secret exposes nothing.
 
-Not yet built: where the converter container runs. That is still
-deliberately open.
+A job now carries a `kind`, because there are two of them:
+
+    kind: "master"    ocr_key (or source_key) → DOCX master
+    kind: "formats"   master_key              → EPUB, PDF…
+
+`ocr_key` is a JSON document in R2 — `books/{id}/ocr/pages.json`, shape
+and version in `apps/web/src/domain/ocr.ts` — holding the pages the
+engine read, in order, as paragraphs. It is absent for a DOCX or plain
+text upload, which needed no OCR; the converter reads `source_key`
+instead. The completion `POST` carries the same `kind`, and phase 1
+finishing does **not** publish a book: a DOCX master is not a readable
+edition.
+
+Phase 2 is claimable on its own, which is what makes a corrected master
+cheap to act on.
+
+Not yet built: the converter side of both job kinds — it still expects
+the single-phase job it was written against. And where the converter
+container runs, which is still deliberately open.
 
 Example:
 
