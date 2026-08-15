@@ -277,8 +277,51 @@ Storage is R2 over the S3 API (`app/storage`). This service is not a
 Worker and has no binding, so it is the one component that legitimately
 holds an R2 key; keeping that in one small module is the point.
 
-Not yet built: the handoff from the web application. The Worker records
-an upload as `conversion.state = 'queued'` with its source key, but
-nothing yet carries that to this service and nothing writes the finished
-artifacts back onto the Book row. `tools/generate-seed-content.py`
-remains the way the seed library's files are produced.
+## The handoff, and the two phases
+
+`python -m app.handoff` polls the web application for work
+(`app/handoff/poller.py`). The converter has no inbound port — the thing
+that lets it run behind a filtered egress — so the direction of the wire
+is always outward.
+
+    NOBLESEE_API=https://noblesee.com
+    CONVERTER_SECRET=...
+    CONVERTER_POLL_SECONDS=30
+
+Book production is **two phases joined at the DOCX master**, and a job
+says which one it is:
+
+| `kind` | reads | writes |
+| --- | --- | --- |
+| `master` | `ocr_key`, or `source_key` when the upload was already text | the DOCX master |
+| `formats` | `master_key` | EPUB and the PDF variants |
+| `full` | `source_key` | everything, in one pass |
+
+`full` is what the CLI and the job API do; the handoff never asks for it.
+The split exists so that a corrected master is cheap to act on: an
+editor fixes what the OCR misread, and only `formats` runs again.
+Re-running `master` would pay Google a second time to read pages already
+read, and would discard the correction that prompted it.
+
+**OCR no longer happens here for books that come through the portal.**
+The web application calls Google Document AI and writes the result to
+R2 as JSON — `ocr_key`, read by `app/sources/ocr_json.py`, format
+version pinned and refused if it does not match. OCR became an HTTP
+request when it stopped being a local model, and a Worker is billed
+almost nothing to wait on one. The local OCR path
+(`app/ocr`, `pipeline/structure.py`) is untouched and still runs for the
+CLI.
+
+What that costs: geometry does not cross the boundary. Document AI
+reports paragraphs, so the heading, verse and footnote detection that
+`structure.py` derives from *where a line sits on the page* is not
+available for those books. `ocr_json.py` therefore does not guess —
+paragraphs become body text, and structure is left for a human to add in
+the master. A missing heading is cheap to fix there; a fabricated one is
+not.
+
+Still open: where this service runs. Nothing is deployed, so nothing
+polls, and a book uploaded through the portal waits at `queued` — its
+OCR included, since the poll is also what drives that.
+`tools/generate-seed-content.py` remains the way the seed library's
+files are produced.

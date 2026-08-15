@@ -41,11 +41,9 @@ FOOT_MAX_HEIGHT_RATIO = 0.85
 # page width, first lines at 18.4–19.0%.
 PARAGRAPH_INDENT = 0.03
 
-MARKER_RE = re.compile(r"^[(（]\s*[一二三四五六七八九十百零〇]+\s*[)）]$")
-# 「（见第 71 页）」 and its shorthand 「（同上）」 for a repeated source.
-REF_RE = re.compile(r"[(（]\s*(?:见|同上)[^)）]{0,24}[)）]")
-DASH_RE = re.compile(r"^[—–\-―─]{1,3}\s*[^\s]")
-FOOTNOTE_CUE_RE = re.compile(r"^[*＊※注]")
+# Re-exported from `patterns`, which holds them so that a reader needing
+# only the text patterns does not import PyMuPDF through this module.
+from .patterns import DASH_RE, FOOTNOTE_CUE_RE, MARKER_RE, REF_RE  # noqa: E402
 
 # An attribution names a source; it never ends in sentence punctuation.
 # This is what separates 「——唐·李白《静夜思》」 from a verse line whose

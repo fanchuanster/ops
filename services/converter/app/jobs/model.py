@@ -29,6 +29,30 @@ class JobState(str, Enum):
 TERMINAL_STATES = {JobState.COMPLETED, JobState.FAILED, JobState.CANCELLED}
 
 
+class JobKind(str, Enum):
+    """Which half of production this job is.
+
+    Book production is two pipelines joined at the DOCX master:
+
+        MASTER    original (or OCR text) → DOCX master
+        FORMATS   DOCX master            → EPUB, PDFs
+
+    The split is what lets a corrected master be acted on cheaply. An
+    editor fixes what the OCR misread, and only FORMATS runs again —
+    re-running MASTER would pay Google a second time to read pages
+    already read, and would throw away the correction. See
+    `apps/web/src/domain/pipeline.ts`, which owns the state machine.
+    """
+
+    MASTER = "master"
+    FORMATS = "formats"
+    # Both, in one run. What the CLI and the job API do: they are driven
+    # by an editor at a terminal rather than by the web application's
+    # handoff, and there is no reason to make someone converting a book
+    # locally run two commands.
+    FULL = "full"
+
+
 @dataclass
 class Job:
     """One book being converted.
@@ -40,6 +64,16 @@ class Job:
 
     source_key: str
     book_id: str | None = None
+    # Which phase. Defaulted to the whole of production so the CLI and
+    # the job API — neither of which is driven by the web application's
+    # two-phase handoff — keep working unchanged.
+    kind: JobKind = JobKind.FULL
+    # Phase 1 reads one of these: `ocr_key` when the pages were read by
+    # the hosted OCR engine, `source_key` when the upload was already
+    # text and needed no OCR.
+    ocr_key: str | None = None
+    # Phase 2 reads this.
+    master_key: str | None = None
     title: str | None = None
     author: str | None = None
     # Whether this book may be sent to a third-party LLM for OCR

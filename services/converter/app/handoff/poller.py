@@ -29,8 +29,8 @@ from dataclasses import dataclass
 
 import httpx
 
-from ..jobs.model import Job
-from ..jobs.runner import run_job
+from ..jobs.model import Job, JobKind
+from ..jobs.runner import run
 from ..storage.r2 import ObjectStore
 
 log = logging.getLogger(__name__)
@@ -91,9 +91,24 @@ class Poller:
         if not job:
             return None
 
+        # Which phase this is. Defaulted rather than required so a web
+        # application that predates the split still hands out work this
+        # converter can do.
+        try:
+            kind = JobKind(job.get("kind", JobKind.FULL.value))
+        except ValueError:
+            raise RuntimeError(
+                f"the web application asked for job kind {job.get('kind')!r}, "
+                "which this converter does not know. It is newer than this build."
+            ) from None
+
         return Job(
-            source_key=job["source_key"],
+            # Absent for a phase 2 job, which reads the master instead.
+            source_key=job.get("source_key") or "",
             book_id=str(job["book_id"]),
+            kind=kind,
+            ocr_key=job.get("ocr_key"),
+            master_key=job.get("master_key"),
             title=job.get("title"),
             author=job.get("author"),
             # Taken from the server's answer, never assumed here. The
@@ -102,7 +117,11 @@ class Poller:
         )
 
     def report(self, job: Job) -> None:
-        body: dict = {"book_id": job.book_id}
+        # The phase is echoed back because it decides where the book
+        # lands: phase 1 finishing queues phase 2, phase 2 finishing
+        # makes the book readable. Reporting the wrong one would either
+        # publish a book with no EPUB or rebuild it forever.
+        body: dict = {"book_id": job.book_id, "kind": job.kind.value}
         if job.state.value == "completed":
             body |= {
                 "state": "completed",
@@ -115,13 +134,18 @@ class Poller:
         self._client.post("/api/conversion", json=body).raise_for_status()
 
     def tick(self) -> bool:
-        """One poll. True if a book was converted, False if idle."""
+        """One poll. True if a book was worked on, False if idle."""
         job = self.claim()
         if job is None:
             return False
 
-        log.info("converting book %s from %s", job.book_id, job.source_key)
-        run_job(job, self._store)
+        log.info(
+            "book %s: %s from %s",
+            job.book_id,
+            job.kind.value,
+            job.master_key or job.ocr_key or job.source_key,
+        )
+        run(job, self._store)
 
         # Reported whatever the outcome. A book left in `converting`
         # forever is the worst failure mode here: the uploader sees a

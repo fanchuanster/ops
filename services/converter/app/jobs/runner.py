@@ -26,8 +26,9 @@ from ..epub import build_epub
 from ..models import Document
 from ..pdf import build_all_pdfs, page_count
 from ..sources.load import load_source
+from ..sources.ocr_json import page_count_of, read_ocr_json
 from ..storage.r2 import CONTENT_TYPES, ObjectStore, artifact_key
-from .model import Job, JobState
+from .model import Job, JobKind, JobState
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +40,135 @@ ARTIFACT_FILENAMES = {
     "pdf_large": "large.pdf",
     "pdf_xl": "xl.pdf",
 }
+
+
+def run(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
+    """Run whichever phase this job is.
+
+    The single entry point the poller uses. `run_job` below remains the
+    whole of production in one pass, for the CLI and the job API.
+    """
+    if job.kind is JobKind.MASTER:
+        return run_master_job(job, store, on_change=on_change)
+    if job.kind is JobKind.FORMATS:
+        return run_formats_job(job, store, on_change=on_change)
+    return run_job(job, store, on_change=on_change)
+
+
+def _load_input(job: Job, store: ObjectStore, work: Path) -> Document:
+    """Phase 1's input, from whichever place it came.
+
+    Two doors into the same room. A scanned book arrives as OCR text the
+    web application already paid Google to produce; a DOCX or plain text
+    upload needed no OCR and arrives as itself. CLAUDE.md section 6.1
+    requires both to converge on the same master with no second-class
+    path, which is exactly what returning one `Document` means.
+    """
+    if job.ocr_key:
+        local = work / "ocr.json"
+        store.download(job.ocr_key, local)
+        content = local.read_text(encoding="utf-8")
+        document = read_ocr_json(content=content, title=job.title, author=job.author)
+        # The engine counted every page, including the blank ones this
+        # document does not carry. That count is the book's real length
+        # and what its price is derived from.
+        job.page_count = page_count_of(content)
+        return document
+
+    source = work / Path(job.source_key).name
+    store.download(job.source_key, source)
+    return load_source(source, title=job.title, author=job.author, cache_dir=work / "cache")
+
+
+def run_master_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
+    """Phase 1: build the DOCX master and stop.
+
+    Deliberately produces nothing else. The master is the source of
+    truth (CLAUDE.md section 5) and an editor may correct it before any
+    reader-facing format is generated — so generating formats here would
+    be building them from text nobody has looked at yet.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix=f"noblesee-{job.id}-") as tmp:
+            work = Path(tmp)
+            if store is None:
+                raise RuntimeError("object storage is not configured")
+
+            job.advance(JobState.NORMALIZING)
+            on_change(job)
+            document = _load_input(job, store, work)
+
+            if job.allow_third_party_ai:
+                # Suggestions only. Nothing is applied without a human,
+                # so the job does not wait here.
+                job.advance(JobState.AI_PROCESSING)
+                on_change(job)
+
+            job.advance(JobState.DOCX_GENERATION)
+            on_change(job)
+            master = build_docx(document, work / "master.docx")
+
+            key = artifact_key(job.book_id or job.id, ARTIFACT_FILENAMES["docx"])
+            store.upload(master, key, content_type=CONTENT_TYPES.get(master.suffix))
+            job.artifacts["docx"] = key
+
+            job.advance(JobState.COMPLETED)
+            on_change(job)
+            return job
+
+    except Exception as error:  # noqa: BLE001 — a job must never take the worker down
+        log.exception("master job %s failed", job.id)
+        job.advance(JobState.FAILED, error=_readable(error))
+        on_change(job)
+        return job
+
+
+def run_formats_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
+    """Phase 2: build the reader-facing formats from the master.
+
+    Reads the DOCX and nothing else. That is the rule the whole two-phase
+    split exists to enforce — CLAUDE.md section 5 says formats are
+    generated from the approved master, so reading the original source
+    here would silently discard every correction an editor made.
+
+    Cheap enough to re-run on every edit, which is what makes the master
+    genuinely editable rather than nominally so.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix=f"noblesee-{job.id}-") as tmp:
+            work = Path(tmp)
+            if store is None:
+                raise RuntimeError("object storage is not configured")
+            if not job.master_key:
+                raise RuntimeError("this book has no DOCX master to build from")
+
+            job.advance(JobState.NORMALIZING)
+            on_change(job)
+
+            master = work / "master.docx"
+            store.download(job.master_key, master)
+            document = load_source(master, title=job.title, author=job.author)
+
+            job.advance(JobState.FORMAT_GENERATION)
+            on_change(job)
+            epub_path = build_epub(document, work / "book.epub", identifier=job.id)
+            pdfs = build_all_pdfs(document, work)
+            job.page_count = page_count(document)
+
+            for fmt, path in {"epub": epub_path, **pdfs}.items():
+                key = artifact_key(job.book_id or job.id, ARTIFACT_FILENAMES[fmt])
+                store.upload(path, key, content_type=CONTENT_TYPES.get(path.suffix))
+                job.artifacts[fmt] = key
+
+            job.advance(JobState.COMPLETED)
+            on_change(job)
+            return job
+
+    except Exception as error:  # noqa: BLE001
+        log.exception("formats job %s failed", job.id)
+        job.advance(JobState.FAILED, error=_readable(error))
+        on_change(job)
+        return job
 
 
 def run_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
