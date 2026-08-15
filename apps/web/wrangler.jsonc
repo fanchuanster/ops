@@ -51,6 +51,22 @@
   "vars": {
     // Payload scopes CSRF and CORS to this origin and builds absolute
     // URLs from it, so it must be the real public name, not a guess.
-    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com"
+    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com",
+
+    // Document AI, from `terraform output`. None of these is a secret:
+    // the processor name and bucket are identifiers, and reaching either
+    // needs GOOGLE_SERVICE_ACCOUNT_KEY, which is.
+    //
+    // The processor is a full resource name because it already carries
+    // the project and the location — splitting it into three vars would
+    // create three ways for them to disagree.
+    "DOCUMENT_AI_PROCESSOR": "projects/gen-lang-client-0021728111/locations/asia-southeast1/processors/1fdee9b756a6e620",
+
+    // Duplicated out of the resource name on purpose: it selects the API
+    // *endpoint* (asia-southeast1-documentai.googleapis.com), which is a
+    // different use than naming the processor.
+    "DOCUMENT_AI_LOCATION": "asia-southeast1",
+
+    "DOCUMENT_AI_BUCKET": "noblesee-conversion-0021728111"
   }
 }

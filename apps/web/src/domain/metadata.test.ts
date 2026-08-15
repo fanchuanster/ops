@@ -248,13 +248,22 @@ describe('CJK text that arrives mis-decoded', () => {
 })
 
 describe('byte strings', () => {
-  it('preserves every byte, unlike TextDecoder("latin1")', () => {
-    // 0x96 is the trap: windows-1252 — which is what the "latin1" label
-    // actually selects — turns it into U+2013, and the byte is lost.
+  it('preserves every byte, which TextDecoder("latin1") does not promise', () => {
+    // 0x96 is the trap. Per the WHATWG encoding standard the "latin1"
+    // label selects *windows-1252*, not ISO-8859-1, and windows-1252
+    // maps 0x96 to U+2013 — so the byte is lost and the later
+    // GBK/Big5 detection never sees what it needs.
+    //
+    // Only our own helper is asserted here. Which way TextDecoder
+    // actually goes is a property of the host: workerd follows the spec
+    // and yields U+2013, while Node 20 on this machine yields 0x96. The
+    // production runtime is the one that loses the byte, so the helper
+    // is required regardless — but pinning a third party's behaviour in
+    // an assertion makes the suite fail when a runtime is upgraded,
+    // which tells us nothing about this code.
     const bytes = new Uint8Array([0x00, 0x7f, 0x80, 0x96, 0x9f, 0xff])
     const encoded = bytesToBinaryString(bytes)
     expect([...encoded].map((c) => c.charCodeAt(0))).toEqual([...bytes])
-    expect(new TextDecoder('latin1').decode(bytes).charCodeAt(3)).toBe(0x2013)
   })
 
   it('handles a window larger than the call-stack chunk', () => {
