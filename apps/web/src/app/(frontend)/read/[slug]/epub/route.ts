@@ -30,10 +30,10 @@ export async function GET(
   const { slug } = await params
   const payload = await getPayload({ config })
 
-  const book = await getBookBySlug(slug)
+  const user = await getCurrentUser()
+  const book = await getBookBySlug(slug, user)
   if (!book) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  const user = await getCurrentUser()
   const decision = await authorizeReading({
     payload,
     bookId: book.id,

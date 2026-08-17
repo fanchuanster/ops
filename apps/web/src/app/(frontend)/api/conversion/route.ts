@@ -114,11 +114,8 @@ export async function GET(request: Request) {
   await advanceOcrPipeline(payload)
 
   for (const state of CLAIMABLE) {
-    // More than one, because a `master_ready` book may be held back by
-    // review while the one behind it is cleared. Taking only the oldest
-    // would let a single unreviewed book block every other book's
-    // formats behind it — a head-of-line stall with no way out but an
-    // administrator noticing.
+    // More than one, so a lost claim race falls through to the next book
+    // rather than ending the poll empty-handed.
     const waiting = await payload.find({
       collection: 'books',
       where: { 'conversion.state': { equals: state } },
@@ -131,13 +128,9 @@ export async function GET(request: Request) {
     for (const book of waiting.docs) {
       const conversion = (book.conversion ?? {}) as Record<string, unknown>
 
-      // May this book run, and on what. The review gate lives in the
-      // domain layer — a book whose uploader has not had it approved
-      // yet is not refused here, it is simply not offered.
+      // What this book needs built, decided in the domain layer.
       const work = claimFor({
         state,
-        hasOwner: Boolean(book.owner),
-        reviewState: book.review?.state ?? 'unsubmitted',
         pendingFormats: Array.isArray(conversion.pendingFormats)
           ? (conversion.pendingFormats as unknown[])
           : [],

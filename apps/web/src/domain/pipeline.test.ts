@@ -16,12 +16,10 @@ import {
   completedState,
   hasMaster,
   inProgressState,
-  awaitingReview,
   claimFor,
   formatsToBuild,
   isConversionState,
   isInFlight,
-  reviewClearsFormats,
   needsOcrRun,
   retryStateFor,
   stateAfterMasterEdit,
@@ -171,54 +169,38 @@ describe('validating stored values', () => {
   })
 })
 
-describe('the review gate before phase 2', () => {
-  it('clears staff library content, which has no owner to review it', () => {
-    expect(reviewClearsFormats({ hasOwner: false, reviewState: 'unsubmitted' })).toBe(true)
-  })
-
-  it('holds a reader upload until it is approved', () => {
-    for (const reviewState of ['unsubmitted', 'submitted', 'rejected'] as const) {
-      expect(reviewClearsFormats({ hasOwner: true, reviewState })).toBe(false)
-    }
-    expect(reviewClearsFormats({ hasOwner: true, reviewState: 'approved' })).toBe(true)
-  })
-
-  it('offers no phase 2 work for a book still awaiting review', () => {
+describe('review does not stand in front of phase 2', () => {
+  /**
+   * Phase 2 was held until an administrator approved the book, until
+   * 2026-08-17. The gate was the wrong way round: what a reviewer reads
+   * is the finished EPUB, so holding the EPUB for the review left them
+   * nothing to read — and an uploader who never submitted their private
+   * book, which section 6.2 explicitly permits, could never read it at
+   * all. Publication is where review belongs, and the Books collection
+   * is where it is enforced.
+   */
+  it('builds the formats for an unsubmitted private upload', () => {
     expect(
-      claimFor({
-        state: 'master_ready',
-        hasOwner: true,
-        reviewState: 'submitted',
-        pendingFormats: [],
-        existingFormats: [],
-      }),
-    ).toBeNull()
+      claimFor({ state: 'master_ready', pendingFormats: [], existingFormats: [] }),
+    ).toEqual({ kind: 'formats', formats: ['epub'] })
   })
 
-  it('still offers phase 1, which review has nothing to say about', () => {
-    // The master is what gets reviewed. Gating its creation on review
-    // would be asking someone to approve a book nobody can read yet.
+  it('offers phase 1 the same as it always did', () => {
     expect(
-      claimFor({
-        state: 'ocr_ready',
-        hasOwner: true,
-        reviewState: 'unsubmitted',
-        pendingFormats: [],
-        existingFormats: [],
-      }),
+      claimFor({ state: 'ocr_ready', pendingFormats: [], existingFormats: [] }),
     ).toEqual({ kind: 'master', formats: [] })
   })
 
-  it('says a held book is awaiting review rather than in flight', () => {
-    const held = { state: 'master_ready' as const, hasOwner: true, reviewState: 'submitted' as const }
-    expect(awaitingReview(held)).toBe(true)
-    expect(isInFlight(held.state)).toBe(false)
+  it('offers nothing from a state that is not a phase boundary', () => {
+    for (const state of ['queued', 'ocr', 'mastering', 'formatting', 'ready'] as const) {
+      expect(claimFor({ state, pendingFormats: [], existingFormats: [] })).toBeNull()
+    }
   })
 
-  it('does not call an approved book awaiting review', () => {
-    expect(
-      awaitingReview({ state: 'master_ready', hasOwner: true, reviewState: 'approved' }),
-    ).toBe(false)
+  it('does not treat a book at the hinge as in flight', () => {
+    // Nothing is running at `master_ready` — a converter has to claim
+    // it. That was true when review held it there and stays true now.
+    expect(isInFlight('master_ready')).toBe(false)
   })
 })
 
@@ -269,8 +251,6 @@ describe('what a converter is handed', () => {
     expect(
       claimFor({
         state: 'master_ready',
-        hasOwner: true,
-        reviewState: 'approved',
         pendingFormats: ['pdf_standard'],
         existingFormats: ['docx', 'epub'],
       }),
@@ -279,15 +259,7 @@ describe('what a converter is handed', () => {
 
   it('offers nothing for a resting book', () => {
     for (const state of ['ready', 'draft', 'failed', 'formatting', 'none'] as const) {
-      expect(
-        claimFor({
-          state,
-          hasOwner: false,
-          reviewState: 'approved',
-          pendingFormats: [],
-          existingFormats: [],
-        }),
-      ).toBeNull()
+      expect(claimFor({ state, pendingFormats: [], existingFormats: [] })).toBeNull()
     }
   })
 })

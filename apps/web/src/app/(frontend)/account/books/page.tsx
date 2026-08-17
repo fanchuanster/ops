@@ -6,12 +6,22 @@ import { getBooksOwnedBy } from '../../../../lib/catalog'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'My books' }
 
-/** Where an upload is in the pipeline, in the uploader's words. */
+/**
+ * Where an upload is in the pipeline, in the uploader's words.
+ *
+ * Every state in `domain/pipeline.ts`, because anything missing here
+ * falls through to the raw stored value — and the two-phase states are
+ * exactly the ones a book now spends its visible minutes in.
+ */
 const CONVERSION_LABEL: Record<string, string> = {
   none: 'Ready',
   draft: 'Draft',
   queued: 'Waiting to be converted',
-  converting: 'Converting',
+  ocr: 'Reading the pages',
+  ocr_ready: 'Text ready',
+  mastering: 'Building the master',
+  master_ready: 'Building the EPUB',
+  formatting: 'Building the EPUB',
   ready: 'Ready',
   failed: 'Conversion failed',
 }

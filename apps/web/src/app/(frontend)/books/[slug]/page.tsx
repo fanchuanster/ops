@@ -38,19 +38,23 @@ const LANGUAGE_LABEL: Record<string, string> = {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const book = await getBookBySlug(slug)
+  const book = await getBookBySlug(slug, await getCurrentUser())
   if (!book) return { title: 'Not found' }
   return { title: book.title, description: book.description ?? undefined }
 }
 
 export default async function BookPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const book = await getBookBySlug(slug)
+
+  // With the session, so an uploader can open their own private book's
+  // page. Without it the lookup is anonymous and their own book reads
+  // as missing.
+  const reader = await getCurrentUser()
+  const book = await getBookBySlug(slug, reader)
   if (!book) notFound()
 
   const cover = typeof book.cover === 'object' && book.cover !== null ? book.cover : null
 
-  const reader = await getCurrentUser()
   const kindleReady = Boolean(reader?.kindleEmail)
 
   const artifacts = (book.artifacts ?? [])

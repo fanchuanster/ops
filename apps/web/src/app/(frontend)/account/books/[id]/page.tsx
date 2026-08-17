@@ -8,7 +8,7 @@ import { BookActions } from '../../../../../components/BookActions'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
 import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
-import { awaitingReview, isConversionState } from '../../../../../domain/pipeline'
+import { isConversionState } from '../../../../../domain/pipeline'
 import { UPLOADER_RIGHTS } from '../../../../../domain/rights'
 import { shareDescription } from '../../../../../domain/uploaderShare'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
@@ -55,11 +55,6 @@ export default async function BookDetailsPage({
   const state = book.conversion?.state ?? 'none'
   const rightsDeclared = UPLOADER_RIGHTS.some((o) => o.value === book.rightsStatus)
   const share = shareDescription(book.rightsStatus)
-  const heldForReview = awaitingReview({
-    state: isConversionState(state) ? state : 'none',
-    hasOwner: true,
-    reviewState: book.review?.state ?? 'unsubmitted',
-  })
 
   return (
     <>
@@ -113,7 +108,6 @@ export default async function BookDetailsPage({
         state={state}
         message={book.conversion?.message}
         queuedSince={book.conversion?.startedAt}
-        awaitingReview={heldForReview}
       />
 
       {/* Only once the book has been through the pipeline: there is

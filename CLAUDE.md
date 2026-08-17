@@ -391,25 +391,39 @@ where a failure restarts from. That last one is keyed on whether a DOCX
 artifact exists rather than on the state, because the state is what a
 failure loses and the artifact is the evidence that survived.
 
-## Phase 2 waits for review
+## Phase 2 does not wait for review
 
-Phase 2 does not start on its own for a reader's upload. A book sits at
-`master_ready` until an administrator has approved it, and only then is
-the EPUB generated — `reviewClearsFormats` in
-`apps/web/src/domain/pipeline.ts`. The reasoning is that generating an
-edition is a statement that the book is fit to read, and building it
-before anyone has looked at the master bakes the OCR damage into the
-edition. The two-phase split is exactly what makes waiting cheap.
+Phase 2 runs as soon as a master exists. Every book that reaches
+`master_ready` is offered to the next converter that polls, whoever owns
+it and whatever its review state — `claimFor` in
+`apps/web/src/domain/pipeline.ts` consults neither.
 
-The gate is scoped to books that have an **owner**, identically to
-`enforcePublicationReview` in the Books collection. Library content
-entered by staff has no owner and no submission to review; requiring one
-would mean an editor could not convert a book without first submitting
-it to themselves.
+Between 2026-08-15 and 2026-08-17 it did wait: a reader's upload sat at
+`master_ready` until an administrator approved it. That gate was
+backwards, in two ways that only show up from the outside.
 
-A consequence worth stating: review now happens *before* the reader-facing
-formats exist, so "is there anything to review?" means the DOCX master,
-not the EPUB.
+**What a reviewer reads is the finished edition.** Publication publishes
+the deliverables — the EPUB is what a reader will actually open, so it is
+what the decision is about. Holding the EPUB until the review left the
+reviewer with a DOCX master and an act of imagination.
+
+**A private book is never submitted at all.** Section 6.2 says an upload
+may stay private forever and that submitting is optional. Under the gate,
+"optional" meant the book was never converted past its master, so the one
+reader entitled to it could not read it either — while section 5.2
+promises exactly that reader every word.
+
+Review still decides publication, and `enforcePublicationReview` in the
+Books collection is where it is enforced: an owned book cannot become
+`visibility: public` without an approved review *and* a rights status
+that permits distribution. That is the gate that was always doing the
+work. Building an EPUB is not publishing it — a converted private upload
+is `status: published` but still `visibility: private`, readable by its
+owner and by nobody else (`readBooks` in `collections/Books.ts`).
+
+Reviewing therefore means reading the book: an administrator opens
+`/read/<slug>` like anyone else, which is what the Books access rule
+grants them.
 
 ## EPUB on release, PDFs on request
 

@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const book = await getBookBySlug(slug)
+  const book = await getBookBySlug(slug, await getCurrentUser())
   return { title: book ? `Reading ${book.title}` : 'Not found' }
 }
 
@@ -30,11 +30,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function ReadPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  const book = await getBookBySlug(slug)
+  const user = await getCurrentUser()
+
+  // The session goes into the lookup, not just into the authorization
+  // below it: a private upload is invisible to an anonymous query, and
+  // an owner opening their own book would get a bare 404 here rather
+  // than ever reaching a decision about it.
+  const book = await getBookBySlug(slug, user)
   if (!book) notFound()
 
   const payload = await getPayload({ config })
-  const user = await getCurrentUser()
 
   const decision = await authorizeReading({
     payload,

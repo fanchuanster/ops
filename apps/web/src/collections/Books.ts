@@ -11,13 +11,21 @@ import { priceInCredits } from '../domain/credits'
 import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 
 /**
- * Anonymous visitors see only cleared, public, published books.
+ * Anonymous visitors see only cleared, public, published books. A
+ * signed-in reader also sees the books they uploaded, whatever state
+ * those are in: a private workspace nobody can read is not a workspace
+ * (CLAUDE.md section 6.2), and this rule is what a reader's own `/read`
+ * and `/books` pages are refused by otherwise.
+ *
+ * This returned `true` for anyone signed in until 2026-08-17. That was
+ * both too much and too little — it let any account read any other
+ * reader's private upload, leaving only the artifact boundary in the
+ * way, which is meant to be the second check and not the first.
+ *
  * Annotated as `Where` because TypeScript otherwise widens the array
  * literal into a union that no longer satisfies Payload's query type.
  */
-const readBooks: Access = ({ req }) => {
-  if (req.user) return true
-
+export const readBooks: Access = ({ req }) => {
   const publiclyVisible: Where = {
     and: [
       { visibility: { equals: 'public' } },
@@ -26,7 +34,10 @@ const readBooks: Access = ({ req }) => {
     ],
   }
 
-  return publiclyVisible
+  if (!req.user) return publiclyVisible
+  if (req.user.roles?.includes('admin')) return true
+
+  return { or: [publiclyVisible, { owner: { equals: req.user.id } }] }
 }
 
 /**

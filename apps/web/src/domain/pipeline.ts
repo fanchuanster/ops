@@ -23,7 +23,6 @@
  */
 
 import type { ArtifactFormat } from './conversion'
-import type { ReviewState } from './moderation'
 
 export const CONVERSION_STATES = [
   'none',
@@ -87,31 +86,6 @@ export function isOnDemandFormat(value: unknown): value is ArtifactFormat {
 }
 
 /**
- * Is this book cleared for its reader-facing formats to be built?
- *
- * Reader uploads wait for review; staff library content does not. The
- * scoping is deliberately identical to `enforcePublicationReview` in
- * the Books collection — a book is "reader-created" exactly when it has
- * an owner. Requiring review of staff content would mean an editor
- * could not convert a book without first submitting it to themselves.
- *
- * The gate exists because generating an edition is a statement that the
- * book is fit to read. Building the EPUB before anyone has looked at
- * the master means the OCR damage is baked into the edition, and the
- * two-phase split (above) is precisely what makes waiting cheap.
- */
-export function reviewClearsFormats({
-  hasOwner,
-  reviewState,
-}: {
-  hasOwner: boolean
-  reviewState: ReviewState
-}): boolean {
-  if (!hasOwner) return true
-  return reviewState === 'approved'
-}
-
-/**
  * Which formats a phase 2 run should produce.
  *
  * Three cases, in order:
@@ -148,9 +122,6 @@ export function formatsToBuild({
 
 export interface ClaimCandidate {
   state: ConversionState
-  /** Reader-created books need review; staff library content does not. */
-  hasOwner: boolean
-  reviewState: ReviewState
   pendingFormats: readonly unknown[]
   /** Formats the book already has, so a master edit rebuilds them all. */
   existingFormats: readonly unknown[]
@@ -166,16 +137,23 @@ export interface ClaimedWork {
  * What, if anything, a converter should be handed for this book.
  *
  * `claimableAs` above answers "which phase does this state belong to";
- * this answers "may it run, and on what". They are separate because the
- * first is a property of the state alone and stays testable as such,
- * while the second needs the book's review and its artifacts.
+ * this answers "and on what". They are separate because the first is a
+ * property of the state alone and stays testable as such, while the
+ * second needs the book's artifacts.
+ *
+ * Nothing here consults review. Phase 2 was held until an administrator
+ * approved the book until 2026-08-17, and the gate was backwards:
+ * review is a judgement about the finished edition, so holding the
+ * edition until the review meant the reviewer had nothing to read, and
+ * an uploader who never submitted their private book — which section
+ * 6.2 explicitly permits — could never read it either. Publication is
+ * where review belongs, and `enforcePublicationReview` in the Books
+ * collection is where it is enforced.
  */
 export function claimFor(candidate: ClaimCandidate): ClaimedWork | null {
   const kind = claimableAs(candidate.state)
   if (!kind) return null
   if (kind === 'master') return { kind, formats: [] }
-
-  if (!reviewClearsFormats(candidate)) return null
 
   return {
     kind,
@@ -267,22 +245,6 @@ export const QUOTA_COUNTED_STATES: ConversionState[] = CONVERSION_STATES.filter(
  */
 export function retryStateFor({ hasMasterArtifact }: { hasMasterArtifact: boolean }): ConversionState {
   return hasMasterArtifact ? 'master_ready' : 'queued'
-}
-
-/**
- * Is this book finished with phase 1 and waiting on a human?
- *
- * Distinct from `isInFlight`: nothing is running and nothing will start
- * until somebody reviews it. The uploader should be told that, not
- * shown a spinner — a progress bar that will never move on its own is
- * worse than no progress bar.
- */
-export function awaitingReview(candidate: {
-  state: ConversionState
-  hasOwner: boolean
-  reviewState: ReviewState
-}): boolean {
-  return candidate.state === 'master_ready' && !reviewClearsFormats(candidate)
 }
 
 /**

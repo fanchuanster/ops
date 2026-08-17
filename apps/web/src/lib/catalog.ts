@@ -12,7 +12,7 @@
  */
 
 import config from '@payload-config'
-import { getPayload, type Where } from 'payload'
+import { getPayload, type TypedUser, type Where } from 'payload'
 
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
 
@@ -41,16 +41,26 @@ export async function getCatalog({
     collectionId = found.docs[0].id
   }
 
-  // One indexed comparison: a reader at this id sees every book at or
-  // below it. Runs in the query rather than over the results, so a
+  // The catalog is the *public* library, said here rather than left to
+  // the collection's access rule. That rule now also admits a reader's
+  // own uploads, which belong in `/account/books` and nowhere near a
+  // browse listing — and a filter that only holds while nobody passes a
+  // session is not a filter.
+  //
+  // The level is one indexed comparison: a reader at this id sees every
+  // book at or below it. In the query rather than over the results, so a
   // folded-away book is never fetched and never reaches the browser —
   // though it is still curation and not access control (domain/levels.ts).
-  const filters: Where[] = [{ level: { less_than_equal: levelId(level) } }]
+  const filters: Where[] = [
+    { visibility: { equals: 'public' } },
+    { status: { equals: 'published' } },
+    { level: { less_than_equal: levelId(level) } },
+  ]
   if (collectionId) filters.push({ collections: { equals: collectionId } })
 
   const books = await payload.find({
     collection: 'books',
-    where: filters.length === 1 ? filters[0] : { and: filters },
+    where: { and: filters },
     sort: 'title',
     limit,
     depth: 1,
@@ -72,7 +82,17 @@ export async function getCollections() {
   return result.docs
 }
 
-export async function getBookBySlug(slug: string) {
+/**
+ * One book by slug, as seen by whoever is asking.
+ *
+ * The `user` argument is not optional decoration. `overrideAccess:
+ * false` with nobody passed is an *anonymous* query — the local API
+ * does not read the request's cookies — so omitting it means a reader's
+ * own private upload is filtered out of their own book page and their
+ * own reader, which surfaces as a bare 404. Every caller that has a
+ * session must hand it over.
+ */
+export async function getBookBySlug(slug: string, user?: TypedUser | null) {
   const payload = await getPayload({ config })
   const result = await payload.find({
     collection: 'books',
@@ -80,6 +100,7 @@ export async function getBookBySlug(slug: string) {
     limit: 1,
     depth: 1,
     overrideAccess: false,
+    user: user ?? undefined,
   })
   return result.docs[0] ?? null
 }

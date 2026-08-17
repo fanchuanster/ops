@@ -6,12 +6,7 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
-import {
-  awaitingReview,
-  isConversionState,
-  isOnDemandFormat,
-  retryStateFor,
-} from '../../../domain/pipeline'
+import { isConversionState, isOnDemandFormat, retryStateFor } from '../../../domain/pipeline'
 import { canAccessArtifact } from '../../../domain/rights'
 import { getCurrentUser } from '../../../lib/auth'
 import { deleteObjects } from '../../../lib/storage'
@@ -193,16 +188,6 @@ export async function requestFormat(_prev: ManageState, formData: FormData): Pro
 
   const conversion = (book.conversion ?? {}) as Record<string, unknown>
   const state = isConversionState(conversion.state) ? conversion.state : 'none'
-
-  if (
-    awaitingReview({
-      state,
-      hasOwner: Boolean(book.owner),
-      reviewState: book.review?.state ?? 'unsubmitted',
-    })
-  ) {
-    return { error: 'This book is still waiting to be reviewed. Its formats are built after that.' }
-  }
 
   // Only from a resting state. A request arriving mid-build would be
   // cleared by the completion that is already in flight, and would
