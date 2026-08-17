@@ -36,7 +36,9 @@ describe('a single shard', () => {
       pages: [{ pageNumber: 1, paragraphs: [paragraph('0', '4'), paragraph('4', '11')] }],
     })
 
-    expect(pages).toEqual([{ number: 1, paragraphs: ['學而第一', '子曰學而時習之'] }])
+    expect(pages).toEqual([
+      { number: 1, paragraphs: [{ text: '學而第一' }, { text: '子曰學而時習之' }] },
+    ])
   })
 
   it('keeps the page number the engine reported', () => {
@@ -67,7 +69,7 @@ describe('a sharded document', () => {
       pages: [{ pageNumber: 2, paragraphs: [paragraph('11', '16')] }],
     })
 
-    expect(pages).toEqual([{ number: 2, paragraphs: ['溫故而知新'] }])
+    expect(pages).toEqual([{ number: 2, paragraphs: [{ text: '溫故而知新' }] }])
   })
 
   it('would slice the wrong text if the offset were ignored', () => {
@@ -78,7 +80,7 @@ describe('a sharded document', () => {
       shardInfo: { textOffset: '11' },
       pages: [{ pageNumber: 2, paragraphs: [paragraph('11', '16')] }],
     })
-    expect(pages[0]!.paragraphs[0]).not.toBe('')
+    expect(pages[0]!.paragraphs[0]!.text).not.toBe('')
   })
 
   it('does not drift after a CJK Extension B character', () => {
@@ -91,7 +93,7 @@ describe('a sharded document', () => {
       pages: [{ pageNumber: 1, paragraphs: [paragraph('0', '1'), paragraph('1', '8')] }],
     })
 
-    expect(pages[0]!.paragraphs).toEqual(['𠀀', '子曰學而時習之'])
+    expect(pages[0]!.paragraphs.map((p) => p.text)).toEqual(['𠀀', '子曰學而時習之'])
   })
 
   it('handles a textOffset that arrived as a number', () => {
@@ -100,7 +102,7 @@ describe('a sharded document', () => {
       shardInfo: { textOffset: 6 },
       pages: [{ pageNumber: 2, paragraphs: [paragraph('6', '12')] }],
     })
-    expect(pages[0]!.paragraphs).toEqual(['second'])
+    expect(pages[0]!.paragraphs.map((p) => p.text)).toEqual(['second'])
   })
 })
 

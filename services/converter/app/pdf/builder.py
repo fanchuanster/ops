@@ -48,10 +48,13 @@ body {{
 /* Chapters start on a fresh page, as they would in print. */
 h2 {{ page-break-before: always; }}
 h2:first-of-type {{ page-break-before: avoid; }}
+/* A section head divides a chapter and must not start a page — but it
+   must not be the last thing on one either. */
+h3 {{ page-break-before: auto; }}
 /* A heading stranded at the foot of a page, or one line of a paragraph
    carried over, is the most visible way a generated book looks
    generated. */
-h1, h2 {{ page-break-after: avoid; }}
+h1, h2, h3 {{ page-break-after: avoid; }}
 p, .verse {{ orphans: 2; widows: 2; }}
 """
 

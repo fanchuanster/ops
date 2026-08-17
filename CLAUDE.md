@@ -1002,18 +1002,27 @@ is not read as "all".
 
 `ocr_key` is a JSON document in R2 — `books/{id}/ocr/pages.json`, shape
 and version in `apps/web/src/domain/ocr.ts` — holding the pages the
-engine read, in order, as paragraphs. It is absent for a DOCX or plain
-text upload, which needed no OCR; the converter reads `source_key`
-instead. The completion `POST` carries the same `kind`, and phase 1
+engine read, in order, as paragraphs. Each paragraph carries a **role**
+(`h1`, `h2`, `body`) decided on the web side from the type size and
+position Document AI reports, because that is the only evidence for a
+heading and it does not survive as plain text. Version 1 wrote bare
+strings and is still read: those pages were paid for once. It is absent
+for a DOCX or plain text upload, which needed no OCR; the converter
+reads `source_key` instead. The completion `POST` carries the same `kind`, and phase 1
 finishing does **not** publish a book: a DOCX master is not a readable
 edition.
 
 Phase 2 is claimable on its own, which is what makes a corrected master
 cheap to act on.
 
-Not yet built: the converter side of both job kinds — it still expects
-the single-phase job it was written against. And where the converter
-container runs, which is still deliberately open.
+Both job kinds are built on the converter side (`app/jobs/runner.py`,
+claimed by `app/handoff/poller.py`), and the heading levels the OCR
+handoff now carries survive the master round trip — which is what makes
+the corrected master come back as the same book. The EPUB's table of
+contents nests sections under their chapter accordingly.
+
+Not yet built: where the converter container runs, which is still
+deliberately open.
 
 Example:
 

@@ -41,7 +41,11 @@ def _make_styles(docx) -> None:
     base.font.size = Pt(11)
     _bind_fonts(base)
 
-    for name in ("Title", "Heading 1"):
+    # Every built-in style this builder emits, including "Heading 2" for
+    # section heads: an unbound heading leaves Chinese to Word's fallback,
+    # which is the mismatched-face problem above showing up on exactly the
+    # lines a reader looks at first.
+    for name in ("Title", "Heading 1", "Heading 2"):
         _bind_fonts(docx.styles[name], cjk=CJK_HEADING_FONT)
 
     def add(name: str, *, size: int, align, space_before=0, space_after=0,
@@ -92,6 +96,8 @@ _STYLE_FOR = {
     BlockKind.ATTRIBUTION: "NobleSee Attribution",
     BlockKind.FOOTNOTE: "NobleSee Footnote",
     BlockKind.BODY: "NobleSee Body",
+    # Handled ahead of this map, but present so a lookup can never fail.
+    BlockKind.SECTION: "Heading 2",
 }
 
 
@@ -121,6 +127,15 @@ def build_docx(doc: Document, out_path: Path, author: str | None = None) -> Path
             flush_ref()
             docx.add_page_break()
             docx.add_paragraph(block.lines[0], style="Heading 1")
+            continue
+
+        if block.kind is BlockKind.SECTION:
+            # No page break: a section head divides a chapter, it does
+            # not start one. Word's built-in style, so the master keeps a
+            # real outline — one an editor can navigate and restyle, and
+            # one the EPUB's table of contents can be built from.
+            flush_ref()
+            docx.add_paragraph(block.lines[0], style="Heading 2")
             continue
 
         if block.kind is BlockKind.ATTRIBUTION:

@@ -42,6 +42,20 @@ interface OcrConfig {
   processor: string
   location: string
   bucket: string
+  /**
+   * Whether to pay for type-size information.
+   *
+   * `DOCUMENT_AI_STYLE_INFO=true` turns it on. Off by default because
+   * it is a Document AI premium feature billed above the base per-page
+   * rate, and this project reads whole books — a surcharge per page is
+   * a surcharge per four hundred pages, per book.
+   *
+   * What it buys is headings: without it every paragraph is classified
+   * `body`, because type size is the only honest evidence for a chapter
+   * title (`domain/ocr.ts`). Running-head removal does *not* depend on
+   * it — that runs off geometry, which costs nothing extra.
+   */
+  styleInfo: boolean
 }
 
 /**
@@ -63,7 +77,7 @@ export async function ocrConfig(): Promise<OcrConfig | null> {
     const bucket = e.DOCUMENT_AI_BUCKET
 
     if (!encodedKey || !processor || !location || !bucket) return null
-    return { encodedKey, processor, location, bucket }
+    return { encodedKey, processor, location, bucket, styleInfo: e.DOCUMENT_AI_STYLE_INFO === 'true' }
   } catch {
     return null
   }
@@ -72,6 +86,52 @@ export async function ocrConfig(): Promise<OcrConfig | null> {
 /** Where this book's batch output goes in the scratch bucket. */
 function outputPrefix(bookId: string | number): string {
   return `output/${bookId}/`
+}
+
+/** SHA-256 of the uploaded original, as lowercase hex. */
+async function sourceHash(bytes: ArrayBuffer | Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * Has a byte-identical file already been read?
+ *
+ * OCR is the one third-party, per-page cost in the pipeline, and the
+ * public-domain scans this library preserves circulate as a small number
+ * of widely-copied PDFs — so the same file arriving twice is ordinary,
+ * not exotic. When it does, the second book points at the first book's
+ * OCR text and Google is not called at all.
+ *
+ * Safe across owners: the text returned is a function of the bytes the
+ * second uploader already holds, so nothing is revealed that they did
+ * not upload themselves. The artifact is *shared*, not copied, which is
+ * why the twin's `ocrKey` is used directly.
+ */
+async function alreadyRead(
+  payload: Payload,
+  hash: string,
+  bookId: string | number,
+): Promise<{ ocrKey: string; pageCount: number | null } | null> {
+  const twin = await payload.find({
+    collection: 'books',
+    where: {
+      and: [
+        { 'conversion.sourceHash': { equals: hash } },
+        { 'conversion.ocrKey': { exists: true } },
+        { id: { not_equals: bookId } },
+      ],
+    },
+    sort: 'createdAt',
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  const found = twin.docs[0]
+  const ocrKey = found?.conversion?.ocrKey
+  if (!found || typeof ocrKey !== 'string' || ocrKey.length === 0) return null
+  return { ocrKey, pageCount: typeof found.pageCount === 'number' ? found.pageCount : null }
 }
 
 async function fail(payload: Payload, book: { id: string | number; conversion?: unknown }, message: string) {
@@ -147,6 +207,29 @@ export async function startNextOcr(payload: Payload, config: OcrConfig): Promise
       return true
     }
 
+    // Before anything is sent to Google. This is the only place in the
+    // pipeline where a check can still prevent the charge.
+    const hash = await sourceHash(bytes)
+    const seen = await alreadyRead(payload, hash, book.id)
+    if (seen) {
+      await payload.update({
+        collection: 'books',
+        id: book.id,
+        data: {
+          conversion: {
+            ...conversion,
+            state: 'ocr_ready',
+            sourceHash: hash,
+            ocrKey: seen.ocrKey,
+            message: null,
+          },
+          ...(seen.pageCount === null ? {} : { pageCount: seen.pageCount }),
+        },
+        overrideAccess: true,
+      })
+      return true
+    }
+
     const { gcsName } = await stageForConversion({
       encodedKey: config.encodedKey,
       bucket: config.bucket,
@@ -164,6 +247,7 @@ export async function startNextOcr(payload: Payload, config: OcrConfig): Promise
       inputName: gcsName,
       mimeType: 'application/pdf',
       outputPrefix: prefix,
+      styleInfo: config.styleInfo,
     })
 
     // Written together, and only after Google has accepted the job. A
@@ -178,6 +262,9 @@ export async function startNextOcr(payload: Payload, config: OcrConfig): Promise
           state: 'ocr',
           ocrOperation: operation,
           ocrOutputPrefix: prefix,
+          // Recorded now so the *next* identical upload can find it,
+          // even though this one paid.
+          sourceHash: hash,
           message: null,
         },
       },

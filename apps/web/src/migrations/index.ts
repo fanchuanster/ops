@@ -9,6 +9,7 @@ import * as migration_20260814_155000_uploader_share from './20260814_155000_upl
 import * as migration_20260814_182000_cascade_book_deletes from './20260814_182000_cascade_book_deletes';
 import * as migration_20260815_051500_ocr_pipeline from './20260815_051500_ocr_pipeline';
 import * as migration_20260815_060000_pending_formats from './20260815_060000_pending_formats';
+import * as migration_20260815_150000_source_hash from './20260815_150000_source_hash';
 
 export const migrations = [
   {
@@ -65,5 +66,10 @@ export const migrations = [
     up: migration_20260815_060000_pending_formats.up,
     down: migration_20260815_060000_pending_formats.down,
     name: '20260815_060000_pending_formats'
+  },
+  {
+    up: migration_20260815_150000_source_hash.up,
+    down: migration_20260815_150000_source_hash.down,
+    name: '20260815_150000_source_hash'
   },
 ];

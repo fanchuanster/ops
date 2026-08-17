@@ -27,7 +27,9 @@
  */
 
 import {
+  type OcrBox,
   type OcrPage,
+  type TextSegment,
   codePoints,
   offset,
   orderPages,
@@ -62,6 +64,65 @@ export interface BatchOcrRequest {
   mimeType: string
   /** Where output goes. Must end in a slash. */
   outputPrefix: string
+  /**
+   * Ask for type-size and weight information.
+   *
+   * A **paid extra**. `computeStyleInfo` is one of Document AI's premium
+   * features and is billed above the base per-page rate, so this is off
+   * unless the deployment turns it on — see DOCUMENT_AI_STYLE_INFO in
+   * `lib/ocrPipeline.ts`.
+   *
+   * What it buys is headings. Without it every paragraph is classified
+   * `body`, because type size is the only evidence that distinguishes a
+   * chapter title from a sentence and guessing from length alone
+   * invents chapters (`domain/ocr.ts`).
+   */
+  styleInfo?: boolean
+  /**
+   * BCP-47 language hints, most likely first.
+   *
+   * Free, and worth setting. The engine detects script perfectly well
+   * but hints resolve the genuinely ambiguous cases — Traditional
+   * versus Simplified, and Han characters shared with Japanese — which
+   * is exactly the material this library is made of.
+   */
+  languageHints?: readonly string[]
+}
+
+/**
+ * The default hints for this library.
+ *
+ * Traditional first, then Simplified, then English. Order is a
+ * preference and not a restriction: an English book sent with these
+ * hints is still read as English.
+ */
+export const DEFAULT_LANGUAGE_HINTS = ['zh-Hant', 'zh-Hans', 'en'] as const
+
+/**
+ * OCR options for one request.
+ *
+ * Everything here was previously left unset, which meant every option
+ * took its default: no hints, no native PDF parsing, no style. Two of
+ * the three cost nothing to fix.
+ */
+function ocrConfig(request: BatchOcrRequest): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    hints: { languageHints: [...(request.languageHints ?? DEFAULT_LANGUAGE_HINTS)] },
+    // Free, and strictly better on a PDF that already has a text layer:
+    // the characters are read from the file rather than recognised from
+    // a rendering of it. `needsOcr` deliberately sends every PDF here
+    // rather than trying to tell scanned from born-digital, so this is
+    // the option that makes that choice cheap.
+    enableNativePdfParsing: true,
+  }
+
+  if (request.styleInfo) {
+    // Nested under premiumFeatures rather than set as the top-level
+    // `computeStyleInfo`, which the API marks deprecated.
+    config.premiumFeatures = { computeStyleInfo: true }
+  }
+
+  return config
 }
 
 /**
@@ -93,6 +154,7 @@ export async function startBatchOcr(request: BatchOcrRequest): Promise<string> {
         gcsOutputConfig: { gcsUri: `gs://${request.bucket}/${request.outputPrefix}` },
       },
       skipHumanReview: true,
+      processOptions: { ocrConfig: ocrConfig(request) },
     }),
   })
 
@@ -162,15 +224,113 @@ export async function ocrStatus({
 }
 
 /** The Document JSON shape, reduced to the parts we read. */
+interface NormalizedVertex {
+  x?: number
+  y?: number
+}
+
+interface DocumentLayout {
+  textAnchor?: { textSegments?: { startIndex?: string; endIndex?: string }[] }
+  boundingPoly?: { normalizedVertices?: NormalizedVertex[] }
+}
+
+interface DocumentToken {
+  layout?: DocumentLayout
+  styleInfo?: { fontSize?: number; pixelFontSize?: number; bold?: boolean }
+}
+
 interface DocumentShard {
   text?: string
   shardInfo?: { textOffset?: string | number }
   pages?: {
     pageNumber?: number
-    paragraphs?: {
-      layout?: { textAnchor?: { textSegments?: { startIndex?: string; endIndex?: string }[] } }
-    }[]
+    paragraphs?: { layout?: DocumentLayout }[]
+    tokens?: DocumentToken[]
   }[]
+}
+
+/**
+ * The axis-aligned hull of a bounding polygon.
+ *
+ * Document AI returns four vertices, which are not axis-aligned on a
+ * skewed scan — and a scanned book is very often slightly skewed. Taking
+ * the extremes rather than assuming vertex 0 is the top left is what
+ * keeps a crooked page's running head in the margin band where the
+ * detector can find it.
+ */
+export function hullOf(layout: DocumentLayout | undefined): OcrBox | undefined {
+  const vertices = layout?.boundingPoly?.normalizedVertices
+  if (!vertices || vertices.length === 0) return undefined
+
+  const xs = vertices.map((v) => v.x ?? 0)
+  const ys = vertices.map((v) => v.y ?? 0)
+  return {
+    x0: Math.min(...xs),
+    y0: Math.min(...ys),
+    x1: Math.max(...xs),
+    y1: Math.max(...ys),
+  }
+}
+
+/** Do two segments overlap at all? */
+function overlaps(a: TextSegment, b: TextSegment): boolean {
+  return a.start < b.end && b.start < a.end
+}
+
+function median(values: number[]): number | undefined {
+  if (values.length === 0) return undefined
+  const sorted = [...values].sort((x, y) => x - y)
+  return sorted[Math.floor(sorted.length / 2)]
+}
+
+/**
+ * The type size and weight of a paragraph, from the tokens inside it.
+ *
+ * Document AI reports style per *token*, not per paragraph, so a
+ * paragraph's size has to be gathered from the tokens whose text range
+ * falls inside the paragraph's. The median again, so one large drop
+ * capital does not make the whole paragraph a heading — which is
+ * precisely the mistake that would turn the first paragraph of every
+ * chapter into a chapter title.
+ *
+ * `fontSize` is in points and `pixelFontSize` in pixels; either is
+ * usable because everything downstream compares sizes to the book's own
+ * median rather than to an absolute. Points are preferred when present
+ * so the comparison is not disturbed by a change of scan resolution
+ * partway through a book.
+ */
+export function styleOf(
+  tokens: readonly DocumentToken[],
+  paragraph: TextSegment,
+  base: number,
+): { fontSize?: number; bold?: boolean } {
+  const sizes: number[] = []
+  let bold = 0
+  let counted = 0
+
+  for (const token of tokens) {
+    const segments = token.layout?.textAnchor?.textSegments ?? []
+    const inside = segments.some((segment) =>
+      overlaps(
+        { start: offset(segment.startIndex) - base, end: offset(segment.endIndex) - base },
+        paragraph,
+      ),
+    )
+    if (!inside) continue
+
+    counted += 1
+    const size = token.styleInfo?.fontSize ?? token.styleInfo?.pixelFontSize
+    if (typeof size === 'number' && size > 0) sizes.push(size)
+    if (token.styleInfo?.bold) bold += 1
+  }
+
+  const fontSize = median(sizes)
+  return {
+    ...(fontSize === undefined ? {} : { fontSize }),
+    // Bold only if most of the paragraph is, so an emphasised phrase
+    // inside a sentence does not make the sentence a heading.
+    ...(counted > 0 && bold > counted / 2 ? { bold: true } : {}),
+  }
 }
 
 /**
@@ -190,17 +350,35 @@ export function pagesFromShard(shard: DocumentShard): OcrPage[] {
   const base = offset(shard.shardInfo?.textOffset)
 
   return (shard.pages ?? []).map((page, index) => {
+    const tokens = page.tokens ?? []
+
     const paragraphs = (page.paragraphs ?? [])
-      .flatMap((paragraph) => paragraph.layout?.textAnchor?.textSegments ?? [])
-      .map((segment) =>
-        tidyParagraph(
-          sliceSegment(units, {
-            start: offset(segment.startIndex) - base,
-            end: offset(segment.endIndex) - base,
-          }),
-        ),
+      .flatMap((paragraph) =>
+        (paragraph.layout?.textAnchor?.textSegments ?? []).map((segment) => ({
+          segment,
+          layout: paragraph.layout,
+        })),
       )
-      .filter((paragraph) => paragraph.length > 0)
+      .map(({ segment, layout }) => {
+        const range = {
+          start: offset(segment.startIndex) - base,
+          end: offset(segment.endIndex) - base,
+        }
+        return {
+          text: tidyParagraph(sliceSegment(units, range)),
+          ...(hullOf(layout) ? { box: hullOf(layout) } : {}),
+          // Skipped entirely when no token carries style, which is the
+          // case whenever the paid feature is off — one pass over the
+          // page's tokens per paragraph is not free on a dense page.
+          // `base` again, because the token offsets are in whole-document
+          // space exactly as the paragraph's were, and `range` above has
+          // already been rebased into this shard.
+          ...(tokens.some((token) => token.styleInfo)
+            ? styleOf(tokens, range, base)
+            : {}),
+        }
+      })
+      .filter((paragraph) => paragraph.text.length > 0)
 
     return {
       // pageNumber is 1-based and document-wide, which is what we want.

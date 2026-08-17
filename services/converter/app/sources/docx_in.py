@@ -32,9 +32,35 @@ STYLE_TO_KIND = {
     "NobleSee Body": BlockKind.BODY,
 }
 
-# A DOCX from anywhere else has no NobleSee styles, so fall back to the
-# built-in heading styles every word processor writes.
-HEADING_STYLES = {"Title", "Heading 1", "Heading 2", "Heading 3"}
+# Headings are Word's own built-in styles rather than NobleSee ones, so
+# that the master carries a real outline — one an editor can navigate in
+# the sidebar, and one a DOCX from anywhere else already speaks.
+#
+# The *level* has to survive. A section head read back as a chapter would
+# start a new page and a new EPUB document at every subheading, and the
+# reader would get a table of contents claiming forty chapters where the
+# book has six. That is not a cosmetic difference: it is the corrected
+# master coming back as a different book from the one the editor
+# approved.
+HEADING_KINDS = {
+    "Title": BlockKind.CHAPTER,
+    "Heading 1": BlockKind.CHAPTER,
+}
+
+
+def _heading_kind(style: str) -> BlockKind | None:
+    """CHAPTER, SECTION, or None if this style is not a heading at all.
+
+    Anything below Heading 1 is a SECTION rather than a deeper kind of
+    its own. The pipeline has two heading levels because that is what the
+    OCR side can honestly distinguish (`classifyParagraphs` in
+    `apps/web/src/domain/ocr.ts`), and inventing a third here would be a
+    level nothing upstream can fill.
+    """
+    known = HEADING_KINDS.get(style)
+    if known is not None:
+        return known
+    return BlockKind.SECTION if style.startswith("Heading ") else None
 
 REFERENCE_STYLE = "NobleSee Reference"
 
@@ -74,7 +100,7 @@ def read_docx(path: Path, title: str | None = None) -> Document:
 
         kind = STYLE_TO_KIND.get(style)
         if kind is None:
-            kind = BlockKind.CHAPTER if style in HEADING_STYLES else BlockKind.BODY
+            kind = _heading_kind(style) or BlockKind.BODY
 
         # Consecutive verse paragraphs are one poem. Everything else
         # stands alone: two adjacent BODY paragraphs are two paragraphs,

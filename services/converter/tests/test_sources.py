@@ -36,6 +36,7 @@ def sample_document() -> Document:
         author="李白",
         blocks=[
             Block(kind=BlockKind.CHAPTER, lines=["第一章"], page=0),
+            Block(kind=BlockKind.SECTION, lines=["一、月與鄉思"], page=1),
             Block(kind=BlockKind.MARKER, lines=["（一）"], page=1),
             Block(
                 kind=BlockKind.VERSE,
@@ -109,18 +110,50 @@ def test_two_prose_paragraphs_stay_two_paragraphs(tmp_path):
     assert [b.lines for b in restored.blocks] == [["第一段。"], ["第二段。"]]
 
 
+def test_a_section_head_does_not_come_back_as_a_chapter(tmp_path):
+    """The failure this guards against is a corrected master returning as
+    a different book: every subheading starting a new page and a new EPUB
+    document, and a table of contents claiming chapters the book has not
+    got. Silent, and only visible once someone opens the result."""
+    build_docx(sample_document(), tmp_path / "master.docx")
+    restored = read_docx(tmp_path / "master.docx")
+
+    kinds = [b.kind for b in restored.blocks]
+    assert kinds.count(BlockKind.SECTION) == 1
+    assert kinds.count(BlockKind.CHAPTER) == 1
+
+
 def test_a_foreign_docx_falls_back_to_headings_and_prose(tmp_path):
     from docx import Document as DocxDocument
 
     docx = DocxDocument()
     docx.add_paragraph("第一章", style="Heading 1")
+    docx.add_paragraph("第一節", style="Heading 2")
     docx.add_paragraph("尋常的段落。")
     docx.save(str(tmp_path / "foreign.docx"))
 
     restored = read_docx(tmp_path / "foreign.docx", title="外來文件")
 
-    assert [b.kind for b in restored.blocks] == [BlockKind.CHAPTER, BlockKind.BODY]
+    assert [b.kind for b in restored.blocks] == [
+        BlockKind.CHAPTER,
+        BlockKind.SECTION,
+        BlockKind.BODY,
+    ]
     assert restored.title == "外來文件"
+
+
+def test_a_deeper_heading_is_a_section_rather_than_body(tmp_path):
+    # An editor working in Word may nest further than the pipeline's two
+    # levels. Losing the heading entirely would be worse than flattening
+    # it: the text would come back as a sentence in the middle of a
+    # paragraph run.
+    from docx import Document as DocxDocument
+
+    docx = DocxDocument()
+    docx.add_paragraph("更深的標題", style="Heading 4")
+    docx.save(str(tmp_path / "deep.docx"))
+
+    assert read_docx(tmp_path / "deep.docx").blocks[0].kind is BlockKind.SECTION
 
 
 def test_read_text_is_exact_about_confidence(tmp_path):

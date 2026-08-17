@@ -74,7 +74,7 @@ handed to PyMuPDF.
 
 | input | how it is read |
 |---|---|
-| DOCX | paragraph styles. A NobleSee master round-trips exactly; a foreign DOCX falls back to `Heading 1`/`Title` → chapter, everything else → prose |
+| DOCX | paragraph styles. A NobleSee master round-trips exactly, heading *levels* included — `Heading 1`/`Title` → chapter, anything below it → section, everything else → prose. A foreign DOCX takes the same fallback |
 | text-layer PDF | PyMuPDF spans fed through the *same* geometry rules the scanned path uses, so verse, footnotes and attributions are recovered identically — with no OCR |
 | plain text | blank lines separate paragraphs; `# heading` and a lone `（十一）` marker are recognised |
 | scanned PDF | refused, with a pointer to `convert` |
@@ -259,7 +259,16 @@ failure and it is invisible until a reader hits that page.
 
 The EPUB deliberately sets no page size, no font size and no measure:
 the device decides, which is the whole reason EPUB is the primary format
-(CLAUDE.md section 10). The PDFs exist because a fixed layout cannot
+(CLAUDE.md section 10).
+
+Its table of contents is two levels deep where the book is: one XHTML
+document per chapter, with the chapter's section heads beneath it as
+anchors into that document. A chapter with no sections is a plain entry
+rather than a parent with nothing under it. That nesting is why heading
+*level* has to survive the master round trip — a section read back as a
+chapter would start a new page, a new file and a new contents entry, and
+the corrected master would come back as a different book from the one
+the editor approved. The PDFs exist because a fixed layout cannot
 reflow, so serving a reader who needs larger type means rendering the
 book again — hence three variants rather than one.
 
@@ -312,13 +321,21 @@ almost nothing to wait on one. The local OCR path
 (`app/ocr`, `pipeline/structure.py`) is untouched and still runs for the
 CLI.
 
-What that costs: geometry does not cross the boundary. Document AI
-reports paragraphs, so the heading, verse and footnote detection that
-`structure.py` derives from *where a line sits on the page* is not
-available for those books. `ocr_json.py` therefore does not guess —
-paragraphs become body text, and structure is left for a human to add in
-the master. A missing heading is cheap to fix there; a fabricated one is
-not.
+Structure crosses the boundary, but only what the web side can support
+with evidence. Format **version 2** carries each paragraph's role —
+`h1`, `h2` or `body` — decided there from the type size and position
+Document AI reports, and `ocr_json.py` maps those to `CHAPTER`,
+`SECTION` and `BODY`. Version 1 wrote bare strings and is still read:
+those pages have been paid for once, and refusing them would mean paying
+Google again to read text already sitting in R2.
+
+What it still costs: verse, attributions and footnotes. Those are
+recognised by `structure.py` from *where a line sits on the page* at a
+resolution the handoff does not carry, so a book that came through the
+portal gets no verse detection and `ocr_json.py` does not guess. They
+are left for a human to mark up in the master. A missing distinction is
+cheap to fix there; a fabricated one is not — and a role that arrives
+unrecognised falls back to body for the same reason.
 
 Still open: where this service runs. Nothing is deployed, so nothing
 polls, and a book uploaded through the portal waits at `queued` — its

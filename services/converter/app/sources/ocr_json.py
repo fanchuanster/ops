@@ -45,7 +45,20 @@ from ..pipeline.patterns import MARKER_RE
 # Bumped by the writer when the shape changes incompatibly. Refusing an
 # unknown version here means a format change is discovered in the first
 # second, as a refusal, rather than an hour later as a malformed book.
-SUPPORTED_VERSION = 1
+SUPPORTED_VERSIONS = (1, 2)
+
+# Kept for callers that still import it; version 2 is what the web
+# application writes now.
+SUPPORTED_VERSION = 2
+
+# Roles the writer may assign to a paragraph, mapped to block kinds.
+# Anything unrecognised falls back to BODY — a role this converter does
+# not know is a newer writer being cautious, not a reason to fail a book.
+_ROLE_KINDS = {
+    "h1": BlockKind.CHAPTER,
+    "h2": BlockKind.SECTION,
+    "body": BlockKind.BODY,
+}
 
 
 class UnsupportedOcrDocument(RuntimeError):
@@ -74,10 +87,10 @@ def read_ocr_json(
         raise UnsupportedOcrDocument("the OCR file is not an object")
 
     version = payload.get("version")
-    if version != SUPPORTED_VERSION:
+    if version not in SUPPORTED_VERSIONS:
         raise UnsupportedOcrDocument(
             f"OCR format version {version!r} is not supported "
-            f"(this converter reads version {SUPPORTED_VERSION})"
+            f"(this converter reads versions {', '.join(str(v) for v in SUPPORTED_VERSIONS)})"
         )
 
     pages = payload.get("pages")
@@ -97,13 +110,32 @@ def read_ocr_json(
         page_number = number if isinstance(number, int) else 0
 
         for paragraph in page.get("paragraphs") or []:
-            if not isinstance(paragraph, str):
+            # Version 1 wrote bare strings; version 2 writes objects
+            # carrying the paragraph's role. Both are read, because
+            # books already OCR'd under version 1 have been paid for and
+            # must not need re-reading to stay convertible.
+            if isinstance(paragraph, str):
+                text, role = paragraph.strip(), None
+            elif isinstance(paragraph, dict):
+                raw = paragraph.get("text")
+                if not isinstance(raw, str):
+                    continue
+                text = raw.strip()
+                role = paragraph.get("role")
+            else:
                 continue
-            text = paragraph.strip()
+
             if not text:
                 continue
 
-            kind = BlockKind.MARKER if MARKER_RE.match(text) else BlockKind.BODY
+            # A poem marker is still recognised by pattern, because that
+            # pattern is unambiguous and does not depend on type size —
+            # so it works on a version 1 document and on a version 2 one
+            # OCR'd without the paid style feature.
+            if MARKER_RE.match(text):
+                kind = BlockKind.MARKER
+            else:
+                kind = _ROLE_KINDS.get(role, BlockKind.BODY) if isinstance(role, str) else BlockKind.BODY
             doc.blocks.append(
                 Block(
                     kind=kind,

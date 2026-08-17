@@ -333,6 +333,16 @@ export const Books: CollectionConfig = {
           ],
         },
         {
+          name: 'sourceHash',
+          type: 'text',
+          index: true,
+          admin: {
+            readOnly: true,
+            description:
+              'SHA-256 of the uploaded original. A byte-identical file that has already been read by OCR is reused rather than sent to Google a second time.',
+          },
+        },
+        {
           name: 'pendingFormats',
           type: 'json',
           admin: {

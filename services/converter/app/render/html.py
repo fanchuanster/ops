@@ -22,6 +22,10 @@ BOOK_CSS = """
 body { line-height: 1.75; }
 h1 { font-size: 1.6em; text-align: center; margin: 0 0 .2em; }
 h2 { font-size: 1.25em; margin: 1.6em 0 .6em; }
+/* A section head divides a chapter. Close enough to the body size that
+   it reads as a division rather than as a second chapter, and set with
+   more space above than below so it binds to the text it introduces. */
+h3 { font-size: 1.08em; margin: 1.8em 0 .5em; }
 .byline { text-align: center; font-style: italic; color: #555;
           margin: 0 0 2em; }
 .marker { font-weight: 600; color: #444; margin: 1.4em 0 .4em; }
@@ -38,7 +42,7 @@ h2 { font-size: 1.25em; margin: 1.6em 0 .6em; }
 """
 
 
-def _block_html(block: Block) -> str:
+def _block_html(block: Block, *, anchor: str | None = None) -> str:
     body = escape(block.text)
     uncertain = ' class="uncertain"' if block.confidence < 0.75 else ""
     ref = (
@@ -49,6 +53,13 @@ def _block_html(block: Block) -> str:
 
     if block.kind is BlockKind.CHAPTER:
         return f"<h2{uncertain}>{body}</h2>"
+    if block.kind is BlockKind.SECTION:
+        # The id is what the EPUB's table of contents links to. A chapter
+        # is its own document and needs no anchor; a section is a place
+        # inside one, and without an id the reader can only be dropped at
+        # the top of the chapter and left to scroll.
+        ident = f' id="{anchor}"' if anchor else ""
+        return f"<h3{ident}{uncertain}>{body}</h3>"
     if block.kind is BlockKind.MARKER:
         return f'<p class="marker"{uncertain}>{body}</p>'
     if block.kind is BlockKind.VERSE:
@@ -80,6 +91,39 @@ def chapters(document: Document) -> list[tuple[str, list[Block]]]:
     return grouped
 
 
+def sections(blocks: list[Block]) -> list[tuple[str, str]]:
+    """The section heads inside one chapter, as (anchor, title).
+
+    Numbered exactly as `_render` below numbers them, and deliberately
+    the only other place that knows the numbering rule — the EPUB nav
+    links to these ids, and an anchor here that no heading carries is a
+    table of contents entry that goes nowhere.
+    """
+    return [
+        (_anchor(index), block.text)
+        for index, block in enumerate(
+            (b for b in blocks if b.kind is BlockKind.SECTION), start=1
+        )
+    ]
+
+
+def _anchor(index: int) -> str:
+    return f"sec-{index}"
+
+
+def _render(blocks: list[Block]) -> str:
+    """Blocks to HTML, anchoring section heads as it goes."""
+    seen = 0
+    out = []
+    for block in blocks:
+        if block.kind is BlockKind.SECTION:
+            seen += 1
+            out.append(_block_html(block, anchor=_anchor(seen)))
+        else:
+            out.append(_block_html(block))
+    return "".join(out)
+
+
 def document_html(document: Document, *, include_title: bool = True) -> str:
     """The whole book as one HTML body fragment. Used by the PDF path."""
     head = ""
@@ -88,12 +132,15 @@ def document_html(document: Document, *, include_title: bool = True) -> str:
         if document.author:
             head += f'<p class="byline">{escape(document.author)}</p>'
 
-    return f"<article>{head}{''.join(_block_html(b) for b in document.blocks)}</article>"
+    # Numbered across the whole book here, per chapter in `chapter_html`.
+    # The two never share a file — the PDF is one document, the EPUB is
+    # one per chapter — so each is unique where uniqueness is required.
+    return f"<article>{head}{_render(document.blocks)}</article>"
 
 
 def chapter_html(title: str, blocks: list[Block], *, opening: str = "") -> str:
     """One chapter as an HTML body fragment. Used by the EPUB path."""
-    rendered = "".join(_block_html(b) for b in blocks)
+    rendered = _render(blocks)
     # A CHAPTER block renders its own <h2>, so adding the title again
     # would print it twice.
     heading = "" if blocks and blocks[0].kind is BlockKind.CHAPTER else f"<h2>{escape(title)}</h2>"

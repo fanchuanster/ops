@@ -104,3 +104,88 @@ def test_page_count_counts_blank_pages_too():
 
 def test_page_count_is_absent_rather_than_wrong():
     assert page_count_of("not json") is None
+
+
+def test_reads_version_1_string_paragraphs():
+    """Books OCR'd before the format grew must still convert.
+
+    Google has been paid for those pages once. Refusing them would mean
+    paying a second time to read text already sitting in storage.
+    """
+    doc = read_ocr_json(
+        content=document([{"number": 1, "paragraphs": ["子曰學而時習之"]}], version=1)
+    )
+
+    assert [b.text for b in doc.blocks] == ["子曰學而時習之"]
+    assert doc.blocks[0].kind is BlockKind.BODY
+
+
+def test_reads_version_2_paragraph_objects():
+    content = json.dumps(
+        {
+            "version": 2,
+            "bookId": "7",
+            "pageCount": 1,
+            "pages": [
+                {
+                    "number": 1,
+                    "paragraphs": [
+                        {"text": "學而第一", "role": "h1"},
+                        {"text": "小節", "role": "h2"},
+                        {"text": "子曰學而時習之", "role": "body"},
+                    ],
+                }
+            ],
+        }
+    )
+    doc = read_ocr_json(content=content)
+
+    assert [b.kind for b in doc.blocks] == [
+        BlockKind.CHAPTER,
+        BlockKind.SECTION,
+        BlockKind.BODY,
+    ]
+
+
+def test_unknown_role_falls_back_to_body():
+    """A newer writer being cautious is not a reason to fail a book."""
+    content = json.dumps(
+        {
+            "version": 2,
+            "bookId": "7",
+            "pageCount": 1,
+            "pages": [{"number": 1, "paragraphs": [{"text": "子曰", "role": "h7"}]}],
+        }
+    )
+    assert read_ocr_json(content=content).blocks[0].kind is BlockKind.BODY
+
+
+def test_version_2_without_roles_is_all_body():
+    """What an OCR run without the paid style feature produces."""
+    content = json.dumps(
+        {
+            "version": 2,
+            "bookId": "7",
+            "pageCount": 1,
+            "pages": [{"number": 1, "paragraphs": [{"text": "學而第一"}, {"text": "子曰"}]}],
+        }
+    )
+    assert all(b.kind is BlockKind.BODY for b in read_ocr_json(content=content).blocks)
+
+
+def test_a_marker_is_still_a_marker_whatever_its_role():
+    """Pattern beats role: the marker test does not need type size."""
+    content = json.dumps(
+        {
+            "version": 2,
+            "bookId": "7",
+            "pageCount": 1,
+            "pages": [{"number": 1, "paragraphs": [{"text": "（十一）", "role": "body"}]}],
+        }
+    )
+    assert read_ocr_json(content=content).blocks[0].kind is BlockKind.MARKER
+
+
+def test_still_refuses_a_version_it_does_not_know():
+    with pytest.raises(UnsupportedOcrDocument):
+        read_ocr_json(content=document([{"number": 1, "paragraphs": ["x"]}], version=99))

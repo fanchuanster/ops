@@ -105,7 +105,8 @@ class Line:
 
 
 class BlockKind(str, Enum):
-    CHAPTER = "chapter"  # 《论语别裁》诗词
+    CHAPTER = "chapter"  # 《论语别裁》诗词 — Word "Heading 1"
+    SECTION = "section"  # a heading below chapter level — Word "Heading 2"
     MARKER = "marker"  # （十一） — the poem's number within a chapter
     VERSE = "verse"  # a poem; line breaks are significant
     ATTRIBUTION = "attribution"  # ——唐·李白《静夜思》

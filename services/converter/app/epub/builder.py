@@ -20,7 +20,7 @@ from pathlib import Path
 from ebooklib import epub
 
 from ..models import Document
-from ..render.html import BOOK_CSS, chapter_html, chapters
+from ..render.html import BOOK_CSS, chapter_html, chapters, sections
 
 
 def build_epub(document: Document, path: Path, *, identifier: str | None = None) -> Path:
@@ -60,9 +60,14 @@ def build_epub(document: Document, path: Path, *, identifier: str | None = None)
         book.add_item(item)
         documents.append(item)
 
+    # Two levels deep where the book has two. A chapter with section
+    # heads gets them as children, so a reader navigating a four-hundred
+    # page classic lands on the passage rather than at the top of the
+    # chapter containing it — which is the whole difference between a
+    # table of contents and a list of files.
     book.toc = tuple(
-        epub.Link(item.file_name, title, f"ch{index}")
-        for index, (item, (title, _)) in enumerate(zip(documents, grouped), start=1)
+        _entry(item, index, title, blocks)
+        for index, (item, (title, blocks)) in enumerate(zip(documents, grouped), start=1)
     )
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
@@ -77,6 +82,22 @@ def build_epub(document: Document, path: Path, *, identifier: str | None = None)
     path.parent.mkdir(parents=True, exist_ok=True)
     epub.write_epub(str(path), book, {})
     return path
+
+
+def _entry(item, index: int, title: str, blocks):
+    """One chapter's table-of-contents entry, with its sections under it.
+
+    A bare Link when the chapter has no section heads, rather than a
+    parent with an empty child list: some readers draw a disclosure
+    arrow for anything that could have children, and an arrow opening
+    onto nothing is a small lie told on every chapter of most books.
+    """
+    link = epub.Link(item.file_name, title, f"ch{index}")
+    children = [
+        epub.Link(f"{item.file_name}#{anchor}", text, f"ch{index}-{anchor}")
+        for anchor, text in sections(blocks)
+    ]
+    return (link, children) if children else link
 
 
 def _escape(value: str) -> str:

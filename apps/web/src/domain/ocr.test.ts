@@ -12,8 +12,15 @@ import { describe, expect, it } from 'vitest'
 import {
   type OcrPage,
   characterCount,
+  type OcrBox,
+  type OcrParagraph,
+  bodyFontSize,
+  classifyParagraphs,
   codePoints,
+  dropRunningHeads,
   looksLikeABook,
+  looksLikeFolio,
+  runningHeadKey,
   offset,
   orderPages,
   pageHasContent,
@@ -21,7 +28,10 @@ import {
   tidyParagraph,
 } from './ocr'
 
-const page = (number: number, ...paragraphs: string[]): OcrPage => ({ number, paragraphs })
+const page = (number: number, ...paragraphs: string[]): OcrPage => ({
+  number,
+  paragraphs: paragraphs.map((text) => ({ text })),
+})
 
 describe('offsets', () => {
   it('reads the strings JSON encodes int64 as', () => {
@@ -158,5 +168,162 @@ describe('counting', () => {
 
   it('knows an empty page has nothing on it', () => {
     expect(pageHasContent(page(1, '', '   '))).toBe(false)
+  })
+})
+
+/*
+ * Running heads, feet and folios.
+ *
+ * The failure that matters here is the false positive. Deleting a
+ * running head that was really a chapter title loses text silently, and
+ * nobody discovers it until they read the book — so every rule below is
+ * built to need evidence, and the tests are mostly about what must
+ * *survive*.
+ */
+
+const at = (text: string, box: OcrBox, extra: Partial<OcrParagraph> = {}): OcrParagraph => ({
+  text,
+  box,
+  ...extra,
+})
+
+const TOP = { x0: 0.1, y0: 0.02, x1: 0.9, y1: 0.05 }
+const BOTTOM = { x0: 0.45, y0: 0.95, x1: 0.55, y1: 0.98 }
+const MIDDLE = { x0: 0.1, y0: 0.3, x1: 0.9, y1: 0.4 }
+
+describe('recognising a folio', () => {
+  it('accepts bare and decorated numbers, in both numeral systems', () => {
+    for (const folio of ['12', '— 12 —', '[12]', '（十二）', '十二']) {
+      expect(looksLikeFolio(folio)).toBe(true)
+    }
+  })
+
+  it('rejects anything with real text in it', () => {
+    for (const text of ['第十二章 學而', '12 論語', '']) {
+      expect(looksLikeFolio(text)).toBe(false)
+    }
+  })
+})
+
+describe('the running-head key', () => {
+  it('treats a head as the same when only its folio changes', () => {
+    expect(runningHeadKey('論語別裁 12')).toBe(runningHeadKey('論語別裁 87'))
+  })
+
+  it('does the same for CJK numerals', () => {
+    // 第三十七頁 and 第三十八頁 are one running head, not two.
+    expect(runningHeadKey('第三十七頁')).toBe(runningHeadKey('第三十八頁'))
+  })
+
+  it('keeps genuinely different heads apart', () => {
+    expect(runningHeadKey('學而第一')).not.toBe(runningHeadKey('為政第二'))
+  })
+})
+
+describe('dropping running heads', () => {
+  const book = (count: number): OcrPage[] =>
+    Array.from({ length: count }, (_, i) => ({
+      number: i + 1,
+      paragraphs: [at('論語別裁', TOP), at(`本文第${i + 1}段`, MIDDLE), at(String(i + 1), BOTTOM)],
+    }))
+
+  it('removes a head that repeats and a folio that never does', () => {
+    const cleaned = dropRunningHeads(book(10))
+    for (const page of cleaned) {
+      expect(page.paragraphs.map((p) => p.text)).toEqual([`本文第${page.number}段`])
+    }
+  })
+
+  it('keeps a one-off title that happens to sit high on the page', () => {
+    // The whole safety argument: a chapter title is in the margin band
+    // on its opening page, but appears once.
+    const pages = book(10)
+    pages[0]!.paragraphs.push(at('學而第一', { x0: 0.2, y0: 0.03, x1: 0.8, y1: 0.06 }))
+
+    const cleaned = dropRunningHeads(pages)
+    expect(cleaned[0]!.paragraphs.map((p) => p.text)).toContain('學而第一')
+  })
+
+  it('never touches body text, however often it repeats', () => {
+    const pages = Array.from({ length: 8 }, (_, i) => ({
+      number: i + 1,
+      paragraphs: [at('子曰', MIDDLE)],
+    }))
+    const cleaned = dropRunningHeads(pages)
+    expect(cleaned.every((page) => page.paragraphs.length === 1)).toBe(true)
+  })
+
+  it('does nothing at all without geometry', () => {
+    // A version 1 handoff, or an engine that reported no boxes. Without
+    // position there is no evidence, so nothing may be removed.
+    const pages = Array.from({ length: 8 }, (_, i) => ({
+      number: i + 1,
+      paragraphs: [{ text: '論語別裁' }, { text: '本文' }],
+    }))
+    expect(dropRunningHeads(pages)).toEqual(pages)
+  })
+
+  it('does not run on a document too short to have evidence', () => {
+    const pages = [{ number: 1, paragraphs: [at('論語別裁', TOP)] }]
+    expect(dropRunningHeads(pages)[0]!.paragraphs).toHaveLength(1)
+  })
+})
+
+describe('classifying headings', () => {
+  const sized = (text: string, fontSize: number, extra: Partial<OcrParagraph> = {}) => ({
+    text,
+    fontSize,
+    ...extra,
+  })
+
+  const pages = (...paragraphs: OcrParagraph[]): OcrPage[] => [{ number: 1, paragraphs }]
+
+  it('takes the body size as the median, not the mean', () => {
+    // One display line at 40pt must not drag the body size up.
+    const size = bodyFontSize(
+      pages(sized('a', 10), sized('b', 10), sized('c', 10), sized('title', 40)),
+    )
+    expect(size).toBe(10)
+  })
+
+  it('promotes clearly larger short text to h1', () => {
+    const [page] = classifyParagraphs(
+      pages(sized('本文一', 10), sized('本文二', 10), sized('學而第一', 16)),
+    )
+    expect(page!.paragraphs.map((p) => p.role)).toEqual(['body', 'body', 'h1'])
+  })
+
+  it('uses h2 for a smaller step up', () => {
+    const [page] = classifyParagraphs(pages(sized('本文', 10), sized('本文', 10), sized('小節', 12)))
+    expect(page!.paragraphs[2]!.role).toBe('h2')
+  })
+
+  it('refuses to promote a long paragraph however it is set', () => {
+    // The failure this prevents: a preface set slightly larger becoming
+    // a chapter title and breaking the book at the wrong place.
+    const long = '子'.repeat(200)
+    const [page] = classifyParagraphs(pages(sized('本文', 10), sized(long, 20)))
+    expect(page!.paragraphs[1]!.role).toBe('body')
+  })
+
+  it('calls everything body when no style information was bought', () => {
+    // Honest rather than degraded: with no type sizes there is no
+    // evidence for a heading, and guessing from length invents chapters.
+    const [page] = classifyParagraphs(pages({ text: '學而第一' }, { text: '子曰' }))
+    expect(page!.paragraphs.every((p) => p.role === 'body')).toBe(true)
+  })
+
+  it('treats a short bold line as a section head', () => {
+    const [page] = classifyParagraphs(
+      pages(sized('本文', 10), sized('本文', 10), sized('小節', 10, { bold: true })),
+    )
+    expect(page!.paragraphs[2]!.role).toBe('h2')
+  })
+
+  it('does not promote a long bold paragraph', () => {
+    const [page] = classifyParagraphs(
+      pages(sized('本文', 10), sized('子'.repeat(50), 10, { bold: true })),
+    )
+    expect(page!.paragraphs[1]!.role).toBe('body')
   })
 })
