@@ -73,6 +73,12 @@ const COLLECTIONS: { title: string; slug: string; description?: string; parent?:
     slug: 'personal-development',
   },
   {
+    title: 'Life-Lifting',
+    slug: 'life-lifting',
+    description:
+      'Books that change how a life is lived — wisdom, character, health and the daily practice of living well.',
+  },
+  {
     title: 'Authors',
     slug: 'authors',
     description: 'Browse by author.',
