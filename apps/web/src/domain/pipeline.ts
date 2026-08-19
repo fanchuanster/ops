@@ -13,16 +13,20 @@
  * damage in the master, or an uploader re-uploads a corrected one
  * (section 6.2), and the book returns to `master_ready` — phase 2 runs
  * again and phase 1 does not. Re-running phase 1 would mean paying
- * Google to re-read pages we have already read, and would throw away
+ * Adobe to re-read pages we have already read, and would throw away
  * the correction that prompted it.
  *
- * Both phases are done by the converter. The web application's share is
- * OCR, which is an HTTP call rather than compute.
+ * Who does which phase depends on the source. A PDF's master is built by
+ * Adobe's Export PDF, which is an HTTP call, so the web application owns
+ * it end to end (`lib/masterPipeline.ts`). A DOCX or text upload needs
+ * no export, and its master is built by the converter — which also owns
+ * phase 2 for every book, because rendering is compute.
  *
  * Framework-independent, like everything in `src/domain`.
  */
 
 import type { ArtifactFormat } from './conversion'
+import { type SourceKind, formatsToGenerate } from './publication'
 
 export const CONVERSION_STATES = [
   'none',
@@ -49,8 +53,10 @@ export function isConversionState(value: unknown): value is ConversionState {
 /**
  * States a converter may claim work from, and what work that is.
  *
- * `ocr_ready` is phase 1's second half: the text exists and the master
- * has to be built from it. `master_ready` is phase 2.
+ * `ocr_ready` is phase 1's remaining half for a source that needed no
+ * export — a DOCX or text upload whose master the converter builds
+ * itself. A PDF never passes through it: Adobe returns the master, so
+ * the book goes straight to `master_ready`, which is phase 2.
  */
 export function claimableAs(state: ConversionState): JobKind | null {
   if (state === 'ocr_ready') return 'master'
@@ -59,70 +65,46 @@ export function claimableAs(state: ConversionState): JobKind | null {
 }
 
 /**
- * What phase 2 builds when a book is first released.
- *
- * EPUB alone. CLAUDE.md section 10 makes it the primary reflowable
- * format, and it is the one every reader needs; the PDF variants are
- * three renderings of the same book that most readers will never open.
- * Building all four on every release spent WeasyPrint's time — by far
- * the slowest stage — on files nobody asked for.
- */
-export const RELEASE_FORMATS: readonly ArtifactFormat[] = ['epub']
-
-/**
- * Formats built only when somebody asks for one.
- *
- * The three PDF sizes. A reader picks the typography they want and that
- * variant is rendered for them; the other two are not.
- */
-export const ON_DEMAND_FORMATS: readonly ArtifactFormat[] = [
-  'pdf_standard',
-  'pdf_large',
-  'pdf_xl',
-]
-
-export function isOnDemandFormat(value: unknown): value is ArtifactFormat {
-  return typeof value === 'string' && ON_DEMAND_FORMATS.includes(value as ArtifactFormat)
-}
-
-/**
  * Which formats a phase 2 run should produce.
  *
- * Three cases, in order:
+ * There is no on-demand set any more, and no release set distinct from
+ * it. Both existed to ration WeasyPrint: three PDF sizes were slow to
+ * render and mostly unopened, so the EPUB was built on release and a PDF
+ * only when a reader asked. With one PDF that mirrors the original —
+ * and, for a PDF upload, *is* the original — there is nothing left to
+ * ration. A book gets everything its source can give it, on the first
+ * run, and `requestFormat` and its button are gone.
  *
- *   - Something was asked for → build exactly that.
- *   - Nothing asked for, nothing built → the release set.
- *   - Nothing asked for, formats already exist → rebuild them all.
- *
- * That last case is the one worth stating plainly: it is a master edit.
- * The book already has an EPUB and perhaps two PDFs, all of them built
- * from text an editor has since corrected. Rebuilding only the release
- * set would leave those PDFs behind, still rendering the errors the
- * edit removed — stale in a way nobody would notice until a reader
- * opened one.
+ * What a book's source can give it is `formatsToGenerate` in
+ * `domain/publication.ts`; this narrows that by what already exists.
+ * The narrowing has one deliberate exception: when the book already has
+ * formats, every one of them is rebuilt. That is a master edit — the
+ * existing EPUB was built from text an editor has since corrected, and
+ * rebuilding only what is missing would leave it behind, still carrying
+ * the errors the edit removed.
  *
  * `docx` is never in the answer. It is the input.
  */
 export function formatsToBuild({
-  pendingFormats,
+  sourceKind,
   existingFormats,
 }: {
-  pendingFormats: readonly unknown[]
+  sourceKind: SourceKind
   existingFormats: readonly unknown[]
 }): ArtifactFormat[] {
-  const pending = pendingFormats.filter(isOnDemandFormat)
-  if (pending.length > 0) return [...new Set(pending)]
-
-  const existing = existingFormats.filter(
-    (format): format is ArtifactFormat =>
-      isOnDemandFormat(format) || RELEASE_FORMATS.includes(format as ArtifactFormat),
+  const possible = formatsToGenerate(sourceKind)
+  const existing = existingFormats.filter((format): format is ArtifactFormat =>
+    possible.includes(format as ArtifactFormat),
   )
-  return [...new Set([...RELEASE_FORMATS, ...existing])]
+  // A rebuild covers what is there; a first run covers what is missing.
+  // The union is both, and is the same thing in either case.
+  return [...new Set([...possible, ...existing])]
 }
 
 export interface ClaimCandidate {
   state: ConversionState
-  pendingFormats: readonly unknown[]
+  /** What was uploaded, which decides what phase 2 can build at all. */
+  sourceKind: SourceKind
   /** Formats the book already has, so a master edit rebuilds them all. */
   existingFormats: readonly unknown[]
 }
@@ -139,7 +121,7 @@ export interface ClaimedWork {
  * `claimableAs` above answers "which phase does this state belong to";
  * this answers "and on what". They are separate because the first is a
  * property of the state alone and stays testable as such, while the
- * second needs the book's artifacts.
+ * second needs the book's source and its artifacts.
  *
  * Nothing here consults review. Phase 2 was held until an administrator
  * approved the book until 2026-08-17, and the gate was backwards:
@@ -155,13 +137,16 @@ export function claimFor(candidate: ClaimCandidate): ClaimedWork | null {
   if (!kind) return null
   if (kind === 'master') return { kind, formats: [] }
 
-  return {
-    kind,
-    formats: formatsToBuild({
-      pendingFormats: candidate.pendingFormats,
-      existingFormats: candidate.existingFormats,
-    }),
-  }
+  const formats = formatsToBuild({
+    sourceKind: candidate.sourceKind,
+    existingFormats: candidate.existingFormats,
+  })
+  // Nothing to build means nothing to claim. An EPUB upload reaches
+  // `master_ready` with its edition already filed, and handing a
+  // converter an empty job list would have it report success on work it
+  // never did.
+  if (formats.length === 0) return null
+  return { kind, formats }
 }
 
 /**
@@ -262,22 +247,20 @@ export function isInFlight(state: ConversionState): boolean {
 }
 
 /**
- * Whether OCR has to run before phase 1's master can be built.
+ * Whether phase 1's export still has to be started for this book.
  *
- * Kept beside the states rather than in `ocr.ts` because it is a
- * question about *this book's* progress, not about OCR: a book that has
- * already been read has an `ocrKey`, and asking Google to read it again
- * would be paying twice for the same pages.
+ * Kept beside the states rather than in `adobe.ts` because it is a
+ * question about *this book's* progress, not about the export engine: a
+ * book that already has a job running has an `exportJob`, and submitting
+ * it again would be paying twice for the same pages.
  */
-export function needsOcrRun({
+export function needsMasterRun({
   state,
-  ocrKey,
-  ocrOperation,
+  exportJob,
 }: {
   state: ConversionState
-  ocrKey?: string | null
-  ocrOperation?: string | null
+  exportJob?: string | null
 }): boolean {
   if (state !== 'queued') return false
-  return !ocrKey && !ocrOperation
+  return !exportJob
 }

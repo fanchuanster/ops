@@ -16,8 +16,8 @@
 
 FROM python:3.12-slim-bookworm
 
-# WeasyPrint renders the PDF variants and links against these at
-# runtime. It needs no browser and no display, which is what keeps this
+# WeasyPrint renders the PDF for sources with no layout of their own and
+# links against these at runtime. It needs no browser and no display, which is what keeps this
 # image small enough to run anywhere — but Pango and Cairo are not
 # optional, and their absence shows up as an import error rather than as
 # a missing-font warning.
@@ -35,6 +35,21 @@ RUN apt-get update \
 # Noto CJK above is not decoration. This project's centre of gravity is
 # Chinese, and a PDF rendered without a CJK face silently produces a
 # document of empty boxes — valid, openable, and unreadable.
+
+# LibreOffice, for the one job WeasyPrint cannot do: rendering a DOCX
+# with the DOCX's own layout. A book's PDF has to mirror its original,
+# and when the original is a Word document that means laying it out the
+# way a word processor would — see app/pdf/docx_pdf.py.
+#
+# `libreoffice-writer` rather than the full suite: this converts text
+# documents and nothing else, and the meta-package would pull in Calc,
+# Impress, Draw and a Java runtime for no reason. `--no-install-recommends`
+# is doing real work here.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        libreoffice-writer \
+        libreoffice-core \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

@@ -141,7 +141,7 @@ pip install python-docx ebooklib weasyprint pillow
 python3 tools/generate-seed-content.py
 ```
 
-Writes DOCX, EPUB and three PDF sizes into `content/seed/`. This stands in for
+Writes DOCX, EPUB and one PDF into `content/seed/`. This stands in for
 the OCR/AI conversion pipeline, which reaches a proofread DOCX master but does
 not yet generate EPUB or PDF — see `services/converter/README.md`. The seed
 content is generated rather than committed so it is reproducible instead of a
@@ -216,9 +216,9 @@ sent to the reader's device. It is never handed over as a file to collect. That
 is a product decision, not a technical limit: NobleSee exists to make books
 pleasant to *read*, and a folder of PDFs is not that.
 
-**Delivery limits count books, not files.** A reader who sends EPUB and all
-three PDF variants of one book to their Kindle has consumed one slot, because
-they read one book. Reading in the browser is never limited at all — the policy
+**Delivery limits count books, not files.** A reader who sends both the EPUB
+and the PDF of one book to their Kindle has consumed one slot, because they
+read one book. Reading in the browser is never limited at all — the policy
 paces bulk delivery, and charging someone for opening a book would penalise
 exactly the behaviour the site is for. This is an application-level fairness
 policy, not a bandwidth control.

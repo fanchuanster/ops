@@ -12,6 +12,7 @@ import {
 import { hasMaster, isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
 import { isUploaderSelectableRights } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
+import { needsConverter, readSourceKind, resolvePlan } from '../../../domain/publication'
 import { getCurrentUser } from '../../../lib/auth'
 import { objectBucket } from '../../../lib/storage'
 import { checkQuotaFor } from '../../../lib/uploadQuota'
@@ -88,7 +89,15 @@ export async function saveBookDetails(
   // reader correcting the details of a converted book is not asking for
   // it to be converted again.
   const alreadyConverting = book.conversion?.state !== 'draft'
-  if (!alreadyConverting) {
+
+  const sourceKind = readSourceKind(book.conversion ?? {})
+  const plan = resolvePlan(sourceKind, formData.get('plan'))
+
+  // The quota counts conversions, so a book that will not be converted
+  // does not consume one. Publishing a PDF as it stands, or filing an
+  // uploaded EPUB, costs no pages read and no rendering — charging for
+  // it would be charging for a decision to *not* use the pipeline.
+  if (!alreadyConverting && needsConverter(sourceKind, plan)) {
     const quota = await checkQuotaFor(payload, {
       userId: user.id,
       pagesRequested: book.estimatedPages ?? 0,
@@ -124,6 +133,10 @@ export async function saveBookDetails(
         conversion: {
           ...book.conversion,
           state: alreadyConverting ? book.conversion?.state : 'queued',
+          // What the uploader chose, narrowed to what this source can
+          // actually do. A form value is untrusted input: asking for
+          // `as_is` on a DOCX would publish a Word file as a book.
+          plan,
           // Stamped once, when the book first enters the pipeline. This
           // is what the monthly count is scoped by.
           startedAt: book.conversion?.startedAt ?? new Date().toISOString(),

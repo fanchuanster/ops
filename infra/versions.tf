@@ -6,24 +6,6 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.0"
     }
-
-    # OCR runs on Document AI, which is the one part of this system that
-    # is not on Cloudflare. See documentai.tf for why.
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 6.0"
-    }
-
-    # For exactly one resource: google_project_service_identity, which
-    # creates the Document AI service agent. Batch OCR writes its output
-    # as that agent rather than as the caller, so the agent needs access
-    # to the bucket — and granting IAM to an agent that has not been
-    # created yet is how a first `apply` fails. The GA provider has no
-    # equivalent resource.
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 6.0"
-    }
   }
 
   # State lives in R2 — see backend.tf.
@@ -35,6 +17,8 @@ terraform {
   # was nothing to bootstrap. What remains is the destroy hazard
   # documented in backend.tf.
   #
-  # State still holds secret material — the Document AI service account
-  # key among it — so it stays out of git regardless of where it lives.
+  # State has held secret material — the Document AI service account key
+  # among it, until those resources were destroyed on 2026-08-19 — so it
+  # stays out of git regardless of where it lives. Old state versions in
+  # R2 still contain that key; it is revoked, not redacted.
 }

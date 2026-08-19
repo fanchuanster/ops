@@ -151,7 +151,7 @@ describe('kindle delivery', () => {
 
   it('never offers the DOCX master to a Kindle', () => {
     expect(isKindleDeliverableFormat('epub')).toBe(true)
-    expect(isKindleDeliverableFormat('pdf_xl')).toBe(true)
+    expect(isKindleDeliverableFormat('pdf')).toBe(true)
     expect(isKindleDeliverableFormat('docx')).toBe(false)
   })
 

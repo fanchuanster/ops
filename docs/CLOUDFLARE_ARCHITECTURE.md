@@ -21,9 +21,9 @@ assembly and PDF rendering are exactly that.
 | Download authorization + streaming        | I/O            | Worker    |
 | Streaming an EPUB to the reader          | I/O            | Worker    |
 | Payload admin / editorial                | render         | Worker    |
-| **OCR of scanned pages**                 | heavy CPU, GPU | Container |
+| **OCR + DOCX master, scanned PDF**       | external HTTP  | Worker    |
 | **LLM-assisted OCR correction**          | long, external | Container |
-| **DOCX generation**                      | heavy CPU      | Container |
+| **DOCX master, text sources**            | heavy CPU      | Container |
 | **PDF rendering (3 sizes)**              | heavy CPU      | Container |
 | **EPUB 3 generation + validation**       | heavy CPU      | Container |
 | **Send-to-Kindle delivery**              | SMTP, retries  | Container |
@@ -32,6 +32,15 @@ Nothing in the top half is new work to move — the reading path was already
 built as bounded request handling. Nothing in the bottom half is a regression —
 `services/converter` was always specified as a standalone service that talks to
 the application over HTTP and knows nothing about the frontend.
+
+The one row that changed sides did so by changing shape, which is the test
+this table applies. Reading a scan and building its master was heavy CPU while
+we did it ourselves; on Adobe PDF Services it is one HTTP request and a poll,
+so it is I/O and belongs on the Worker (`apps/web/src/lib/masterPipeline.ts`).
+It moved once before for the same reason, to Google Document AI on 2026-08-14,
+and that only carried the OCR half — Adobe returns the master too, which is
+why the DOCX row now qualifies "text sources": a DOCX or plain text upload
+still has its master built by the converter, because that is still compute.
 
 ## What this actually changes
 

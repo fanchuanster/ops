@@ -252,10 +252,18 @@ inside this one.
 
 ## Formats
 
-EPUB 3 (`app/epub`) and three PDF sizes (`app/pdf`) are generated from
-the same HTML rendering in `app/render`, so the two cannot drift — a
-footnote that appears in one and vanishes in the other is the classic
+EPUB 3 (`app/epub`) and the PDF (`app/pdf/builder.py`) are generated
+from the same HTML rendering in `app/render`, so the two cannot drift —
+a footnote that appears in one and vanishes in the other is the classic
 failure and it is invisible until a reader hits that page.
+
+There were three PDF sizes here until 2026-08-20. One now, and its job
+changed with its number: it mirrors the *original's* layout rather than
+offering a typography. Which means `builder.py` is not always the
+renderer. A DOCX upload is its own original, so its PDF comes from
+headless LibreOffice (`app/pdf/docx_pdf.py`) to keep the Word layout;
+`builder.py` handles the sources that have no layout to keep. A book
+uploaded as a PDF never renders one at all — the upload is the PDF.
 
 The EPUB deliberately sets no page size, no font size and no measure:
 the device decides, which is the whole reason EPUB is the primary format
@@ -302,43 +310,52 @@ says which one it is:
 
 | `kind` | reads | writes |
 | --- | --- | --- |
-| `master` | `ocr_key`, or `source_key` when the upload was already text | the DOCX master |
-| `formats` | `master_key` | EPUB and the PDF variants |
+| `master` | `source_key` — always a text source since 2026-08-19 | the DOCX master |
+| `formats` | `master_key` | the EPUB, and the PDF when the source needs one |
 | `full` | `source_key` | everything, in one pass |
 
 `full` is what the CLI and the job API do; the handoff never asks for it.
 The split exists so that a corrected master is cheap to act on: an
 editor fixes what the OCR misread, and only `formats` runs again.
-Re-running `master` would pay Google a second time to read pages already
+Re-running `master` would pay Adobe a second time to read pages already
 read, and would discard the correction that prompted it.
 
-**OCR no longer happens here for books that come through the portal.**
-The web application calls Google Document AI and writes the result to
-R2 as JSON — `ocr_key`, read by `app/sources/ocr_json.py`, format
-version pinned and refused if it does not match. OCR became an HTTP
-request when it stopped being a local model, and a Worker is billed
-almost nothing to wait on one. The local OCR path
-(`app/ocr`, `pipeline/structure.py`) is untouched and still runs for the
-CLI.
+**Neither OCR nor the master of a scan happens here any more.** A scanned
+PDF that comes through the portal is sent by the web application to
+Adobe PDF Services, whose Export PDF operation OCRs it and returns a
+DOCX in one call; the web side stores that as the master and the book
+arrives here already at `formats`. Both stopped being local computation
+and became an HTTP request, and a Worker is billed almost nothing to
+wait on one.
 
-Structure crosses the boundary, but only what the web side can support
-with evidence. Format **version 2** carries each paragraph's role —
-`h1`, `h2` or `body` — decided there from the type size and position
-Document AI reports, and `ocr_json.py` maps those to `CHAPTER`,
-`SECTION` and `BODY`. Version 1 wrote bare strings and is still read:
-those pages have been paid for once, and refusing them would mean paying
-Google again to read text already sitting in R2.
+What still reaches a `master` job is a DOCX or a plain text upload —
+sources that needed no OCR, and whose master this service builds from
+the original. The local OCR path (`app/ocr`, `pipeline/structure.py`) is
+untouched and still runs for the CLI.
 
-What it still costs: verse, attributions and footnotes. Those are
-recognised by `structure.py` from *where a line sits on the page* at a
-resolution the handoff does not carry, so a book that came through the
-portal gets no verse detection and `ocr_json.py` does not guess. They
-are left for a human to mark up in the master. A missing distinction is
-cheap to fix there; a fabricated one is not — and a role that arrives
-unrecognised falls back to body for the same reason.
+`ocr_key` and `app/sources/ocr_json.py` are the older door: a pages.json
+written by Google Document AI, which drove phase 1 between 2026-08-14
+and 2026-08-19. Nothing writes one now. The reader is kept, version
+check and all, because the documents already in R2 were paid for once
+and the CLI can still be pointed at one.
+
+Heading structure crosses the boundary as Word's own `Heading 1` and
+`Heading 2` styles, which `app/sources/docx_in.py` maps to `CHAPTER` and
+`SECTION`. That mapping is not new work for Adobe — it existed so that
+an *approved* master could be read back — which is why an engine that
+speaks Word's heading styles needed no reader written for it.
+
+What it still costs: verse, attributions and footnotes. `structure.py`
+recognises those from *where a line sits on the page*, at a resolution
+no DOCX carries — Adobe's included, since a Word paragraph has a style
+and not a position on a scan. So a book that came through the portal
+gets no verse detection, and nothing guesses at one. They are left for a
+human to mark up in the master. A missing distinction is cheap to fix
+there; a fabricated one is not — which is the same reason an
+unrecognised style falls back to body rather than to something plausible.
 
 Still open: where this service runs. Nothing is deployed, so nothing
 polls, and a book uploaded through the portal waits at `queued` — its
-OCR included, since the poll is also what drives that.
+export to Adobe included, since the poll is also what drives that.
 `tools/generate-seed-content.py` remains the way the seed library's
 files are produced.

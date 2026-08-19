@@ -14,12 +14,12 @@ describe('accepting reported artifacts', () => {
   const good = {
     docx: 'books/42/book/master.docx',
     epub: 'books/42/book/book.epub',
-    pdf_standard: 'books/42/book/standard.pdf',
+    pdf: 'books/42/book/original.pdf',
   }
 
   it('accepts the known formats under the book’s own prefix', () => {
     const accepted = acceptArtifacts({ bookId: 42, artifacts: good })
-    expect(accepted.map((a) => a.format).sort()).toEqual(['docx', 'epub', 'pdf_standard'])
+    expect(accepted.map((a) => a.format).sort()).toEqual(['docx', 'epub', 'pdf'])
     expect(accepted.every((a) => a.storageKey.startsWith(artifactPrefix(42)))).toBe(true)
   })
 
@@ -60,13 +60,13 @@ describe('accepting reported artifacts', () => {
   })
 
   it('keeps the good entries when one is bad', () => {
-    // Losing four good formats over one malformed key would mean
-    // re-running hours of OCR to recover them.
+    // Losing the good formats over one malformed key would mean
+    // re-running an export to recover them.
     const accepted = acceptArtifacts({
       bookId: 42,
-      artifacts: { ...good, pdf_large: 'books/99/book/large.pdf' },
+      artifacts: { ...good, pdf: 'books/99/book/original.pdf' },
     })
-    expect(accepted).toHaveLength(3)
+    expect(accepted.map((a) => a.format).sort()).toEqual(['docx', 'epub'])
   })
 
   it('survives junk', () => {

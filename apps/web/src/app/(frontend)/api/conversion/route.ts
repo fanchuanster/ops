@@ -33,9 +33,9 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
 import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
-import { OCR_FORMAT_VERSION } from '../../../../domain/ocr'
 import { claimFor, completedState, inProgressState } from '../../../../domain/pipeline'
-import { advanceOcrPipeline } from '../../../../lib/ocrPipeline'
+import { readSourceKind } from '../../../../domain/publication'
+import { advanceMasterPipeline } from '../../../../lib/masterPipeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,12 +106,12 @@ export async function GET(request: Request) {
 
   const payload = await getPayload({ config })
 
-  // The converter's poll is the pipeline's clock. Nothing schedules OCR
-  // — no cron, no queue consumer — so this is where a queued book gets
-  // submitted to Document AI and a finished operation gets collected.
-  // Bounded to one step, and it never throws: failing to advance OCR
+  // The converter's poll is the pipeline's clock. Nothing schedules
+  // phase 1 — no cron, no queue consumer — so this is where a queued
+  // book gets submitted to Adobe and a finished export gets collected.
+  // Bounded to one step, and it never throws: failing to advance phase 1
   // must not stop a converter being handed work it could already do.
-  await advanceOcrPipeline(payload)
+  await advanceMasterPipeline(payload)
 
   for (const state of CLAIMABLE) {
     // More than one, so a lost claim race falls through to the next book
@@ -131,9 +131,7 @@ export async function GET(request: Request) {
       // What this book needs built, decided in the domain layer.
       const work = claimFor({
         state,
-        pendingFormats: Array.isArray(conversion.pendingFormats)
-          ? (conversion.pendingFormats as unknown[])
-          : [],
+        sourceKind: readSourceKind(conversion),
         existingFormats: (book.artifacts ?? []).map((artifact) => artifact.format),
       })
       if (!work) continue
@@ -162,19 +160,18 @@ export async function GET(request: Request) {
           job_id: book.conversion?.jobId ?? String(book.id),
           book_id: String(book.id),
           // What the converter is being asked to do. Phase 1 builds the
-          // DOCX master from OCR text; phase 2 builds reader formats from
-          // that master. See domain/pipeline.ts.
+          // DOCX master from the uploaded original; phase 2 builds reader
+          // formats from that master. See domain/pipeline.ts.
           kind,
           // Which formats phase 2 should produce. Empty for phase 1.
           // Sent explicitly rather than left to the converter's
           // judgement: what a book needs depends on what it already has
           // and what a reader asked for, and only this side knows both.
           formats,
-          ocr_format_version: OCR_FORMAT_VERSION,
-          // Phase 1 reads one of these two. `ocr_key` is the OCR text;
-          // it is absent for a DOCX or plain-text upload, which needed no
-          // OCR and whose original is the text.
-          ocr_key: book.conversion?.ocrKey ?? null,
+          // Phase 1 reads the uploaded original. Only sources that needed
+          // no export reach a `master` job at all — a DOCX or a text file
+          // — because a PDF's master comes back from Adobe already built
+          // (`lib/masterPipeline.ts`).
           source_key: book.conversion?.sourceKey,
           // Phase 2 reads the master, which phase 1 attached.
           master_key:
@@ -296,7 +293,6 @@ export async function POST(request: Request) {
         // only: a phase 1 completion has not touched the formats, and
         // clearing here would silently drop a request made while the
         // master was being rebuilt.
-        ...(kind === 'formats' ? { pendingFormats: [] } : {}),
       },
       // Only once a reader can actually read it. A DOCX master is not a
       // readable edition, so phase 1 finishing does not publish

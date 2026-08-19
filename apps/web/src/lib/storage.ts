@@ -49,6 +49,34 @@ async function artifactBucket(): Promise<R2Bucket | null> {
 }
 
 /**
+ * Copy an object within the bucket, streaming.
+ *
+ * Streamed rather than read-then-write because the thing being copied is
+ * an uploaded book — up to 64 MB — and a Worker has 128 MB of memory for
+ * everything. Holding the whole file as a `Uint8Array` to hand it
+ * straight back to `put` is the one avoidable way that budget gets
+ * spent.
+ *
+ * Returns the size copied, or null if the source was not there.
+ */
+export async function copyObject(
+  from: string,
+  to: string,
+  contentType?: string,
+): Promise<number | null> {
+  const bucket = await objectBucket()
+  if (!bucket) return null
+
+  const object = await bucket.get(from)
+  if (!object) return null
+
+  await bucket.put(to, object.body, {
+    httpMetadata: { contentType: contentType ?? object.httpMetadata?.contentType },
+  })
+  return object.size
+}
+
+/**
  * Remove objects, best effort.
  *
  * Used when a reader deletes their own upload. Failures are swallowed:

@@ -177,7 +177,7 @@ def test_formats_absent_means_build_everything():
 def test_formats_list_is_taken_as_given():
     from app.handoff.poller import _formats
 
-    assert _formats(["epub", "pdf_large"]) == ["epub", "pdf_large"]
+    assert _formats(["epub", "pdf"]) == ["epub", "pdf"]
     # An empty list is a real instruction, not a missing one.
     assert _formats([]) == []
 

@@ -6,6 +6,7 @@ import { getPayload } from 'payload'
 
 import { LEVEL_IDS } from '../../../domain/levels'
 import { getCurrentUser } from '../../../lib/auth'
+import { defaultPlanFor, sourceKindOf } from '../../../domain/publication'
 import { extractMetadata } from '../../../lib/extractMetadata'
 import { objectBucket } from '../../../lib/storage'
 
@@ -30,10 +31,20 @@ import { objectBucket } from '../../../lib/storage'
 
 export type UploadState = { error?: string }
 
-/** What the pipeline can actually start from. */
+/**
+ * What the pipeline can actually start from.
+ *
+ * EPUB joined this list on 2026-08-20 and needs no conversion at all —
+ * it is already the reading edition, so the book is finished the moment
+ * the file is filed under it (`domain/publication.ts`).
+ *
+ * Classification itself lives in the domain layer; this map exists only
+ * to reject a file before it is stored and to name it on the way in.
+ */
 const ACCEPTED = new Map<string, string>([
   ['application/pdf', 'pdf'],
   ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx'],
+  ['application/epub+zip', 'epub'],
   ['text/plain', 'txt'],
   ['text/markdown', 'md'],
 ])
@@ -51,9 +62,12 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
     return { error: `That file is larger than ${Math.round(MAX_BYTES / 1024 / 1024)} MB.` }
   }
 
-  const extension = ACCEPTED.get(file.type)
-  if (!extension) {
-    return { error: 'Upload a PDF, a DOCX, or a plain text file.' }
+  // The declared type first, then the filename — several browsers send
+  // `application/octet-stream` for an EPUB, which says nothing.
+  const kind = sourceKindOf(file.name, file.type)
+  const extension = ACCEPTED.get(file.type) ?? (kind === 'epub' ? 'epub' : undefined)
+  if (!extension || !kind) {
+    return { error: 'Upload a PDF, a DOCX, an EPUB, or a plain text file.' }
   }
 
   // Read before storing, so a file we cannot parse never becomes a book
@@ -109,6 +123,13 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
           state: 'draft',
           sourceKey,
           sourceFilename: file.name,
+          // Recorded now, from the file that is actually in front of us.
+          // Everything downstream branches on it — which formats can be
+          // built, whether Adobe is called, whether a converter is
+          // needed at all — and re-deriving it from a filename later is
+          // one more chance to get it wrong.
+          sourceKind: kind,
+          plan: defaultPlanFor(kind),
           jobId,
         },
       },

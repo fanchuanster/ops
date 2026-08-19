@@ -27,3 +27,22 @@ PAYLOAD_SECRET=
 # added via `email_dns_records` in infra/terraform.tfvars — Amazon drops
 # a personal document whose sender fails SPF or DKIM, silently.
 RESEND_API_KEY=
+
+# Adobe PDF Services. Optional: with these unset, phase 1's export
+# stages do not run and a queued scan simply waits — the same fail-closed
+# shape the converter handoff uses, so the Worker can be deployed before
+# the credentials exist.
+#
+# Both come from a project in the Adobe Developer Console
+# (developer.adobe.com), under "PDF Services API". These are NOT the same
+# thing as an Acrobat Pro subscription, which grants the desktop and web
+# applications and no API credentials at all.
+#
+# Billing is per document transaction — one per 50 pages of a PDF → DOCX
+# export, so a 400-page book costs 8. The free tier is 500 a month.
+# ADOBE_API_KEY is accepted as an alias for ADOBE_CLIENT_ID, because that
+# is what the Developer Console calls the value. The secret has no alias
+# and is not optional: a token is issued from the pair, so the key on its
+# own authenticates nothing.
+ADOBE_CLIENT_ID=
+ADOBE_CLIENT_SECRET=

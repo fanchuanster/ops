@@ -51,22 +51,22 @@
   "vars": {
     // Payload scopes CSRF and CORS to this origin and builds absolute
     // URLs from it, so it must be the real public name, not a guess.
-    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com",
+    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com"
 
-    // Document AI, from `terraform output`. None of these is a secret:
-    // the processor name and bucket are identifiers, and reaching either
-    // needs GOOGLE_SERVICE_ACCOUNT_KEY, which is.
+    // Adobe PDF Services needs no vars, only two secrets:
     //
-    // The processor is a full resource name because it already carries
-    // the project and the location — splitting it into three vars would
-    // create three ways for them to disagree.
-    "DOCUMENT_AI_PROCESSOR": "projects/gen-lang-client-0021728111/locations/asia-southeast1/processors/1fdee9b756a6e620",
-
-    // Duplicated out of the resource name on purpose: it selects the API
-    // *endpoint* (asia-southeast1-documentai.googleapis.com), which is a
-    // different use than naming the processor.
-    "DOCUMENT_AI_LOCATION": "asia-southeast1",
-
-    "DOCUMENT_AI_BUCKET": "noblesee-conversion-0021728111"
+    //   wrangler secret put ADOBE_CLIENT_ID
+    //   wrangler secret put ADOBE_CLIENT_SECRET
+    //
+    // Both come from a project in the Adobe Developer Console. Neither
+    // is derivable from Terraform, because Adobe is not provisioned as
+    // infrastructure — which is also why nothing here replaces the
+    // Document AI processor, location and bucket vars this block used to
+    // hold. Phase 1 is one HTTP call now; it needs no scratch bucket and
+    // no regional endpoint.
+    //
+    // With the secrets unset the export stages simply do not run
+    // (`lib/masterPipeline.ts`), so the Worker deploys fine ahead of
+    // them.
   }
 }

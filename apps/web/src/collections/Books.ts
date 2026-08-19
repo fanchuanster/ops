@@ -279,11 +279,9 @@ export const Books: CollectionConfig = {
           type: 'select',
           required: true,
           options: [
-            { label: 'DOCX (editable master)', value: 'docx' },
+            { label: 'DOCX (editable master, owner only)', value: 'docx' },
             { label: 'EPUB 3', value: 'epub' },
-            { label: 'PDF — Standard', value: 'pdf_standard' },
-            { label: 'PDF — Large', value: 'pdf_large' },
-            { label: 'PDF — Extra Large', value: 'pdf_xl' },
+            { label: 'PDF (the original’s layout)', value: 'pdf' },
           ],
         },
         { name: 'storageKey', type: 'text', required: true },
@@ -318,13 +316,14 @@ export const Books: CollectionConfig = {
 
             // Phase 1 — original to DOCX master.
             //
-            // Split at the OCR boundary: this application runs OCR (an
-            // HTTP call to Document AI, which a Worker is billed almost
-            // nothing to wait on), the converter builds the master from
-            // the text.
+            // A PDF is read and mastered by Adobe's Export PDF, which
+            // is an HTTP call a Worker is billed almost nothing to wait
+            // on, and lands on 'master_ready' directly. A DOCX or text
+            // upload needs no export and goes to 'ocr_ready', where the
+            // converter builds the master itself.
             { label: '1. Queued for mastering', value: 'queued' },
             { label: '1. Reading the pages (OCR)', value: 'ocr' },
-            { label: '1. Text ready, awaiting the converter', value: 'ocr_ready' },
+            { label: '1. Source ready, awaiting the converter', value: 'ocr_ready' },
             { label: '1. Building the DOCX master', value: 'mastering' },
 
             // The hinge. Phase 1 is done and the master exists; phase 2
@@ -350,16 +349,36 @@ export const Books: CollectionConfig = {
           admin: {
             readOnly: true,
             description:
-              'SHA-256 of the uploaded original. A byte-identical file that has already been read by OCR is reused rather than sent to Google a second time.',
+              'SHA-256 of the uploaded original. A byte-identical file that has already been converted has its DOCX master copied rather than being sent to Adobe a second time.',
           },
         },
         {
-          name: 'pendingFormats',
-          type: 'json',
+          name: 'plan',
+          type: 'select',
+          defaultValue: 'convert',
+          options: [
+            { label: 'Convert to an e-reader edition', value: 'convert' },
+            { label: 'Publish the original as it stands', value: 'as_is' },
+          ],
           admin: {
             readOnly: true,
             description:
-              'Formats a reader has asked for that have not been built yet. Empty means the next phase 2 run builds the release set (EPUB) — or, if the book already has formats, rebuilds all of them after a master edit.',
+              'What the uploader chose. Only a PDF gets the choice — a DOCX is already a master, an EPUB is already an edition, and neither has anything to decide. Set on the details form; see domain/publication.ts.',
+          },
+        },
+        {
+          name: 'sourceKind',
+          type: 'select',
+          options: [
+            { label: 'PDF', value: 'pdf' },
+            { label: 'DOCX', value: 'docx' },
+            { label: 'EPUB', value: 'epub' },
+            { label: 'Plain text', value: 'text' },
+          ],
+          admin: {
+            readOnly: true,
+            description:
+              'What was uploaded. Decides which formats phase 2 can build at all — a PDF source already has its PDF, so only the EPUB is generated.',
           },
         },
         {
@@ -380,29 +399,30 @@ export const Books: CollectionConfig = {
         },
         { name: 'jobId', type: 'text', admin: { readOnly: true } },
         {
-          name: 'ocrOperation',
+          name: 'exportJob',
           type: 'text',
           admin: {
             readOnly: true,
             description:
-              'The Document AI long-running operation. Batch OCR answers into a bucket minutes later, so this is what a later request polls — without it a restart loses a job we have already paid for.',
+              'The Adobe Export PDF job. It answers minutes later, so this is what a later request polls \u2014 without it a restart loses a job we have already paid for.',
           },
         },
         {
-          name: 'ocrOutputPrefix',
-          type: 'text',
-          admin: {
-            readOnly: true,
-            description: 'Where in the scratch bucket that operation writes its output.',
-          },
-        },
-        {
-          name: 'ocrKey',
+          name: 'exportAsset',
           type: 'text',
           admin: {
             readOnly: true,
             description:
-              'The OCR text in R2, which is what the converter reads. Empty for a DOCX or text upload, which needs no OCR — the converter reads the original instead.',
+              'The uploaded file on Adobe\u2019s side, deleted once its master is safely in R2.',
+          },
+        },
+        {
+          name: 'exportStartedAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description:
+              'When the export was submitted. Adobe expires assets after a day, so a job still running long past this can never be collected and the book is failed instead of polled forever.',
           },
         },
         {

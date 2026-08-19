@@ -16,14 +16,17 @@
  * Framework-independent, like everything in `src/domain`.
  */
 
-/** The formats a book may have. Anything else is not ours to serve. */
-export const ARTIFACT_FORMATS = [
-  'docx',
-  'epub',
-  'pdf_standard',
-  'pdf_large',
-  'pdf_xl',
-] as const
+/**
+ * The formats a book may have. Anything else is not ours to serve.
+ *
+ * One PDF, not three. `pdf_standard`, `pdf_large` and `pdf_xl` were the
+ * same book rendered at three type sizes so a reader could choose their
+ * typography — which is a job the EPUB does properly, by letting the
+ * device decide. What replaced them is a single PDF that mirrors the
+ * original's own layout, and for a PDF upload that *is* the uploaded
+ * file (`domain/publication.ts`).
+ */
+export const ARTIFACT_FORMATS = ['docx', 'epub', 'pdf'] as const
 
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number]
 

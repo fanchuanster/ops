@@ -345,30 +345,74 @@ code.
 Kubernetes / AWS EKS remains a possible future target. Do not
 prematurely introduce Kubernetes-specific complexity into the MVP.
 
-OCR runs on **Google Document AI**, over its REST API, provisioned by
-`infra/documentai.tf`. PaddleOCR was the engine until 2026-08-14 and the
-implementation behind `app/ocr/base.py` remains; what changed is where
-the compute happens. OCR cannot run on a Worker — 128 MB of memory and
-five minutes of CPU against a model needing more of both — and calling a
-hosted service turns that compute into an HTTP request, which a Worker is
-billed almost nothing for. Batch processing, not online: online caps a
-request at 15 pages, batch takes 500.
+A scanned PDF becomes a DOCX master through **Adobe PDF Services**,
+over its REST API — the Export PDF operation, with an `ocrLang` of
+`zh-Hant`, `zh-CN` or `en-US`. This was Google Document AI until
+2026-08-19 and PaddleOCR until 2026-08-14; `infra/documentai.tf` still
+provisions the Google resources and carries a banner saying nothing
+calls them.
 
-Because of that, **the pipeline is split at the OCR boundary**. The web
-application calls Document AI and writes the resulting text to R2; the
-converter reads that text and does the rendering. This is the one place
-the rule above ("do not turn the web application into the conversion
-pipeline") is deliberately bent, and only because OCR stopped being
-computation and became a fetch. Everything that is still computation is
-still the converter's.
+The reason for each move is the same one and it is not OCR quality. OCR
+cannot run on a Worker — 128 MB of memory and five minutes of CPU
+against a model needing more of both — so calling a hosted service turns
+that compute into an HTTP request, which a Worker is billed almost
+nothing for. Document AI did that for the *reading*. Adobe does it for
+the reading **and the mastering**, in one call, which is the whole of
+phase 1 rather than the first half of it.
 
-Nothing schedules the OCR stages. The converter already polls
+That collapse is what the change bought, and it deleted more than it
+added:
+
+- **No OCR handoff document.** Document AI returned one string for a
+  whole document plus byte ranges into it, sharded across files, with
+  int64 offsets encoded as strings and indexed in code points. Slicing
+  that back into pages was `domain/ocr.ts`, and it is gone.
+- **No running-head removal.** Adobe puts running heads and folios in
+  Word's header and footer parts, which the converter's `docx.paragraphs`
+  walk does not read. They are excluded by *where they are* rather than
+  by inferring position from normalized vertices across the book.
+- **No heading classification, and no paying for style information.**
+  Adobe returns `Heading 1` / `Heading 2`, which `sources/docx_in.py`
+  already maps — because a corrected master had to be readable back
+  anyway. Document AI only offered type sizes to reason from, and only
+  as a premium per-page extra.
+
+What it costs is worth stating plainly. Adobe's structure detection is
+now unauditable in a way ours was not: when it decides wrongly, there is
+no ratio to tune, only a master to correct. Section 5 already says the
+master is the source of truth and open to correction, so that is the
+intended repair — but it is a human's time rather than a threshold.
+
+Limits that constrain the material: **100 MB per file**, which a
+400-page 300dpi scan can exceed, and which is refused before upload with
+something an uploader can act on; and one document transaction per 50
+pages, so a 400-page book costs 8.
+
+Because of all that, **the pipeline is split at the master**, not at
+OCR. The web application produces the DOCX master for a PDF and the
+converter renders everything downstream of it. This is the one place the
+rule above ("do not turn the web application into the conversion
+pipeline") is deliberately bent, and only because mastering a scan
+stopped being computation and became a fetch. Everything that is still
+computation is still the converter's — including phase 1 for a DOCX or
+plain text upload, which needs no export and reaches the converter as
+itself.
+
+Nothing schedules the export stages. The converter already polls
 `GET /api/conversion` for work, and that poll is used as the clock —
-each one advances at most one book through OCR before answering
-(`apps/web/src/lib/ocrPipeline.ts`). No cron, no queue consumer, and
-nothing fires when no converter is running. The cost is that OCR does
+each one advances at most one book before answering
+(`apps/web/src/lib/masterPipeline.ts`). No cron, no queue consumer, and
+nothing fires when no converter is running. The cost is that a scan does
 not progress while nothing is polling, which is harmless: nothing
 downstream could act on it if it did.
+
+Credentials are `ADOBE_CLIENT_ID` and `ADOBE_CLIENT_SECRET`, from a
+project in the Adobe Developer Console. **An Acrobat Pro subscription is
+not these credentials** — it licenses the desktop and web applications
+and carries no API access. PDF Services is a separate product with its
+own free tier (500 document transactions a month) and its own paid
+plans. With the secrets unset the export stages do not run at all, so
+the Worker deploys fine ahead of them.
 
 ## Two phases, joined at the master
 
@@ -425,21 +469,53 @@ Reviewing therefore means reading the book: an administrator opens
 `/read/<slug>` like anyone else, which is what the Books access rule
 grants them.
 
-## EPUB on release, PDFs on request
+## Four sources, and what each one needs
 
-Phase 2 builds the EPUB and stops. The three PDF variants are rendered
-when a reader asks for one, through `requestFormat`, which records the
-request in `conversion.pendingFormats` and returns the book to
-`master_ready` for the converter's next poll. WeasyPrint is by a wide
-margin the slowest stage in the pipeline, and rendering three fixed-
-typography editions of every book — when EPUB is the point of the
-project — spent that time on files nobody opened.
+The uploaded file can be a **PDF, a DOCX, an EPUB** or plain text, and
+what happens next is almost entirely decided by which it is
+(`apps/web/src/domain/publication.ts`):
 
-`formatsToBuild` decides what a phase 2 run produces, and its third case
-is the subtle one: when nothing has been requested but the book already
-has formats, it rebuilds *all* of them. That is a master edit, and
-regenerating only the EPUB would leave the PDFs rendering errors the
-edit removed.
+    PDF    the owner chooses: read it into a master and build the EPUB,
+           or publish the file exactly as it stands
+    DOCX   already the master — no conversion to one; build EPUB + PDF
+    EPUB   already the edition — nothing is converted at all
+    text   the converter builds a master, then EPUB + PDF
+
+Only a PDF gets a choice, and it is a real one: a scan has to be read
+before it can reflow, which costs money and time and can go wrong, while
+a born-digital PDF may already be perfectly good. Nobody but the
+uploader can weigh that. Everything else has exactly one sensible path,
+so its owner is *told* what will happen rather than asked to pick from a
+list of one.
+
+Publishing as it stands means the reader gets a fixed-layout book and no
+EPUB. That is a real cost against the mission — "not merely to host
+PDFs" — and the reason converting is the default rather than the choice
+being neutral. The decision is reversible: the owner can convert later.
+
+## Everything slow is queued, and a worker moves the book
+
+There is no synchronous conversion anywhere. The expensive stages — the
+PDF→DOCX export, and EPUB/PDF generation — are queues, and the book's
+own `conversion.state` *is* the queue and the status. A worker claims a
+book by a compare-and-swap on that state, does the work, and reports
+back; the owner watches the state change on their book page
+(`ConversionProgress`). Nothing blocks a request on any of it.
+
+That is why a book with nothing to convert — an EPUB upload, or a PDF
+published as it stands — still passes through `queued`. It is filed by
+the same poll, just without a job at the end of it.
+
+Phase 2 builds everything the source can give it, on the first run.
+`requestFormat`, `conversion.pendingFormats` and the on-demand button
+existed to ration WeasyPrint across three PDF sizes; with one PDF — and,
+for a PDF upload, no rendering at all — there is nothing left to ration,
+and all three are gone.
+
+`formatsToBuild` still has one subtle case: when the book already has
+formats, every one of them is rebuilt. That is a master edit, and
+regenerating only what is missing would leave the existing EPUB behind,
+still carrying the errors the edit removed.
 
 The conversion service is
 deliberately standalone and platform-agnostic — it talks to the web
@@ -548,11 +624,15 @@ Book
 |
 +-- pageCount, priceCredits
 |
-+-- DOCX (master, never a reader download)
-+-- EPUB
-+-- PDF Standard
-+-- PDF Large
-+-- PDF Extra Large
++-- the original          preserved, whatever was uploaded
++-- DOCX (master)         owner only, never a reader download
++-- EPUB                  the reading edition
++-- PDF                   mirrors the original's own layout
+
+Three of those four are frequently the same file. A PDF upload *is* the
+book's PDF; a DOCX upload *is* its master; an EPUB upload *is* its
+EPUB. That is what makes "always keep the original" cost nothing extra
+rather than doubling every book (`apps/web/src/domain/publication.ts`).
 
 What the split bought was staged release — a per-reader clock that paced
 someone through a book. That is also gone. The credit price in section
@@ -661,11 +741,16 @@ Private user uploads should not automatically become publicly accessible.
 
 ## 6.1 The conversion portal
 
-A reader may upload a scanned PDF, an ordinary text-layer PDF, a DOCX or
-a plain text file. All four converge on the same DOCX master (section 5)
-— there is no second-class path — and from that master they get the same
-things the library offers: EPUB and the PDF variants, delivery to an
-e-reader, and the online reader.
+A reader may upload a scanned PDF, an ordinary text-layer PDF, a DOCX,
+an **EPUB** or a plain text file. What each one needs is in section 3
+("Four sources"); what they share is the destination. A converted book
+gets everything the library offers — the EPUB, the PDF, delivery to an
+e-reader and the online reader — with no second-class path.
+
+A book published as it stands is the deliberate exception: its owner
+chose a faithful copy over a reflowable one, so it has a PDF and no
+EPUB. It is still delivered, still read from the book page, and still
+theirs.
 
 Such a book is **private by default**, visible only to its owner, and
 may stay that way forever. Publishing it to the public library is a
@@ -848,6 +933,27 @@ The system should support:
 
 Design OCR as an abstraction so it can be replaced later.
 
+**Settled: Adobe PDF Services' Export PDF operation**, which reads a
+scan and returns a DOCX in one call. Section 3 has the reasoning and the
+limits; what matters here is the requirements list above.
+
+It meets them. `ocrLang` accepts `zh-Hant` and `zh-CN`, so traditional
+Chinese — this library's centre of gravity — is read as traditional
+Chinese rather than through a simplified model. Mixed Chinese/English is
+sent under the CJK locale deliberately: Latin script reads well under a
+CJK locale and the reverse does not, so the asymmetric failure decides
+it. Layout, headings and paragraphs come back as Word structure.
+Footnotes do not survive reliably and are not claimed to.
+
+The abstraction survived the replacement twice, which is the point of
+having it, but it moved. It is no longer `app/ocr/base.py` on the
+converter — that interface and its PaddleOCR implementation remain and
+are still what the CLI uses for a local run. For production it is
+`apps/web/src/domain/adobe.ts`, which holds every rule about the engine
+that is not an HTTP call, and `apps/web/src/lib/adobe/client.ts`, which
+is the HTTP call. Replacing Adobe means writing a new pair; nothing
+downstream of the master would know.
+
 ---
 
 # 9. DOCX GENERATION
@@ -901,32 +1007,39 @@ Validate generated EPUB files.
 
 # 11. PDF
 
-PDF should have several variants.
+**One PDF, and its job is fidelity to the original.**
 
-For example:
+This section specified three variants — Standard, Large and Extra Large,
+rendered from the master at different type sizes so a reader could pick
+their typography — until 2026-08-20. They are gone, and the reasoning is
+worth keeping because it applies to any future proposal of the same
+shape: they were three answers to a question section 10 already answers
+better. A reflowable EPUB lets the *device* set the type size. Rendering
+three fixed alternatives was work spent badly, and two of the three were
+never opened.
 
-- Standard
-- Large
-- Extra Large
+What a PDF is actually good for is being a faithful picture of the
+original. So there is one, and where it comes from depends entirely on
+what was uploaded:
 
-The exact typography should be configurable.
+    uploaded as a PDF     the upload itself — nothing renders it
+    uploaded as a DOCX    LibreOffice, so the Word layout survives
+    built from a scan     our own typography; there is nothing to mirror
+    uploaded as an EPUB   no PDF at all
 
-The user can choose:
+The first line is the one that matters most, because this library's
+material is scans. Perfect fidelity, zero rendering time, and nothing
+that can drift from the original — by not trying to improve on it.
 
-Download PDF — Standard
-Download PDF — Large
-Download PDF — Extra Large
-
-PDF generation should use a reliable HTML/CSS-to-PDF or equivalent rendering system.
-
-Investigate:
-
-- WeasyPrint
-- Playwright/Chromium
-- LibreOffice
-- Pandoc
-
-Choose the most reliable solution after evaluation.
+The renderers are `services/converter/app/pdf/builder.py` (WeasyPrint,
+for a master with no layout of its own) and `app/pdf/docx_pdf.py`
+(headless LibreOffice, for a DOCX). Of the options this section asked to
+investigate, LibreOffice is the only one that reads Word's own layout
+model; Pandoc discards presentation by design, WeasyPrint never sees the
+DOCX, and Chromium has no DOCX renderer. It costs a large dependency in
+the converter image and a subprocess rather than a library call, and it
+falls back to WeasyPrint when absent so a developer without it still
+gets a book.
 
 ---
 
@@ -983,10 +1096,11 @@ nothing; deterministic guardrails in `app/llm/correct.py` refuse
 anything that reads as a rewrite rather than an OCR repair, and record
 why. `services/converter/README.md` has the detail.
 
-Also built since: EPUB 3 and the three PDF variants (`app/epub`,
-`app/pdf`, from one shared HTML rendering in `app/render` so the two
-cannot drift), R2 over the S3 API (`app/storage`), the asynchronous job
-API (`app/api`), and the handoff (`app/handoff`).
+Also built since: EPUB 3 and the PDF (`app/epub`, `app/pdf` — the EPUB
+and the WeasyPrint PDF from one shared HTML rendering in `app/render` so
+the two cannot drift, and `app/pdf/docx_pdf.py` for a DOCX's own
+layout), R2 over the S3 API (`app/storage`), the asynchronous job API
+(`app/api`), and the handoff (`app/handoff`).
 
 The handoff is a **pull**, not Cloudflare Queues. The converter has no
 inbound port — the thing that makes it deployable behind a filtered
@@ -1004,7 +1118,7 @@ deploying ahead of the secret exposes nothing.
 
 A job now carries a `kind`, because there are two of them:
 
-    kind: "master"    ocr_key (or source_key) → DOCX master
+    kind: "master"    source_key              → DOCX master
     kind: "formats"   master_key              → EPUB, PDF…
 
 A `formats` job also carries a **`formats` list** saying which editions
@@ -1014,25 +1128,32 @@ book needs depends on what it already has and what a reader asked for,
 and only that side knows either. An empty list is a real instruction and
 is not read as "all".
 
-`ocr_key` is a JSON document in R2 — `books/{id}/ocr/pages.json`, shape
-and version in `apps/web/src/domain/ocr.ts` — holding the pages the
-engine read, in order, as paragraphs. Each paragraph carries a **role**
-(`h1`, `h2`, `body`) decided on the web side from the type size and
-position Document AI reports, because that is the only evidence for a
-heading and it does not survive as plain text. Version 1 wrote bare
-strings and is still read: those pages were paid for once. It is absent
-for a DOCX or plain text upload, which needed no OCR; the converter
-reads `source_key` instead. The completion `POST` carries the same `kind`, and phase 1
-finishing does **not** publish a book: a DOCX master is not a readable
-edition.
+A `master` job now carries only `source_key`, and only for a source that
+needed no export — a DOCX or a plain text upload. A PDF never reaches
+one: Adobe returns the master already built, so the web application
+attaches it and the book goes straight to `master_ready`.
+
+`ocr_key` was a JSON document in R2 (`books/{id}/ocr/pages.json`) that
+crossed this boundary until 2026-08-19, carrying pages as paragraphs
+with a `role` decided from the type size and position Document AI
+reported. Nothing writes it now. The converter still reads one if given
+it — `app/sources/ocr_json.py`, reachable from the CLI — because the
+files already in R2 were paid for once and deleting the reader would
+make them unusable.
+
+The completion `POST` carries the same `kind`, and phase 1 finishing
+does **not** publish a book: a DOCX master is not a readable edition.
 
 Phase 2 is claimable on its own, which is what makes a corrected master
 cheap to act on.
 
 Both job kinds are built on the converter side (`app/jobs/runner.py`,
-claimed by `app/handoff/poller.py`), and the heading levels the OCR
-handoff now carries survive the master round trip — which is what makes
-the corrected master come back as the same book. The EPUB's table of
+claimed by `app/handoff/poller.py`), and heading levels survive the
+master round trip — `Heading 1` and `Heading 2` map to CHAPTER and
+SECTION in `app/sources/docx_in.py`, whichever wrote them. That is what
+makes a corrected master come back as the same book, and it is also why
+Adobe's output needed no new reader: it speaks Word's own heading styles,
+which the round trip already had to understand. The EPUB's table of
 contents nests sections under their chapter accordingly.
 
 Not yet built: where the converter container runs, which is still

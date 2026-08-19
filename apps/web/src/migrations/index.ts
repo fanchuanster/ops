@@ -10,6 +10,8 @@ import * as migration_20260814_182000_cascade_book_deletes from './20260814_1820
 import * as migration_20260815_051500_ocr_pipeline from './20260815_051500_ocr_pipeline';
 import * as migration_20260815_060000_pending_formats from './20260815_060000_pending_formats';
 import * as migration_20260815_150000_source_hash from './20260815_150000_source_hash';
+import * as migration_20260819_100000_adobe_export from './20260819_100000_adobe_export';
+import * as migration_20260820_120000_one_pdf_and_plans from './20260820_120000_one_pdf_and_plans';
 
 export const migrations = [
   {
@@ -71,5 +73,15 @@ export const migrations = [
     up: migration_20260815_150000_source_hash.up,
     down: migration_20260815_150000_source_hash.down,
     name: '20260815_150000_source_hash'
+  },
+  {
+    up: migration_20260819_100000_adobe_export.up,
+    down: migration_20260819_100000_adobe_export.down,
+    name: '20260819_100000_adobe_export'
+  },
+  {
+    up: migration_20260820_120000_one_pdf_and_plans.up,
+    down: migration_20260820_120000_one_pdf_and_plans.down,
+    name: '20260820_120000_one_pdf_and_plans'
   },
 ];

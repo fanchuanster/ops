@@ -156,8 +156,9 @@ repo's `.env` as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
 `AWS_ENDPOINT_URL_S3`. Bare `terraform` without those will fail to initialise
 rather than quietly fall back to a local file.
 
-State holds secret material — the Document AI service account key among it —
-so any local remnant (`terraform.tfstate.backup`) stays git-ignored.
+State has held secret material — the Document AI service account key among
+it, until that key was destroyed on 2026-08-19 — so any local remnant
+(`terraform.tfstate.backup`) stays git-ignored.
 
 One hazard worth knowing: the state bucket is the artifacts bucket, which this
 same configuration manages. `terraform destroy` would therefore delete the
@@ -172,52 +173,43 @@ owns that record, so it will be replaced at step 3 above. Until then the apex
 resolves to a tunnel with nothing behind it.
 
 
-## Document AI (OCR)
+## OCR — no longer here
 
-OCR is the one stage that cannot run on a Worker — 128 MB of memory and
-five minutes of CPU, against a model that needs more of both — so it runs
-on Google Document AI and becomes an HTTP call, which a Worker is billed
-almost nothing for.
+Nothing in this configuration touches OCR any more. Phase 1 runs on
+**Adobe PDF Services**, whose Export PDF operation OCRs a scan and
+returns a DOCX master in one call — see CLAUDE.md section 8.
 
-`documentai.tf` provisions an `OCR_PROCESSOR`, a private bucket for batch
-input and output, a service account with the two narrow roles it needs,
-and the Document AI service agent's access to that bucket.
+Adobe is not provisioned as infrastructure and never appears here. It has
+no resources to create: the Worker holds `ADOBE_CLIENT_ID` and
+`ADOBE_CLIENT_SECRET` as secrets, both issued by hand from the Adobe
+Developer Console, and there is nothing for Terraform to own.
 
-Batch rather than online: online caps a request at 15 pages, so a
-300-page book would be twenty calls to orchestrate; batch takes 500 in
-one operation. Batch answers into the bucket rather than inline, which is
-why the bucket exists.
+### What was decommissioned
 
-gcloud is not installed on this host and does not need to be — `infra/gc`
-runs it in a container, the same trick `apps/web/cf` uses for wrangler.
-Credentials persist in `infra/.gcloud-home/`, gitignored, and `infra/tf`
-points Terraform at them.
+Google Document AI drove phase 1 from 2026-08-14 to 2026-08-19. On
+2026-08-19 all ten of its resources were destroyed: the `OCR_PROCESSOR`,
+the batch scratch bucket, the converter service account and its key, the
+Document AI service agent, and four IAM bindings. `documentai.tf`,
+`documentai-outputs.tf`, the `google`/`google-beta` providers and the
+`infra/gc` gcloud wrapper went with them; the files are in git history.
 
-```bash
-# Once. --no-launch-browser prints a URL to open elsewhere and waits for
-# the code, which is what you want on a machine with no browser.
-./infra/gc gcloud auth application-default login --no-launch-browser
-./infra/gc gcloud auth application-default set-quota-project gen-lang-client-0021728111
+The two APIs it enabled — `documentai.googleapis.com` and
+`storage.googleapis.com` on project `gen-lang-client-0021728111` — are
+still enabled. `disable_on_destroy = false` was set deliberately so that
+turning an API off would be a separate decision rather than a side effect
+of a destroy. Neither costs anything while unused.
 
-cd infra
-cp terraform.tfvars.example terraform.tfvars   # set gcp_project, documentai_bucket
-./tf apply
+Two loose ends outside Terraform's reach:
 
-# Into the Worker, once:
-terraform output -raw documentai_service_account_key |
-  (cd ../apps/web && ./cf npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY)
-```
+- The Worker still carries a `GOOGLE_SERVICE_ACCOUNT_KEY` secret. The key
+  it holds was deleted at Google and authenticates nothing, so this is
+  tidiness rather than exposure. Removing it redeploys the Worker:
 
-Then set the non-secret values as Worker vars, from `terraform output`:
-`DOCUMENT_AI_PROCESSOR`, `DOCUMENT_AI_LOCATION`, `DOCUMENT_AI_BUCKET`.
+  ```bash
+  cd apps/web && ./cf npx wrangler secret delete GOOGLE_SERVICE_ACCOUNT_KEY
+  ```
 
-The bucket is private with public access *prevented*, not merely unset:
-readers' private uploads pass through it. Objects are deleted after seven
-days — nothing there is a record of anything, since the source stays in
-R2 and the OCR output is folded into the DOCX master.
-
-The service-account key is the one long-lived Google credential in the
-system, which is why the grants are as narrow as they are: run processors
-on the project, read and write objects in one bucket, nothing else. It
-lands in Terraform state, which is why state lives in the private R2 bucket
-rather than anywhere a repository could reach.
+- Old state versions in R2 under `tf/` still contain the service-account
+  key as it was written. It is revoked, not redacted — which is the usual
+  outcome for a credential that has ever been in Terraform state, and the
+  reason state lives in the private bucket.

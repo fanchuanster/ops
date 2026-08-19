@@ -28,6 +28,12 @@ oversight.
   is one record, one master, one set of formats.
 - **Converter** — the full pipeline: OCR, structure, DOCX master, EPUB 3, three
   PDF sizes, R2, the async job API, and the pull handoff from the Worker.
+- **Phase 1 on Adobe PDF Services** — a scanned PDF is OCR'd and mastered in
+  one Export PDF call from the Worker, replacing Google Document AI on
+  2026-08-19 and taking `domain/ocr.ts` with it. Traditional Chinese via
+  `ocrLang: zh-Hant`; running heads land in Word's header parts and headings
+  come back as `Heading 1`/`Heading 2`, so neither has to be inferred any more.
+  Text sources still reach the converter and are mastered there.
 - **Upload portal** — file-only upload with metadata read from the file
   (UTF-16/UTF-8/GBK/Big5), an editable summary, a private draft workspace with
   master download and replace, delete, retry, and optional submit-for-review.

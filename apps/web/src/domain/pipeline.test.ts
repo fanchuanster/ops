@@ -4,8 +4,9 @@
  * The behaviour worth protecting is that correcting a DOCX master costs
  * a rebuild of the formats and nothing else. Everything about the shape
  * of these states exists to make that true — if editing a master ever
- * re-ran OCR, the project would be paying Google again to re-read pages
- * it had already read, and discarding the correction that prompted it.
+ * re-ran the export, the project would be paying Adobe again to re-read
+ * pages it had already read, and discarding the correction that
+ * prompted it.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -20,7 +21,7 @@ import {
   formatsToBuild,
   isConversionState,
   isInFlight,
-  needsOcrRun,
+  needsMasterRun,
   retryStateFor,
   stateAfterMasterEdit,
 } from './pipeline'
@@ -105,25 +106,21 @@ describe('editing the master', () => {
   })
 })
 
-describe('deciding to run OCR', () => {
+describe('deciding to start an export', () => {
   it('runs for a freshly queued book', () => {
-    expect(needsOcrRun({ state: 'queued' })).toBe(true)
+    expect(needsMasterRun({ state: 'queued' })).toBe(true)
   })
 
-  it('does not pay twice for pages already read', () => {
-    expect(needsOcrRun({ state: 'queued', ocrKey: 'books/7/ocr/pages.json' })).toBe(false)
-  })
-
-  it('does not start a second operation for one already running', () => {
+  it('does not start a second export for one already running', () => {
     // A retried poll must not submit the same book again -- that is a
-    // second Document AI bill for one book.
-    expect(needsOcrRun({ state: 'queued', ocrOperation: 'projects/p/locations/l/operations/1' })).toBe(
-      false,
-    )
+    // second Adobe bill for one book.
+    expect(
+      needsMasterRun({ state: 'queued', exportJob: 'https://pdf-services.adobe.io/ops/id/abc' }),
+    ).toBe(false)
   })
 
   it('does not run for a book past phase 1', () => {
-    expect(needsOcrRun({ state: 'master_ready' })).toBe(false)
+    expect(needsMasterRun({ state: 'master_ready' })).toBe(false)
   })
 })
 
@@ -170,96 +167,90 @@ describe('validating stored values', () => {
 })
 
 describe('review does not stand in front of phase 2', () => {
-  /**
+  /*
    * Phase 2 was held until an administrator approved the book, until
    * 2026-08-17. The gate was the wrong way round: what a reviewer reads
    * is the finished EPUB, so holding the EPUB for the review left them
-   * nothing to read — and an uploader who never submitted their private
+   * nothing to read -- and an uploader who never submitted their private
    * book, which section 6.2 explicitly permits, could never read it at
    * all. Publication is where review belongs, and the Books collection
    * is where it is enforced.
    */
   it('builds the formats for an unsubmitted private upload', () => {
-    expect(
-      claimFor({ state: 'master_ready', pendingFormats: [], existingFormats: [] }),
-    ).toEqual({ kind: 'formats', formats: ['epub'] })
+    expect(claimFor({ state: 'master_ready', sourceKind: 'pdf', existingFormats: [] })).toEqual({
+      kind: 'formats',
+      formats: ['epub'],
+    })
   })
 
   it('offers phase 1 the same as it always did', () => {
-    expect(
-      claimFor({ state: 'ocr_ready', pendingFormats: [], existingFormats: [] }),
-    ).toEqual({ kind: 'master', formats: [] })
+    expect(claimFor({ state: 'ocr_ready', sourceKind: 'text', existingFormats: [] })).toEqual({
+      kind: 'master',
+      formats: [],
+    })
   })
 
   it('offers nothing from a state that is not a phase boundary', () => {
     for (const state of ['queued', 'ocr', 'mastering', 'formatting', 'ready'] as const) {
-      expect(claimFor({ state, pendingFormats: [], existingFormats: [] })).toBeNull()
+      expect(claimFor({ state, sourceKind: 'pdf', existingFormats: [] })).toBeNull()
     }
   })
 
   it('does not treat a book at the hinge as in flight', () => {
-    // Nothing is running at `master_ready` — a converter has to claim
+    // Nothing is running at `master_ready` -- a converter has to claim
     // it. That was true when review held it there and stays true now.
     expect(isInFlight('master_ready')).toBe(false)
   })
 })
 
 describe('choosing which formats to build', () => {
-  it('builds only the release set for a new book', () => {
-    expect(formatsToBuild({ pendingFormats: [], existingFormats: [] })).toEqual(['epub'])
+  it('builds only the EPUB for a scanned PDF', () => {
+    // The book's PDF is the scan itself, so rendering one from the
+    // master would replace a faithful picture of the original with
+    // something that looks nothing like it.
+    expect(formatsToBuild({ sourceKind: 'pdf', existingFormats: [] })).toEqual(['epub'])
   })
 
-  it('builds exactly what was asked for', () => {
-    expect(formatsToBuild({ pendingFormats: ['pdf_large'], existingFormats: ['epub'] })).toEqual([
-      'pdf_large',
-    ])
+  it('builds both for a DOCX upload, which has neither yet', () => {
+    expect(formatsToBuild({ sourceKind: 'docx', existingFormats: [] })).toEqual(['epub', 'pdf'])
+  })
+
+  it('builds nothing for an EPUB upload, and so is not claimable', () => {
+    // It is already the reading edition. Handing a converter an empty
+    // job list would have it report success on work it never did.
+    expect(formatsToBuild({ sourceKind: 'epub', existingFormats: [] })).toEqual([])
+    expect(claimFor({ state: 'master_ready', sourceKind: 'epub', existingFormats: [] })).toBeNull()
   })
 
   it('rebuilds everything the book already has when the master is edited', () => {
     // The reason this matters: a PDF built from the old master still
     // renders the errors the edit removed, and nothing would ever
-    // rebuild it if only the release set were regenerated.
-    const formats = formatsToBuild({
-      pendingFormats: [],
-      existingFormats: ['docx', 'epub', 'pdf_xl'],
-    })
+    // rebuild it if only the missing formats were regenerated.
+    const formats = formatsToBuild({ sourceKind: 'docx', existingFormats: ['docx', 'epub', 'pdf'] })
     expect(formats).toContain('epub')
-    expect(formats).toContain('pdf_xl')
+    expect(formats).toContain('pdf')
   })
 
   it('never asks for the master, which is the input', () => {
-    expect(formatsToBuild({ pendingFormats: ['docx'], existingFormats: ['docx'] })).not.toContain(
-      'docx',
-    )
+    expect(formatsToBuild({ sourceKind: 'docx', existingFormats: ['docx'] })).not.toContain('docx')
   })
 
-  it('ignores junk in the stored list', () => {
+  it('ignores junk, and the retired PDF variants, in the stored list', () => {
     expect(
-      formatsToBuild({ pendingFormats: ['pdf_large', 'mobi', null, 7], existingFormats: [] }),
-    ).toEqual(['pdf_large'])
+      formatsToBuild({ sourceKind: 'pdf', existingFormats: ['mobi', null, 7, 'pdf_large'] }),
+    ).toEqual(['epub'])
   })
 
-  it('does not repeat a format asked for twice', () => {
-    expect(
-      formatsToBuild({ pendingFormats: ['pdf_large', 'pdf_large'], existingFormats: [] }),
-    ).toEqual(['pdf_large'])
+  it('does not give a PDF source a rendered PDF, even if one is listed', () => {
+    // A stale row from before the split. The source rule wins.
+    expect(formatsToBuild({ sourceKind: 'pdf', existingFormats: ['epub', 'pdf'] })).toEqual(['epub'])
   })
 })
 
 describe('what a converter is handed', () => {
-  it('asks for one PDF when one was requested', () => {
-    expect(
-      claimFor({
-        state: 'master_ready',
-        pendingFormats: ['pdf_standard'],
-        existingFormats: ['docx', 'epub'],
-      }),
-    ).toEqual({ kind: 'formats', formats: ['pdf_standard'] })
-  })
-
   it('offers nothing for a resting book', () => {
     for (const state of ['ready', 'draft', 'failed', 'formatting', 'none'] as const) {
-      expect(claimFor({ state, pendingFormats: [], existingFormats: [] })).toBeNull()
+      expect(claimFor({ state, sourceKind: 'pdf', existingFormats: [] })).toBeNull()
     }
   })
 })

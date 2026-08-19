@@ -1,16 +1,22 @@
-"""PDF in three sizes, rendered from the same HTML the EPUB uses.
+"""One PDF, rendered from the same HTML the EPUB uses.
 
-WeasyPrint rather than Playwright or LibreOffice. It takes HTML and CSS
-and produces a properly paginated PDF with real page boxes, it needs no
-browser and no headless Chromium, and it runs in a container without a
-display — which matters because this service is meant to be deployable
-somewhere small. Its weakness is CSS coverage, and the CSS here is a
-page box, a font stack and margins.
+WeasyPrint rather than Playwright. It takes HTML and CSS and produces a
+properly paginated PDF with real page boxes, it needs no browser and no
+headless Chromium, and it runs in a container without a display — which
+matters because this service is meant to be deployable somewhere small.
+Its weakness is CSS coverage, and the CSS here is a page box, a font
+stack and margins.
 
-The three sizes are the point (CLAUDE.md section 11). A fixed-layout PDF
-cannot reflow, so the only way to serve a reader who needs larger type
-is to render the book again at a larger size. That is also why none of
-this is a substitute for the EPUB.
+There were three sizes here until 2026-08-20 — standard, large and extra
+large — so a reader could pick their typography. That was three answers
+to a question the EPUB already answers better, by letting the *device*
+set the type size. What a PDF is actually good for is being a faithful
+picture of the original, and there is only one of those.
+
+Which means this renderer is no longer the whole story. It produces the
+PDF for a source that has no layout of its own to mirror — plain text,
+and a DOCX whose own rendering `docx_pdf.py` handles. A book uploaded as
+a PDF never comes here at all: its PDF is the file the reader uploaded.
 """
 
 from __future__ import annotations
@@ -22,17 +28,12 @@ from weasyprint import HTML
 from ..models import Document
 from ..render.html import BOOK_CSS, document_html
 
-# Base body size in points. The names match the artifact formats the web
-# application knows about: pdf_standard, pdf_large, pdf_xl.
-PDF_VARIANTS: dict[str, int] = {
-    "pdf_standard": 12,
-    "pdf_large": 16,
-    "pdf_xl": 22,
-}
+# Body size in points. A5 at 12pt keeps the measure close to a printed
+# book, which is the whole intent now that there is nothing to choose
+# between.
+BODY_SIZE = 12
 
-# A5 keeps the measure close to a printed book at the standard size.
-# Larger variants keep the same page and simply fit less on it, which is
-# the honest trade — the alternative is a bigger sheet nobody can hold.
+# A5 keeps the measure close to a printed book.
 _PAGE_CSS = """
 @page {{
   size: A5;
@@ -64,29 +65,19 @@ def _html_for(document: Document, size: int) -> str:
     return f"<html><head><meta charset='utf-8'><style>{css}</style></head><body>{document_html(document)}</body></html>"
 
 
-def build_pdf(document: Document, path: Path, *, variant: str = "pdf_standard") -> Path:
-    if variant not in PDF_VARIANTS:
-        raise ValueError(f"unknown PDF variant: {variant}")
+def build_pdf(document: Document, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    HTML(string=_html_for(document, PDF_VARIANTS[variant])).write_pdf(str(path))
+    HTML(string=_html_for(document, BODY_SIZE)).write_pdf(str(path))
     return path
 
 
-def build_all_pdfs(document: Document, directory: Path) -> dict[str, Path]:
-    """Every variant, keyed by the artifact format the catalog uses."""
-    return {
-        variant: build_pdf(document, directory / f"{variant}.pdf", variant=variant)
-        for variant in PDF_VARIANTS
-    }
-
-
 def page_count(document: Document) -> int:
-    """Pages at the standard size — what the credit price is derived from.
+    """How long the book is — what the credit price is derived from.
 
     The web application prices a book by the length of its DOCX master,
     but a DOCX carries no reliable page count: pagination is a rendering
-    decision and python-docx writes no `<Pages>` property. The standard
-    PDF is rendered from the same content, so its length is the honest
-    answer to the same question.
+    decision and python-docx writes no `<Pages>` property. Laying the
+    same content out here answers the same question honestly, and does
+    so whether or not a PDF is one of the formats being built.
     """
-    return len(HTML(string=_html_for(document, PDF_VARIANTS["pdf_standard"])).render().pages)
+    return len(HTML(string=_html_for(document, BODY_SIZE)).render().pages)

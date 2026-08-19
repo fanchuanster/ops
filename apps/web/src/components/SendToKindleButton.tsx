@@ -23,9 +23,7 @@ import { RESEND_PRICE } from '../domain/credits'
  */
 const FORMAT_LABEL: Record<string, string> = {
   epub: 'EPUB — reflowable',
-  pdf_standard: 'PDF — Standard',
-  pdf_large: 'PDF — Large',
-  pdf_xl: 'PDF — Extra Large',
+  pdf: 'PDF',
 }
 
 /**

@@ -20,7 +20,7 @@ import { getPayload } from 'payload'
 
 import { LEVEL_IDS, type BookLevel } from '../domain/levels'
 
-type FormatKey = 'docx' | 'epub' | 'pdf_standard' | 'pdf_large' | 'pdf_xl'
+type FormatKey = 'docx' | 'epub' | 'pdf'
 
 interface SeedBook {
   slug: string
@@ -34,7 +34,7 @@ interface SeedBook {
   level: BookLevel
   /** Pages in the DOCX master. The credit price is derived from it. */
   pageCount: number
-  /** Prefix in object storage; the five artifacts hang off it. */
+  /** Prefix in object storage; the three artifacts hang off it. */
   keyPrefix: string
 }
 
@@ -42,9 +42,10 @@ interface SeedBook {
 const ARTIFACT_FILES: Record<FormatKey, string> = {
   docx: 'master.docx',
   epub: 'book.epub',
-  pdf_standard: 'standard.pdf',
-  pdf_large: 'large.pdf',
-  pdf_xl: 'xl.pdf',
+  // One PDF now, mirroring the original's layout. These staff-entered
+  // library books have no uploaded original, so theirs is rendered from
+  // the master like any DOCX source's would be.
+  pdf: 'book.pdf',
 }
 
 const COLLECTIONS: { title: string; slug: string; description?: string; parent?: string }[] = [

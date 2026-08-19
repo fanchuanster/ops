@@ -85,15 +85,11 @@ export const KINDLE_SENDER_ADDRESS = 'kindle@noblesee.com'
  * The DOCX master is deliberately absent, as it is everywhere a reader
  * can reach: it is the editorial source of truth, not a reader format.
  * EPUB is first because Amazon converts it to the native format and it
- * stays reflowable; the PDFs are accepted but arrive fixed-layout,
- * which is the thing this project exists to move away from.
+ * stays reflowable; the PDF is accepted but arrives fixed-layout, which
+ * is the thing this project exists to move away from. It is also, for a
+ * book published as it stands, the only thing there is to send.
  */
-export const KINDLE_DELIVERABLE_FORMATS = [
-  'epub',
-  'pdf_standard',
-  'pdf_large',
-  'pdf_xl',
-] as const
+export const KINDLE_DELIVERABLE_FORMATS = ['epub', 'pdf'] as const
 
 export type KindleDeliverableFormat = (typeof KINDLE_DELIVERABLE_FORMATS)[number]
 

@@ -29,9 +29,9 @@ export function UploadForm() {
           type="file"
           name="file"
           required
-          accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+          accept=".pdf,.docx,.epub,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/epub+zip,text/plain,text/markdown"
         />
-        <small>PDF (scanned or not), DOCX, or plain text. Up to 64 MB.</small>
+        <small>PDF (scanned or not), DOCX, EPUB, or plain text. Up to 64 MB.</small>
       </label>
 
       <button type="submit" className="button-quiet" disabled={pending}>

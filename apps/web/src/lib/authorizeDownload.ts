@@ -53,9 +53,7 @@ export type DownloadDecision =
 const EXTENSION: Record<string, string> = {
   docx: 'docx',
   epub: 'epub',
-  pdf_standard: 'pdf',
-  pdf_large: 'pdf',
-  pdf_xl: 'pdf',
+  pdf: 'pdf',
 }
 
 /** Filesystem-safe, readable, and stable across a book's re-editing. */

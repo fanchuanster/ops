@@ -68,9 +68,15 @@ class Job:
     # the job API — neither of which is driven by the web application's
     # two-phase handoff — keep working unchanged.
     kind: JobKind = JobKind.FULL
-    # Phase 1 reads one of these: `ocr_key` when the pages were read by
-    # the hosted OCR engine, `source_key` when the upload was already
-    # text and needed no OCR.
+    # Phase 1 reads one of these. `source_key` is the ordinary case and
+    # the only one the web application uses since 2026-08-19: a scanned
+    # PDF is now OCR'd *and* mastered by Adobe on the web side, so the
+    # only sources that reach a `master` job are already text.
+    #
+    # `ocr_key` is the older door — a pages.json written by Google
+    # Document AI. Nothing writes one any more; the reader is kept
+    # because the documents already in R2 were paid for once, and the
+    # CLI can still be pointed at one.
     ocr_key: str | None = None
     # Phase 2 reads this.
     master_key: str | None = None

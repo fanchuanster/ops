@@ -43,7 +43,12 @@ SEED_ROOT = os.path.join(REPO_ROOT, "content", "seed")
 CJK_FONT = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"
 LATIN_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
 
-PDF_VARIANTS = {"pdf-standard": 12, "pdf-large": 16, "pdf-xl": 22}
+# One PDF, at a body size that keeps an A5 measure close to a printed
+# book. There were three — standard, large and extra large — until
+# 2026-08-20; the EPUB answers "what type size do you want" properly, by
+# letting the device decide, so rendering fixed alternatives was work
+# spent badly. See CLAUDE.md section 11.
+PDF_BODY_SIZE = 12
 
 
 # --------------------------------------------------------------------------
@@ -315,14 +320,14 @@ def write_pdf(book, path, base_pt):
 
 
 def page_count(book):
-    """Pages at the standard size — what the credit price is derived from.
+    """How long the book is — what the credit price is derived from.
 
     A DOCX carries no reliable page count (pagination is a rendering
     decision, and python-docx writes no `<Pages>` property), so the
-    standard PDF rendered from the same content is the honest proxy.
+    PDF rendered from the same content is the honest proxy.
     """
     html = (
-        f"<html><head><style>{pdf_css(PDF_VARIANTS['pdf-standard'])}</style></head>"
+        f"<html><head><style>{pdf_css(PDF_BODY_SIZE)}</style></head>"
         f"<body>{book_html(book)}</body></html>"
     )
     return len(HTML(string=html).render().pages)
@@ -365,13 +370,12 @@ def generate(book, force=False):
          lambda p: write_cover(book, p))
     emit(os.path.join(book_dir, "master.docx"), lambda p: write_docx(book, p))
     emit(os.path.join(book_dir, "book.epub"), lambda p: write_epub(book, p))
-    for variant, size in PDF_VARIANTS.items():
-        emit(os.path.join(book_dir, f"{variant}.pdf"),
-             lambda p, s=size: write_pdf(book, p, s))
+    emit(os.path.join(book_dir, "book.pdf"),
+         lambda p: write_pdf(book, p, PDF_BODY_SIZE))
 
     # Printed so the value can be copied into the seed, which is where
     # the price comes from.
-    print(f"  pages (standard): {page_count(book)}")
+    print(f"  pages: {page_count(book)}")
 
 
 def main():
