@@ -16,6 +16,7 @@ import { needsConverter, readSourceKind, resolvePlan } from '../../../domain/pub
 import { getCurrentUser } from '../../../lib/auth'
 import { objectBucket } from '../../../lib/storage'
 import { checkQuotaFor } from '../../../lib/uploadQuota'
+import { logError } from '../../../lib/logError'
 
 /**
  * Confirming the details of an uploaded book.
@@ -144,7 +145,8 @@ export async function saveBookDetails(
       },
       overrideAccess: true,
     })
-  } catch {
+  } catch (error) {
+    logError('bookDetails: save details', error)
     return { error: 'Could not save those details. Please try again.' }
   }
 
@@ -310,7 +312,8 @@ export async function replaceMaster(
       },
       overrideAccess: true,
     })
-  } catch {
+  } catch (error) {
+    logError('bookDetails: replace master', error)
     return { error: 'Could not replace the master. Please try again.' }
   }
 

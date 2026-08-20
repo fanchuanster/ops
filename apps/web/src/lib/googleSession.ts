@@ -26,6 +26,7 @@ import {
 import { mirrorAvatar } from './avatars'
 import { accrueMonthlyCredits, grantSignupCredits } from './credits'
 import { randomToken } from './googleOAuth'
+import { logError } from './logError'
 
 export type GoogleSessionResult =
   | { ok: true; cookie: string }
@@ -133,7 +134,8 @@ export async function sessionForGoogleProfile(
         overrideAccess: true,
       })
     }
-  } catch {
+  } catch (error) {
+    logError('googleSession: establish session', error)
     return { ok: false, message: 'Could not complete the sign-in. Please try again.' }
   }
 
@@ -164,7 +166,8 @@ export async function sessionForGoogleProfile(
           data: { avatarUrl: mirrored },
           overrideAccess: true,
         })
-      } catch {
+      } catch (error) {
+        logError('googleSession: save avatar pointer', error)
         // The bytes are in the bucket but the pointer did not save.
         // The reader gets initials this time and we try again on the
         // next sign-in; nothing here is worth refusing a session over.

@@ -23,6 +23,7 @@
  */
 
 import { objectBucket } from './storage'
+import { logError } from './logError'
 
 /** Where a reader's mirrored avatar lives. */
 export function avatarKey(userId: string | number): string {
@@ -111,9 +112,10 @@ export async function mirrorAvatar({
     })
 
     return path
-  } catch {
+  } catch (error) {
     // Timeouts, DNS failures, a bucket that refused the write. None of
     // them are a reason to fail the sign-in that triggered this.
+    logError('avatars: mirror avatar', error)
     return null
   }
 }

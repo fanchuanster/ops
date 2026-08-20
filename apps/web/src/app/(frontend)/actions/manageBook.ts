@@ -10,6 +10,7 @@ import { isConversionState, retryStateFor } from '../../../domain/pipeline'
 import { canAccessArtifact } from '../../../domain/rights'
 import { getCurrentUser } from '../../../lib/auth'
 import { deleteObjects } from '../../../lib/storage'
+import { logError } from '../../../lib/logError'
 
 /**
  * Managing your own uploads: deleting one, and retrying a conversion
@@ -73,7 +74,8 @@ export async function deleteBook(_prev: ManageState, formData: FormData): Promis
 
   try {
     await payload.delete({ collection: 'books', id: bookId, overrideAccess: true })
-  } catch {
+  } catch (error) {
+    logError('manageBook: delete book', error)
     return { error: 'Could not delete that book. Please try again.' }
   }
 

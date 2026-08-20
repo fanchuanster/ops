@@ -14,6 +14,7 @@ import {
 } from '../../../domain/publication'
 import { extractMetadata } from '../../../lib/extractMetadata'
 import { objectBucket } from '../../../lib/storage'
+import { logError } from '../../../lib/logError'
 
 /**
  * Accepting a reader's own book for conversion.
@@ -96,7 +97,8 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
     await bucket.put(sourceKey, file.stream(), {
       httpMetadata: { contentType: file.type },
     })
-  } catch {
+  } catch (error) {
+    logError('upload: store source in R2', error)
     return { error: 'Could not store that file. Please try again.' }
   }
 
@@ -141,7 +143,8 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
       overrideAccess: true,
     })
     bookId = created.id
-  } catch {
+  } catch (error) {
+    logError('upload: create book record', error)
     return { error: 'Could not start the conversion. Please try again.' }
   }
 

@@ -69,6 +69,7 @@ import {
   uploadAsset,
 } from './adobe/client'
 import { artifactBytes, copyObject, objectBucket } from './storage'
+import { logError } from './logError'
 
 /**
  * Adobe credentials, or null when they are not configured.
@@ -97,6 +98,8 @@ export async function adobeConfig(): Promise<AdobeCredentials | null> {
     if (!clientId || !clientSecret) return null
     return { clientId, clientSecret }
   } catch {
+    // Not logged, for the same reason as the converter route's secret
+    // lookup: no bindings is a deployment fact, not an incident.
     return null
   }
 }
@@ -554,7 +557,9 @@ export async function advanceMasterPipeline(payload: Payload): Promise<void> {
 
     if (await advanceRunningMaster(payload, credentials)) return
     await startNextMaster(payload, credentials)
-  } catch {
-    // See above.
+  } catch (error) {
+    // See above — the converter's poll must still be answered. This is
+    // where an Adobe failure would otherwise vanish without trace.
+    logError('masterPipeline: advance', error)
   }
 }

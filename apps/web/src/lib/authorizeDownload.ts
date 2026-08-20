@@ -28,6 +28,7 @@ import type { Payload } from 'payload'
 import { type DeliveryDecision, decideDelivery, priceInCredits } from '../domain/credits'
 import type { Book } from '../payload-types'
 import { canAccessArtifact, canReadOnline, isPubliclyDistributable } from '../domain/rights'
+import { logError } from './logError'
 
 export type DownloadRefusal =
   | { reason: 'not_found' }
@@ -183,7 +184,11 @@ async function loadBook(payload: Payload, bookId: string | number) {
       depth: 1,
       overrideAccess: true,
     })
-  } catch {
+  } catch (error) {
+    // Returning null here makes a broken lookup indistinguishable
+    // from a book that does not exist, which is right for the reader
+    // and useless for us unless the cause is recorded.
+    logError('authorizeDownload: load book', error)
     return null
   }
 }

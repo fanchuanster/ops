@@ -23,6 +23,7 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { createReadStream, existsSync } from 'node:fs'
 import path from 'node:path'
+import { logError } from './logError'
 
 /**
  * The bucket itself.
@@ -90,8 +91,10 @@ export async function deleteObjects(keys: readonly string[]): Promise<void> {
   if (!bucket || keys.length === 0) return
   try {
     await bucket.delete([...keys])
-  } catch {
-    // See above.
+  } catch (error) {
+    // Still not worth failing the caller over — but an object that
+    // outlives the book it belonged to is a bill nobody notices.
+    logError('storage: delete objects', error)
   }
 }
 

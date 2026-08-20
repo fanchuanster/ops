@@ -8,6 +8,7 @@ import { getPayload } from 'payload'
 import { checkPassword } from '../../../domain/password'
 import { accrueMonthlyCredits, grantSignupCredits } from '../../../lib/credits'
 import { safeNext } from '../../../lib/auth'
+import { logError } from '../../../lib/logError'
 
 /**
  * Sign-up and log-in as server actions.
@@ -46,10 +47,13 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
     // Never throws, so a grant that cannot be recorded does not cost
     // the reader their session. See lib/credits.ts.
     if (result.user?.id) await accrueMonthlyCredits(payload, result.user.id)
-  } catch {
-    // Deliberately identical whether the address is unknown or the
-    // password is wrong: distinguishing them tells an attacker which
-    // email addresses have accounts.
+  } catch (error) {
+    // Logged but not shown. The reader's message is deliberately
+    // identical whether the address is unknown or the password is
+    // wrong — distinguishing them tells an attacker which email
+    // addresses have accounts — which also makes a genuine outage here
+    // indistinguishable from a typo unless the cause is written down.
+    logError('signIn: authenticate', error)
     return { error: 'Email or password is incorrect.' }
   }
 

@@ -27,6 +27,7 @@ import {
   pdfPageCount,
 } from '../domain/metadata'
 import { estimatePages } from '../domain/uploadQuota'
+import { logError } from './logError'
 
 /**
  * How much of a PDF to scan for metadata.
@@ -80,9 +81,11 @@ export async function extractMetadata(file: File): Promise<Extraction> {
         characters: Math.round(text.length * ratio),
       })
     }
-  } catch {
+  } catch (error) {
     // A corrupt zip, a truncated PDF, a decode failure. The filename is
-    // still worth something and the reader can fix the rest.
+    // still worth something and the reader can fix the rest — but this
+    // is the answer to "why did my book arrive with no title?".
+    logError('extractMetadata: read file', error)
   }
 
   const metadata = mergeMetadata(found, byFilename)

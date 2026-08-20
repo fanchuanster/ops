@@ -36,6 +36,7 @@ import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
 import { claimFor, completedState, inProgressState } from '../../../../domain/pipeline'
 import { readSourceKind } from '../../../../domain/publication'
 import { advanceMasterPipeline } from '../../../../lib/masterPipeline'
+import { logError } from '../../../../lib/logError'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,9 @@ async function converterSecret(): Promise<string | null> {
     const secret = (env as { CONVERTER_SECRET?: string }).CONVERTER_SECRET
     return secret && secret.length >= 16 ? secret : null
   } catch {
+    // Not logged. This throws on every request that runs without
+    // Cloudflare bindings, which is how a local process discovers it
+    // has none — control flow, not a failure.
     return null
   }
 }
@@ -209,7 +213,10 @@ export async function POST(request: Request) {
   let body: CompletionBody
   try {
     body = (await request.json()) as CompletionBody
-  } catch {
+  } catch (error) {
+    // The only caller is our own converter, so malformed JSON here is
+    // our bug rather than a stranger's probe.
+    logError('conversion: parse completion body', error)
     return NextResponse.json({ error: 'Bad request.' }, { status: 400 })
   }
 

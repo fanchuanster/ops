@@ -24,6 +24,7 @@ import {
   totalCredits,
 } from '../domain/credits'
 import { settleShare, shareForDelivery } from '../domain/uploaderShare'
+import { logError } from './logError'
 
 export interface CreditMovement {
   delta: number
@@ -151,7 +152,11 @@ export async function accrueMonthlyCredits(
     })
 
     return { granted: totalCredits(grants), grants }
-  } catch {
+  } catch (error) {
+    // A reader silently not being paid is exactly the kind of fault
+    // nobody reports, because nobody knows what their balance should
+    // have been.
+    logError('credits: accrue monthly grant', error)
     return { granted: 0, grants: [] }
   }
 }
@@ -270,7 +275,9 @@ export async function payUploaderShare(
         { delta: settled.credits, reason: 'uploader_share', bookId },
       ])
     }
-  } catch {
-    // See above: never at the cost of the delivery.
+  } catch (error) {
+    // See above: never at the cost of the delivery — but an uploader
+    // quietly losing their share is worth knowing about.
+    logError('credits: settle uploader share', error)
   }
 }

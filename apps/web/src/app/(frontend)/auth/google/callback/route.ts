@@ -26,6 +26,7 @@ import {
   googleOAuthConfig,
 } from '../../../../../lib/googleOAuth'
 import { sessionForGoogleProfile } from '../../../../../lib/googleSession'
+import { logError } from '../../../../../lib/logError'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,9 +112,11 @@ export async function GET(request: Request) {
     // TLS and never touched the browser. One Tap receives its token from
     // the client and must check the signature — lib/googleIdToken.ts.
     claims = decodeIdTokenClaims(tokens.id_token)
-  } catch {
-    // The detail is deliberately not shown: it can carry the client
-    // secret's error context and means nothing to a reader.
+  } catch (error) {
+    // The detail is deliberately not shown to the reader: it can carry
+    // the client secret's error context and means nothing to them. It
+    // means a great deal to us, so it goes to the log instead.
+    logError('googleCallback: exchange code', error)
     return fail(origin, 'Google sign-in failed. Please try again.')
   }
 
