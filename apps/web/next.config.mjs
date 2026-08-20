@@ -11,6 +11,23 @@ initOpenNextCloudflareForDev()
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    serverActions: {
+      // Must stay just above MAX_UPLOAD_BYTES in `src/domain/publication.ts`
+      // — `publication.test.ts` fails if it drops below it.
+      //
+      // Not a tuning knob. Next enforces this *before* entering the
+      // action and answers a bare 413, so the default of 1 MB meant the
+      // conversion portal rejected every real book and none of the
+      // action's own messages could be reached. A book is never 1 MB.
+      //
+      // 66mb rather than 64mb so the multipart framing around a
+      // maximum-size file does not push it over: the friendly "larger
+      // than 64 MB" from the action should always win over the 413.
+      bodySizeLimit: '66mb',
+    },
+  },
+
   // No `output: 'standalone'`. That was for the container image;
   // OpenNext produces the Worker bundle from the ordinary build output
   // and standalone mode would fight it.

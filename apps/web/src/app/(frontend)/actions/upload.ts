@@ -6,7 +6,12 @@ import { getPayload } from 'payload'
 
 import { LEVEL_IDS } from '../../../domain/levels'
 import { getCurrentUser } from '../../../lib/auth'
-import { defaultPlanFor, sourceKindOf } from '../../../domain/publication'
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_LABEL,
+  defaultPlanFor,
+  sourceKindOf,
+} from '../../../domain/publication'
 import { extractMetadata } from '../../../lib/extractMetadata'
 import { objectBucket } from '../../../lib/storage'
 
@@ -49,17 +54,14 @@ const ACCEPTED = new Map<string, string>([
   ['text/markdown', 'md'],
 ])
 
-/** Large enough for a scanned book, small enough to bound a Worker. */
-const MAX_BYTES = 64 * 1024 * 1024
-
 export async function uploadBook(_prev: UploadState, formData: FormData): Promise<UploadState> {
   const user = await getCurrentUser()
   if (!user) return { error: 'Sign in to upload a book.' }
 
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) return { error: 'Choose a file to upload.' }
-  if (file.size > MAX_BYTES) {
-    return { error: `That file is larger than ${Math.round(MAX_BYTES / 1024 / 1024)} MB.` }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { error: `That file is larger than ${MAX_UPLOAD_LABEL}.` }
   }
 
   // The declared type first, then the filename — several browsers send
@@ -88,7 +90,10 @@ export async function uploadBook(_prev: UploadState, formData: FormData): Promis
 
   const sourceKey = `conversion/${jobId}/input/source.${extension}`
   try {
-    await bucket.put(sourceKey, await file.arrayBuffer(), {
+    // Streamed, not buffered. Parsing the form already holds the file
+    // in memory once, and `arrayBuffer()` would make a second copy of
+    // it — two copies of a 64 MB book do not fit in a Worker's 128 MB.
+    await bucket.put(sourceKey, file.stream(), {
       httpMetadata: { contentType: file.type },
     })
   } catch {

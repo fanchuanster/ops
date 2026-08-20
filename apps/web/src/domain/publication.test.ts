@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
+  MAX_UPLOAD_BYTES,
   defaultPlanFor,
   formatsToGenerate,
   needsConverter,
@@ -143,5 +146,22 @@ describe('reading a book’s source kind back', () => {
     // rendered over an original it should have kept.
     expect(readSourceKind({})).toBe('pdf')
     expect(readSourceKind({ sourceKind: 'nonsense' })).toBe('pdf')
+  })
+})
+
+describe('the size limit the framework enforces', () => {
+  // The regression this guards is invisible in every other test: Next
+  // rejects an oversized server action body *before* entering the
+  // action, so no amount of testing `uploadBook` can catch a
+  // bodySizeLimit that is too low — or absent, which is how the portal
+  // shipped refusing every book over the 1 MB default.
+  it('is set, and leaves room for the largest file we accept', () => {
+    const config = readFileSync(new URL('../../next.config.mjs', import.meta.url), 'utf8')
+    const declared = /bodySizeLimit:\s*'(\d+)mb'/.exec(config)
+
+    expect(declared, 'next.config.mjs must set experimental.serverActions.bodySizeLimit').not.toBe(
+      null,
+    )
+    expect(Number(declared![1]) * 1024 * 1024).toBeGreaterThan(MAX_UPLOAD_BYTES)
   })
 })

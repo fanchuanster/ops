@@ -35,6 +35,30 @@ import type { ArtifactFormat } from './conversion'
  */
 export type SourceKind = 'pdf' | 'docx' | 'epub' | 'text'
 
+/**
+ * The largest file the portal accepts, in bytes.
+ *
+ * Lives here rather than in the upload action because three places need
+ * the same number and they must not drift: the action rejects above it,
+ * the form says so before a byte is sent, and `next.config.mjs` sets the
+ * server action body limit just above it.
+ *
+ * That last one is the reason this constant exists at all. Next's
+ * `serverActions.bodySizeLimit` defaults to **1 MB**, and the limit is
+ * enforced by the framework before the action is entered — so with it
+ * unset, every book above 1 MB was refused with a bare 413 and none of
+ * the messages below could ever be shown. A book is never under 1 MB.
+ *
+ * 64 MB is a Worker bound, not a scanning one: the request body is
+ * buffered to parse the form, and a Worker has 128 MB of memory for
+ * everything. Adobe's own ceiling is higher still (100 MB,
+ * `domain/adobe.ts`), so this is the limit that actually binds.
+ */
+export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+
+/** The limit as a human sees it: "64 MB". */
+export const MAX_UPLOAD_LABEL = `${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`
+
 const BY_MIME: Record<string, SourceKind> = {
   'application/pdf': 'pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
