@@ -12,6 +12,8 @@ import * as migration_20260815_060000_pending_formats from './20260815_060000_pe
 import * as migration_20260815_150000_source_hash from './20260815_150000_source_hash';
 import * as migration_20260819_100000_adobe_export from './20260819_100000_adobe_export';
 import * as migration_20260820_120000_one_pdf_and_plans from './20260820_120000_one_pdf_and_plans';
+import * as migration_20260821_140000_proposed_level from './20260821_140000_proposed_level';
+import * as migration_20260821_170000_collection_order from './20260821_170000_collection_order';
 
 export const migrations = [
   {
@@ -83,5 +85,15 @@ export const migrations = [
     up: migration_20260820_120000_one_pdf_and_plans.up,
     down: migration_20260820_120000_one_pdf_and_plans.down,
     name: '20260820_120000_one_pdf_and_plans'
+  },
+  {
+    up: migration_20260821_140000_proposed_level.up,
+    down: migration_20260821_140000_proposed_level.down,
+    name: '20260821_140000_proposed_level'
+  },
+  {
+    up: migration_20260821_170000_collection_order.up,
+    down: migration_20260821_170000_collection_order.down,
+    name: '20260821_170000_collection_order'
   },
 ];

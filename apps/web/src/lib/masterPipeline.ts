@@ -47,10 +47,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { Payload } from 'payload'
 
 import { exportHasExpired, exportLocaleFor, masterKey, withinSizeLimit } from '../domain/adobe'
-import { needsMasterRun } from '../domain/pipeline'
+import { needsMasterRun, stateWithoutExport } from '../domain/pipeline'
 import {
   type SourceKind,
-  needsConverter,
   needsExport,
   originalArtifact,
   originalKey,
@@ -315,7 +314,7 @@ const CONTENT_TYPES: Record<SourceKind, string> = {
  */
 export async function startNextMaster(
   payload: Payload,
-  credentials: AdobeCredentials,
+  credentials: AdobeCredentials | null,
 ): Promise<boolean> {
   const queued = await payload.find({
     collection: 'books',
@@ -366,7 +365,7 @@ export async function startNextMaster(
   //   epub  → the upload *is* the edition; the book is finished
   //   pdf, published as it stands → likewise finished
   if (!needsExport(kind, plan)) {
-    const state = kind === 'text' ? 'ocr_ready' : needsConverter(kind, plan) ? 'master_ready' : 'ready'
+    const state = stateWithoutExport(kind, plan)
     await payload.update({
       collection: 'books',
       id: book.id,
@@ -383,6 +382,11 @@ export async function startNextMaster(
     })
     return true
   }
+
+  // Only from here on is Adobe involved, so only from here on do the
+  // credentials matter. Checking them any earlier is what stranded
+  // books that never needed Adobe at all.
+  if (!credentials) return false
 
   try {
     const bytes = await artifactBytes(sourceKey)
@@ -553,13 +557,80 @@ export async function advanceRunningMaster(
 export async function advanceMasterPipeline(payload: Payload): Promise<void> {
   try {
     const credentials = await adobeConfig()
-    if (!credentials) return
 
-    if (await advanceRunningMaster(payload, credentials)) return
+    // Credentials gate the *export*, not the tick. A book that needs no
+    // export — an EPUB, a DOCX, a PDF published as it stands — still has
+    // to be filed under itself and marked finished, and returning early
+    // here stranded precisely the books that never needed Adobe.
+    if (credentials && (await advanceRunningMaster(payload, credentials))) return
     await startNextMaster(payload, credentials)
   } catch (error) {
     // See above — the converter's poll must still be answered. This is
     // where an Adobe failure would otherwise vanish without trace.
     logError('masterPipeline: advance', error)
+  }
+}
+
+/**
+ * Finish a book that has nothing to export, without waiting for anyone.
+ *
+ * The pipeline's clock is the converter's poll (see the header), which
+ * is the right answer for work a converter has to do and the wrong one
+ * for work nobody has to do. A PDF published as it stands, or an EPUB
+ * upload, needs no export, no rendering and no converter — and yet it
+ * sat at `queued` until some converter polled, on a deployment where
+ * none was running and none was needed. The book could not be read, not
+ * submitted for review, and not published: "there is nothing to review
+ * yet", about a book whose file was sitting right there.
+ *
+ * So the details form calls this directly. Filing an original is an R2
+ * copy — I/O, not computation — which is exactly the shape of work a
+ * Worker is supposed to do inline.
+ *
+ * Returns true if the book was settled. Never throws: this runs after
+ * the uploader's details have already been saved, and a failure here
+ * must not turn a successful save into an error. The book stays
+ * `queued`, which the pipeline tick will pick up later.
+ */
+export async function settleQueuedBook(
+  payload: Payload,
+  bookId: string | number,
+): Promise<boolean> {
+  try {
+    const book = await payload.findByID({
+      collection: 'books',
+      id: bookId,
+      depth: 0,
+      overrideAccess: true,
+    })
+
+    const conversion = (book.conversion ?? {}) as Record<string, unknown>
+    if (conversion.state !== 'queued') return false
+
+    const kind = readSourceKind(conversion)
+    const plan = resolvePlan(kind, conversion.plan)
+
+    // Anything needing Adobe is left to the tick, which owns the whole
+    // export lifecycle — including the polling and the timeout.
+    if (needsExport(kind, plan)) return false
+    if (typeof conversion.sourceKey !== 'string' || !conversion.sourceKey) return false
+
+    const artifacts = await fileOriginal(payload, book, { conversion, kind })
+    if (artifacts === null) return false
+
+    const state = stateWithoutExport(kind, plan)
+    await payload.update({
+      collection: 'books',
+      id: book.id,
+      data: {
+        conversion: { ...conversion, state, message: null },
+        ...(state === 'ready' ? { status: 'published' as const } : {}),
+      },
+      overrideAccess: true,
+    })
+    return true
+  } catch (error) {
+    logError('masterPipeline: settle queued book', error)
+    return false
   }
 }

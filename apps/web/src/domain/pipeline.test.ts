@@ -24,6 +24,7 @@ import {
   needsMasterRun,
   retryStateFor,
   stateAfterMasterEdit,
+  uploadStep,
 } from './pipeline'
 
 describe('what a converter may claim', () => {
@@ -252,5 +253,37 @@ describe('what a converter is handed', () => {
     for (const state of ['ready', 'draft', 'failed', 'formatting', 'none'] as const) {
       expect(claimFor({ state, sourceKind: 'pdf', existingFormats: [] })).toBeNull()
     }
+  })
+})
+
+describe('which step of the flow a book is standing on', () => {
+  it('starts on Upload while it is still a draft', () => {
+    expect(uploadStep({ state: 'draft' })).toBe(0)
+  })
+
+  it('sits on Process for everything the converter is doing', () => {
+    for (const state of ['queued', 'ocr', 'ocr_ready', 'mastering', 'master_ready', 'formatting'] as const) {
+      expect(uploadStep({ state })).toBe(1)
+    }
+  })
+
+  // A failure belongs to the phase that was running, not to a step of
+  // its own — that is the phase the reader will restart.
+  it('keeps a failure on Process rather than inventing a step', () => {
+    expect(uploadStep({ state: 'failed' })).toBe(1)
+  })
+
+  it('reaches Review once there is something to judge', () => {
+    expect(uploadStep({ state: 'ready' })).toBe(2)
+    expect(uploadStep({ state: 'ready', reviewState: 'submitted' })).toBe(2)
+    expect(uploadStep({ state: 'ready', reviewState: 'rejected' })).toBe(2)
+  })
+
+  // Submitting is optional (CLAUDE.md section 6.2), so a private upload
+  // may sit at Review forever. Lighting Publish for it would claim
+  // something of a book its owner never offered to anyone.
+  it('reaches Publish only on an approved review', () => {
+    expect(uploadStep({ state: 'ready', reviewState: 'approved' })).toBe(3)
+    expect(uploadStep({ state: 'none', reviewState: 'unsubmitted' })).toBe(2)
   })
 })

@@ -15,6 +15,7 @@ import config from '@payload-config'
 import { getPayload, type TypedUser, type Where } from 'payload'
 
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
+import { slugFromParam } from './slugParam'
 
 export async function getCatalog({
   collectionSlug,
@@ -70,11 +71,19 @@ export async function getCatalog({
   return { books: books.docs, collection: collectionSlug ?? null, level }
 }
 
+/**
+ * Every collection, in the order an editor put them in.
+ *
+ * `sortOrder` first, `title` second. The second key is not decoration:
+ * `sortOrder` is nullable, so a collection nobody has moved still lands
+ * in the alphabetical order it has always had rather than in whatever
+ * order the rows happen to come back in.
+ */
 export async function getCollections() {
   const payload = await getPayload({ config })
   const result = await payload.find({
     collection: 'book-collections',
-    sort: 'title',
+    sort: ['sortOrder', 'title'],
     limit: 100,
     depth: 1,
     overrideAccess: false,
@@ -91,12 +100,18 @@ export async function getCollections() {
  * own private upload is filtered out of their own book page and their
  * own reader, which surfaces as a bare 404. Every caller that has a
  * session must hand it over.
+ *
+ * The slug is decoded on the way in, because every caller is a dynamic
+ * route handing over a URL segment and Next does not decode those — see
+ * `slugFromParam`. Decoding here rather than at each of the five call
+ * sites: this is the one function they all pass through, so a route
+ * added later cannot forget.
  */
 export async function getBookBySlug(slug: string, user?: TypedUser | null) {
   const payload = await getPayload({ config })
   const result = await payload.find({
     collection: 'books',
-    where: { slug: { equals: slug } },
+    where: { slug: { equals: slugFromParam(slug) } },
     limit: 1,
     depth: 1,
     overrideAccess: false,

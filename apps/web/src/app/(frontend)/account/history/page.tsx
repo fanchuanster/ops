@@ -120,7 +120,10 @@ export default async function HistoryPage() {
             <li key={entry.key} className={`history__item history__item--${entry.kind}`}>
               <span className="history__kind">{KIND_LABEL[entry.kind]}</span>
               <span className="history__what">
-                {entry.slug ? <a href={`/books/${entry.slug}`}>{entry.title}</a> : entry.title}
+                {/* Back into the book, not to a page about it: history is
+                    a list of books this reader has opened, and the
+                    obvious thing to want from one is to carry on. */}
+                {entry.slug ? <a href={`/read/${entry.slug}`}>{entry.title}</a> : entry.title}
                 <span>{entry.detail}</span>
               </span>
               <time dateTime={entry.at.toISOString()}>{entry.at.toLocaleDateString()}</time>

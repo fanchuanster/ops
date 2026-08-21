@@ -55,6 +55,17 @@ oversight.
   same ledger.
 - **Admin bootstrap** — `npm run create-admin`, for after the first-user screen
   is gone.
+- **The editorial admin** (`/admin`) — the review queue with its decision
+  panel, the library with reading level and shelf set in place, the
+  collections and their order, and the readers. Front-of-site and built to the
+  design, in its own route group with its own shell. Payload's generated admin
+  moved to `/cms` to make room and is still where everything without a screen
+  here is edited. Approving and publishing stay two acts, because
+  `CLAUDE.md` section 6.1 says they are two gates: approval is editorial, the
+  publish consults the rights, and the collection hook refuses either way.
+  Readers are read-only — the design's suspend control has no account state
+  behind it, and a button that only looks like it suspends someone is worse
+  than no button.
 - **Infrastructure as code** — Terraform for R2, D1, DNS and the www redirect.
 - **Converter, partially** — PyMuPDF rendering, PaddleOCR behind a replaceable
   interface, normalization/structure, and python-docx master generation, driven
@@ -101,11 +112,10 @@ oversight.
 - **EPUB validation** — generated EPUBs are well-formed and open, but nothing
   runs epubcheck over them (NR-1 … NR-8).
 
-- **The portal's remaining screens** — submit-for-review, the admin review
-  queue, and per-user upload quotas. One thing to settle first: whether a
-  private upload may be sent to a third-party LLM at all (`CLAUDE.md` section
-  6.1). `allow_third_party_ai` is false everywhere today, so the question is
-  not yet load-bearing.
+- **The portal's remaining screens** — per-user upload quotas. One thing to
+  settle first: whether a private upload may be sent to a third-party LLM at
+  all (`CLAUDE.md` section 6.1). `allow_third_party_ai` is false everywhere
+  today, so the question is not yet load-bearing.
 
   `tools/generate-seed-content.py` still writes the seed library's own
   reproducible artifacts into `content/seed/`.

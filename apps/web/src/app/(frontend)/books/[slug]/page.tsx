@@ -18,13 +18,21 @@ export const dynamic = 'force-dynamic'
 const FORMAT_ORDER = ['epub', 'pdf', 'docx']
 
 /*
-  Labels, not links. A reader should be able to see what a book is
+  Badges, not links. A reader should be able to see what a book is
   available as before signing in — otherwise the page is silent about
-  the thing it is offering.
+  the thing it is offering. The badge is the same `.fmt` chip the drop
+  zone and the My Books list use, so a format is named identically
+  wherever it appears.
 */
-const FORMAT_LABEL: Record<string, string> = {
-  epub: 'EPUB',
-  pdf: 'PDF',
+
+/** Rights, in a reader's words rather than the stored enum. */
+const RIGHTS_LABEL: Record<string, string> = {
+  public_domain: 'Public domain',
+  licensed: 'Licensed',
+  permission_granted: 'Published with permission',
+  user_owned: 'Reader’s own copy',
+  restricted: 'Restricted',
+  unknown: 'Rights unknown',
 }
 
 const LANGUAGE_LABEL: Record<string, string> = {
@@ -109,7 +117,7 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
             <div className="meta">
               {book.language ? <span>{LANGUAGE_LABEL[book.language] ?? book.language}</span> : null}
               {book.pageCount ? <span>{`${book.pageCount} pages`}</span> : null}
-              <span>Rights: {book.rightsStatus.replace(/_/g, ' ')}</span>
+              <span>{RIGHTS_LABEL[book.rightsStatus] ?? book.rightsStatus}</span>
               {/* The price is a property of the book, like its length —
                   visible before signing in, so nobody discovers the cost
                   only after committing to the book. */}
@@ -123,18 +131,20 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
         </header>
 
         <div className="section-head">
-          <h2>Read &amp; send</h2>
+          <h2>Send to a device</h2>
         </div>
 
         {!distributable && !isOwnUpload ? (
           <p className="locked">This book is not available for distribution.</p>
         ) : (
           <div className="book-actions">
-            {readable ? (
-              <a className="book-actions__read" href={`/read/${book.slug}`}>
-                Read online
-              </a>
-            ) : (
+            {/* No "Read online" button. Opening a book *is* reading it —
+                every shelf tile links straight to the reader, and this
+                page is where a reader arrives from inside it to see the
+                rights, the price and how to send it to a device. A
+                button back to the page they came from would be
+                furniture. */}
+            {readable ? null : (
               <span className="locked">No readable edition has been generated yet.</span>
             )}
 
@@ -142,8 +152,8 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
               {artifacts
                 .filter((a) => isKindleDeliverableFormat(a.format))
                 .map((a) => (
-                  <span className="format-tag" key={a.format}>
-                    {FORMAT_LABEL[a.format] ?? a.format}
+                  <span className={`fmt fmt--${a.format}`} key={a.format}>
+                    {a.format}
                   </span>
                 ))}
 

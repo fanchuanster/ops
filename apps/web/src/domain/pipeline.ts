@@ -26,7 +26,12 @@
  */
 
 import type { ArtifactFormat } from './conversion'
-import { type SourceKind, formatsToGenerate } from './publication'
+import {
+  type PublicationPlan,
+  type SourceKind,
+  formatsToGenerate,
+  needsConverter,
+} from './publication'
 
 export const CONVERSION_STATES = [
   'none',
@@ -178,6 +183,26 @@ export function completedState(kind: JobKind): ConversionState {
  * editing the master is possible, and whether phase 2 can be re-run
  * without phase 1.
  */
+/**
+ * Where a book lands when nothing has to be exported to reach a master.
+ *
+ * Three of the four sources need no export, and they do not need the
+ * same thing afterwards:
+ *
+ *   text  → the converter still has to build a master from it
+ *   docx  → the upload *is* the master; phase 2 can start
+ *   epub  → the upload *is* the edition; the book is finished
+ *   pdf, published as it stands → likewise finished
+ *
+ * Stated once, here, because two callers need the same answer: the
+ * pipeline tick, and the details form that settles such a book on the
+ * spot rather than leaving it for a converter that has nothing to do.
+ */
+export function stateWithoutExport(kind: SourceKind, plan: PublicationPlan): ConversionState {
+  if (kind === 'text') return 'ocr_ready'
+  return needsConverter(kind, plan) ? 'master_ready' : 'ready'
+}
+
 export function hasMaster(state: ConversionState): boolean {
   return state === 'master_ready' || state === 'formatting' || state === 'ready'
 }
@@ -263,4 +288,41 @@ export function needsMasterRun({
 }): boolean {
   if (state !== 'queued') return false
   return !exportJob
+}
+
+/** The four steps the design's upload flow shows across the top. */
+export const UPLOAD_STEPS = ['Upload', 'Process', 'Review', 'Publish'] as const
+
+/**
+ * Which of those four steps a book is standing on.
+ *
+ * The design draws this as a wizard, and the wizard is a lie in one
+ * respect worth naming: our flow is not linear. A book can sit at
+ * `Review` forever because submitting is optional, and one that is
+ * never submitted never reaches `Publish` at all. The stepper says
+ * where a book *is*, not where it is going.
+ *
+ * `Publish` therefore means published — an approved review — rather
+ * than "converted and awaiting a decision". Anything else would light
+ * the last step for a private upload that its owner never offered to
+ * anyone.
+ */
+export function uploadStep({
+  state,
+  reviewState,
+}: {
+  state: ConversionState
+  /** `unsubmitted` | `submitted` | `approved` | `rejected`. */
+  reviewState?: string | null
+}): number {
+  if (reviewState === 'approved') return 3
+  if (state === 'draft') return 0
+  // Only these two mean the converter is finished with it. Everything
+  // else is still Process — including `master_ready`, which `isInFlight`
+  // deliberately excludes because *that* question is about a claim
+  // being open, not about work remaining. And including `failed`: a
+  // failure is not a step of its own, it belongs to the phase that was
+  // running, which is the one the reader will restart.
+  if (state === 'ready' || state === 'none') return 2
+  return 1
 }

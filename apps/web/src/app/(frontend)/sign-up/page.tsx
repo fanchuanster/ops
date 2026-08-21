@@ -3,6 +3,7 @@ import React from 'react'
 
 import { AuthForm } from '../../../components/AuthForm'
 import { GoogleSignInButton } from '../../../components/GoogleSignInButton'
+import { SIGNUP_GRANT } from '../../../domain/credits'
 import { getCurrentUser, safeNext } from '../../../lib/auth'
 import { isGoogleSignInConfigured } from '../../../lib/googleOAuth'
 import { signUp } from '../actions/auth'
@@ -23,22 +24,25 @@ export default async function SignUpPage({
 
   return (
     <main className="page auth-page">
+      <p className="eyebrow">Join the library</p>
       <h1>Create an account</h1>
       <p className="auth-page__lede">
-        Free, and always will be. Every book in the public library is cleared for distribution;
-        an account exists so downloads stay fair, not to put a book behind a gate.
+        Free, and always will be. New accounts start with {SIGNUP_GRANT} credits — credits pay
+        only for sending a book to a device. Reading here costs nothing and never will.
       </p>
 
-      {isGoogleSignInConfigured() ? (
-        <>
-          <GoogleSignInButton next={target} label="Continue with Google" />
-          <p className="auth-divider">
-            <span>or</span>
-          </p>
-        </>
-      ) : null}
+      <div className="auth-card">
+        {isGoogleSignInConfigured() ? (
+          <>
+            <GoogleSignInButton next={target} label="Continue with Google" />
+            <p className="auth-divider">
+              <span>or</span>
+            </p>
+          </>
+        ) : null}
 
-      <AuthForm action={signUp} mode="signup" next={target} />
+        <AuthForm action={signUp} mode="signup" next={target} />
+      </div>
 
       <p className="auth-page__alt">
         Already have one? <a href={`/login?next=${encodeURIComponent(target)}`}>Sign in</a>.

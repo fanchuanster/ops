@@ -120,11 +120,25 @@ function restrictiveness(status: RightsStatus): number {
  * other export into an action reference, and a client component that
  * imports one gets a function where it expected data.
  */
+/*
+ * The answers an uploader may give, in the design's order: the ones
+ * that can lead to publication first, the dead ends last.
+ *
+ * The order is the point, and it was inverted until 2026-08-21 —
+ * `user_owned` led the list, which is the one answer here that can
+ * never clear public distribution. Putting the dead end first invites
+ * it, and this is the single question in the flow where a careless
+ * answer costs the uploader the library.
+ *
+ * `licensed` is phrased from the uploader's side, like its neighbours,
+ * and names writing it yourself — which is the common case for that
+ * status and the one `uploaderShare.ts` already prices at 66%.
+ */
 export const UPLOADER_RIGHTS = [
-  { value: 'user_owned', label: 'I own a copy of this book (stays private to me)' },
   { value: 'public_domain', label: 'It is in the public domain' },
+  { value: 'licensed', label: 'I wrote it, or I hold a licence to publish it' },
   { value: 'permission_granted', label: 'I have the rights holder’s permission' },
-  { value: 'licensed', label: 'It is licensed for redistribution' },
+  { value: 'user_owned', label: 'I own a copy of it' },
 ] as const satisfies readonly { value: RightsStatus; label: string }[]
 
 export function isUploaderSelectableRights(value: unknown): value is RightsStatus {
@@ -133,6 +147,48 @@ export function isUploaderSelectableRights(value: unknown): value is RightsStatu
 
 export function isPubliclyDistributable(status: RightsStatus): boolean {
   return PUBLICLY_DISTRIBUTABLE.has(status)
+}
+
+/**
+ * The short name for a rights status, for a reviewer reading a list.
+ *
+ * Deliberately not `UPLOADER_RIGHTS`' labels, which are sentences in
+ * the uploader's own voice ("I own a copy of it") because that is how
+ * the question was put to them. A reviewer is scanning a column, not
+ * answering a question, and wants the noun.
+ */
+export const RIGHTS_LABELS: Record<RightsStatus, string> = {
+  public_domain: 'Public domain',
+  licensed: 'Wrote it, or licensed',
+  permission_granted: 'Rights holder’s permission',
+  user_owned: 'Owns a copy',
+  restricted: 'Restricted',
+  unknown: 'Not sure',
+}
+
+/**
+ * What a rights status means for the reviewer about to decide.
+ *
+ * Three answers, and only one of them is a warning about the
+ * *reviewer's* judgement:
+ *
+ *   ok     — publication is possible; the decision is editorial.
+ *   block  — publication is impossible whatever the reviewer thinks.
+ *            Owning a copy is not the right to publish it, and
+ *            `restricted` says so outright.
+ *   warn   — nobody knows yet. `unknown` is not a refusal, it is an
+ *            unanswered question, and the person who can answer it is
+ *            the uploader rather than the reviewer.
+ *
+ * Derived from `isPubliclyDistributable` rather than restated, so the
+ * badge in the queue cannot come to disagree with the gate that
+ * actually refuses the publish.
+ */
+export type RightsRisk = 'ok' | 'warn' | 'block'
+
+export function rightsRisk(status: RightsStatus): RightsRisk {
+  if (isPubliclyDistributable(status)) return 'ok'
+  return status === 'unknown' ? 'warn' : 'block'
 }
 
 /**

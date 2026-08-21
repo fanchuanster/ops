@@ -86,6 +86,22 @@ export function parseBrowseLevel(value: string | null | undefined): BookLevel {
   return isBookLevel(value) ? value : DEFAULT_BROWSE_LEVEL
 }
 
+/**
+ * A level named by a form field, or null if it named nothing we know.
+ *
+ * Deliberately unlike `parseBrowseLevel` above, which falls back to the
+ * default. That one answers "what should this reader see", where a
+ * silent fallback is the kind thing to do with a stale bookmark. This
+ * one answers "what did the uploader propose", and inventing an answer
+ * there would put a suggestion in their mouth that they never made —
+ * which an administrator would then read as theirs.
+ *
+ * Null is a real answer: no preference, which is most submissions.
+ */
+export function parseProposedLevel(value: unknown): BookLevel | null {
+  return isBookLevel(value) ? value : null
+}
+
 /** Is a book at `bookLevel` shown to a reader browsing at `browseLevel`? */
 export function isVisibleAtLevel(bookLevel: BookLevel, browseLevel: BookLevel): boolean {
   return levelId(bookLevel) <= levelId(browseLevel)

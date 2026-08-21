@@ -1,0 +1,965 @@
+/*
+ * NobleSee — the editorial admin.
+ *
+ * Loaded after the site's own stylesheet, which is where the palette
+ * lives. Nothing here defines a colour the site does not already have,
+ * with one exception noted below: this is the same building, and a
+ * second brown invented here would drift from the first within a month.
+ *
+ * The site is a page and this is a desk. Three things follow from that
+ * and they are the whole difference:
+ *
+ *   1. Sans-serif throughout. The reading-first serif exists so a book
+ *      is pleasant to read at length; a table of two hundred rows is
+ *      not read at length, it is scanned, and a serif at 13px scanned
+ *      is worse than a sans.
+ *   2. A fixed shell that does not scroll. The sidebar and the section
+ *      heading stay put and only the list moves, because an editor
+ *      working a queue loses their place otherwise.
+ *   3. Denser everything. Line-height 1.4 rather than 1.75, and the
+ *      measure cap deliberately absent — a table wants the width.
+ */
+
+:root {
+  /* One step lighter than --paper. The desk's ground has to sit behind
+     white cards without them disappearing into it, and --paper is warm
+     enough that a white card on it reads as a highlight. */
+  --admin-ground: #f9f7f4;
+
+  /* The row a reviewer has open. Between the ground and white, so the
+     selected row is legible without a border that would fight the
+     table's own rules. */
+  --admin-selected: #faf8f4;
+
+  /* Status colours. These *are* new, and deliberately: the site's
+     palette has one confirmation green and no vocabulary at all for
+     "waiting" or "needs work", because no reader-facing screen has
+     ever had to say either. */
+  --admin-wait-bg: #fef3c7;
+  --admin-wait-ink: #92400e;
+  --admin-good-bg: #d1fae5;
+  --admin-good-ink: #065f46;
+  --admin-stop-bg: #fee2e2;
+  --admin-stop-ink: #991b1b;
+}
+
+.admin-body {
+  margin: 0;
+  background: var(--admin-ground);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.admin {
+  display: flex;
+  /* dvh, not vh: on a phone the browser chrome moves and vh does not,
+     which leaves the last table row permanently under the toolbar. */
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+
+.admin-side {
+  width: 14rem;
+  flex-shrink: 0;
+  background: var(--paper-raised);
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-side__head {
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.admin-side__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+
+.admin-side__back:hover {
+  color: var(--ink);
+}
+
+.admin-side__mark {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-side__mark span {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-side__mark strong {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.admin-side__mark em {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.admin-nav {
+  flex: 1;
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow-y: auto;
+}
+
+.admin-nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.admin-nav a:hover {
+  background: var(--admin-ground);
+  color: var(--ink);
+}
+
+.admin-nav a[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.admin-nav a[aria-current='page'] .admin-nav__icon {
+  color: var(--accent);
+}
+
+.admin-nav__icon {
+  display: inline-flex;
+  color: var(--ink-faint);
+}
+
+.admin-nav__count {
+  margin-left: auto;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The way out to the CMS sits apart from the four sections, because it
+   leaves this application. */
+.admin-nav__cms {
+  margin-top: auto;
+  border-top: 1px solid var(--rule-soft);
+  border-radius: 0;
+  padding-top: 1rem;
+  font-size: 0.8125rem;
+}
+
+.admin-nav__cms:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+/* ── Panes ───────────────────────────────────────────────────────── */
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.admin-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.admin-scroll--pad {
+  padding: 1.5rem 2rem 3rem;
+}
+
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.5rem 2rem;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--rule);
+}
+
+.admin-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.admin-head p {
+  margin: 0.125rem 0 0;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.admin-empty {
+  margin: 3rem auto;
+  max-width: 32rem;
+  padding: 0 2rem;
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+.admin-ok {
+  margin: 0.5rem 0 0;
+  color: var(--done);
+  font-size: 0.8125rem;
+}
+
+.admin-quiet {
+  color: var(--ink-faint);
+}
+
+/* ── Filters ─────────────────────────────────────────────────────── */
+
+.admin-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-filters input,
+.admin-filters select,
+.admin-shelf select {
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.3125rem 0.75rem;
+}
+
+.admin-filters input {
+  width: 9rem;
+}
+
+.admin-filters input:focus-visible,
+.admin-filters select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.admin-chip:hover {
+  color: var(--ink);
+}
+
+.admin-chip[aria-current='true'] {
+  background: var(--paper);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+/* ── Table ───────────────────────────────────────────────────────── */
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.admin-table thead tr {
+  background: var(--admin-ground);
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.admin-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--admin-ground);
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.admin-table th:first-child,
+.admin-table td:first-child {
+  padding-left: 2rem;
+}
+
+.admin-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--rule-soft);
+  background: var(--paper-raised);
+  vertical-align: middle;
+}
+
+.admin-num {
+  text-align: right;
+}
+
+/* The stretched link: one link per row that a keyboard can tab to,
+   with a hit area covering the row. `position: relative` on the row is
+   what anchors it. */
+.admin-table tbody tr {
+  position: relative;
+}
+
+.admin-table tbody tr:hover td {
+  background: var(--admin-ground);
+}
+
+.admin-row[data-selected='true'] td {
+  background: var(--admin-selected);
+}
+
+.admin-rowlink {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.admin-row .admin-rowlink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.admin-rowlink:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+/* Anything interactive inside a row has to sit above the stretched
+   link, or the link swallows the click. */
+.admin-level,
+.admin-shelf {
+  position: relative;
+  z-index: 1;
+}
+
+.admin-bookcell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.admin-bookcell em {
+  display: block;
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+/* The same face the shelves use, at list size: the first character of
+   the original-script title on the band ground. */
+.admin-face {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2.75rem;
+  border-radius: 0.375rem;
+  background: var(--paper-band);
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-avatar {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--paper-band);
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Status and rights ───────────────────────────────────────────── */
+
+.admin-chip-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.admin-chip-status--submitted {
+  background: var(--admin-wait-bg);
+  color: var(--admin-wait-ink);
+}
+
+.admin-chip-status--approved {
+  background: var(--admin-good-bg);
+  color: var(--admin-good-ink);
+}
+
+.admin-chip-status--rejected {
+  background: var(--admin-stop-bg);
+  color: var(--admin-stop-ink);
+}
+
+.admin-chip-status--unsubmitted {
+  background: var(--rule-soft);
+  color: var(--ink-soft);
+}
+
+.admin-rights {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.admin-rights--ok {
+  color: var(--admin-good-ink);
+}
+
+.admin-rights--warn {
+  color: var(--admin-wait-ink);
+}
+
+.admin-rights--block {
+  color: var(--admin-stop-ink);
+}
+
+/* The block case earns a mark of its own. Colour alone would say
+   nothing to a reviewer who cannot see it, and this is the one row
+   state that changes what they are allowed to do. */
+.admin-rights--block::after {
+  content: ' ⚠';
+}
+
+/* ── Detail panel ────────────────────────────────────────────────── */
+
+.admin-panel {
+  width: 21rem;
+  flex-shrink: 0;
+  background: var(--paper-raised);
+  border-left: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.admin-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.admin-panel__head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.admin-panel__kind {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.admin-panel__author {
+  margin: 0.125rem 0 0;
+  color: var(--ink-soft);
+}
+
+.admin-panel__close {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  line-height: 0;
+  padding: 0.25rem;
+}
+
+.admin-panel__close:hover {
+  color: var(--ink);
+}
+
+.admin-panel__body {
+  padding: 1.25rem 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.admin-panel__body h3 {
+  margin: 0 0 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.admin-panel__body p {
+  margin: 0 0 0.125rem;
+}
+
+.admin-note {
+  border-radius: var(--radius-control);
+  padding: 0.75rem 1rem;
+}
+
+.admin-note p {
+  margin: 0.375rem 0 0;
+  font-size: 0.8125rem;
+  opacity: 0.85;
+}
+
+.admin-note--ok {
+  background: var(--done-soft);
+  color: var(--admin-good-ink);
+}
+
+.admin-note--warn {
+  background: #fffbeb;
+  color: var(--admin-wait-ink);
+}
+
+.admin-note--block {
+  background: #fff1f2;
+  color: var(--admin-stop-ink);
+}
+
+.admin-read {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-read:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Decision ────────────────────────────────────────────────────── */
+
+.admin-decision textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  padding: 0.5rem 0.75rem;
+  resize: vertical;
+}
+
+.admin-decision textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.admin-decision__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-decision__publish {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.admin-decision__publish p {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+}
+
+.admin-decision__state {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.admin-btn {
+  width: 100%;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.625rem 1rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.admin-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.admin-btn--approve {
+  background: var(--done);
+  color: #fff;
+}
+
+.admin-btn--publish {
+  background: var(--accent);
+  color: #fff;
+}
+
+.admin-btn--quiet {
+  background: var(--paper-raised);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+.admin-btn--quiet:hover:not(:disabled) {
+  border-color: var(--ink-faint);
+}
+
+.admin-btn--small {
+  width: auto;
+  font-size: 0.75rem;
+  padding: 0.3125rem 0.875rem;
+  background: var(--accent);
+  color: #fff;
+}
+
+.admin-linkbtn {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.admin-linkbtn:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* ── Level pills ─────────────────────────────────────────────────── */
+
+.admin-level {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.admin-level__pill {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--paper-raised);
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.admin-level__pill:hover:not(:disabled) {
+  border-color: var(--ink-faint);
+  color: var(--ink);
+}
+
+.admin-level__pill[data-on='true'] {
+  border-color: transparent;
+}
+
+.admin-level__pill--essential[data-on='true'] {
+  background: #ede9d5;
+  color: #5c4010;
+}
+
+.admin-level__pill--normal[data-on='true'] {
+  background: #e8eff8;
+  color: #1e3a5f;
+}
+
+.admin-level__pill--extensive[data-on='true'] {
+  background: #ede8f5;
+  color: #4c2e80;
+}
+
+.admin-shelf select {
+  max-width: 12rem;
+  border-radius: var(--radius-control);
+  font-size: 0.75rem;
+}
+
+.admin-shelf__error {
+  display: block;
+  color: #b3261e;
+  font-size: 0.6875rem;
+}
+
+/* ── Collection cards ────────────────────────────────────────────── */
+
+.admin-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 48rem;
+}
+
+.admin-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-card);
+  padding: 1.25rem 1.5rem;
+  text-align: left;
+}
+
+.admin-card__move {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.admin-card__move button {
+  background: none;
+  border: 0;
+  padding: 0;
+  line-height: 0;
+  color: var(--rule);
+  cursor: pointer;
+}
+
+.admin-card__move button:hover:not(:disabled) {
+  color: var(--ink-soft);
+}
+
+.admin-card__move button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.admin-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-card__title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.admin-card__title .admin-quiet {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.admin-card__desc {
+  margin: 0.25rem 0 0;
+  color: var(--ink-soft);
+}
+
+.admin-card__edit,
+.admin-card--new {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-card__edit input,
+.admin-card--new input {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  padding: 0.375rem 0.75rem;
+  width: 100%;
+}
+
+.admin-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.admin-card__edittoggle {
+  flex-shrink: 0;
+}
+
+.admin-card--add {
+  justify-content: flex-start;
+  border-style: dashed;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 1rem 1.5rem;
+}
+
+.admin-card--add:hover {
+  border-color: var(--accent-muted);
+  color: var(--ink);
+}
+
+.admin-card--new {
+  border-style: dashed;
+}
+
+/* ── Narrow ──────────────────────────────────────────────────────── */
+
+/*
+ * The admin is a desk and a desk is not a phone, but an editor stuck
+ * with a tablet on a train should still be able to work the queue. The
+ * shell unstacks rather than trying to keep a 14rem sidebar and a 21rem
+ * panel beside a table on a 40rem screen.
+ */
+@media (max-width: 60rem) {
+  .admin {
+    flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .admin-side {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-x: auto;
+  }
+
+  .admin-nav__cms {
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0.625rem;
+  }
+
+  .admin-split {
+    flex-direction: column;
+  }
+
+  .admin-panel {
+    width: auto;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .admin-scroll {
+    overflow-y: visible;
+  }
+
+  /* A table with sticky headings inside a page that scrolls as a whole
+     pins them to the viewport top, over the section heading. */
+  .admin-table th {
+    position: static;
+  }
+
+  .admin-table th:first-child,
+  .admin-table td:first-child {
+    padding-left: 1rem;
+  }
+
+  .admin-head,
+  .admin-scroll--pad {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Columns the design drops as the table narrows. Same breakpoints it
+   uses (Tailwind's md and lg), stated once here rather than as a class
+   on every cell. */
+@media (max-width: 64rem) {
+  .admin-col--lg {
+    display: none;
+  }
+}
+
+@media (max-width: 48rem) {
+  .admin-col--md {
+    display: none;
+  }
+}

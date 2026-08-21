@@ -51,7 +51,11 @@ cd apps/web
 ```
 
 - Site: http://localhost:8787
-- Admin: http://localhost:8787/admin (create the first user on first visit)
+- Admin: http://localhost:8787/admin — the editorial UI: review queue, library,
+  collections, readers. Administrators only.
+- CMS: http://localhost:8787/cms — Payload's generated admin, for everything the
+  editorial UI has no screen for (media, ledgers, entitlements). Create the
+  first user here on first visit.
 - Health: http://localhost:8787/health — checks D1, not just the process
 
 Migrations are explicit and versioned in `apps/web/src/migrations`; the adapter

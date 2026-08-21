@@ -16,33 +16,67 @@
  * until 2026-08-14; it is gone, and with it the pre-paint script that
  * replayed the choice before first render. These books are set on paper
  * and read like paper.
+ *
+ * The values below are the Figma palette (2026-08-21). Lora and Inter
+ * come from that design too, but they are named *after* the CJK faces,
+ * not before: neither has a single Han glyph, so a Lora-first stack
+ * would hand 論語 back to whatever UI font the system picks — exactly
+ * the failure rule 1 exists to prevent. Lora sets the Latin headings,
+ * Noto Serif TC sets everything Chinese, and the cascade sorts it out
+ * per glyph.
  */
 
+@import url("https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap");
+
 :root {
-  --paper: #fbf9f4;
+  --paper: #f2ede3;
   --paper-raised: #ffffff;
+
+  /* A second ground, one step darker than the page, for a full-bleed
+     band that has to separate itself from the paper without becoming a
+     card. Only the "how it works" strip uses it. */
+  --paper-band: #eae3d6;
+
   --ink: #23201b;
   --ink-soft: #5c564c;
   --ink-faint: #8b8477;
   --rule: #e3ddd0;
-  --accent: #7a5c2e;
-  --accent-soft: #f0e7d6;
+  --rule-soft: #efe9dd;
+  --accent: #7a5520;
+  --accent-muted: #a07840;
+  --accent-soft: #f0ebe0;
 
   /* Confirmation green. Deliberately its own token rather than reusing
      the accent: "done" is a different thing from "this is the action",
      and the accent is already the reading-brown the site is built on. */
-  --done: #3f6b38;
-  --done-soft: #e6f1e2;
-  --done-rule: #a9c9a1;
+  --done: #5a8c5a;
+  --done-soft: #eef5ee;
+  --done-rule: #bcd6bc;
 
   --font-serif: "Noto Serif TC", "Source Han Serif TC", "Songti TC", Songti SC,
-    "SimSun", Georgia, "Times New Roman", serif;
-  --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    "SimSun", Lora, Georgia, "Times New Roman", serif;
+  --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", Inter,
     system-ui, -apple-system, "Segoe UI", sans-serif;
 
+  /* Latin-first, for the display headings the Figma sets in Lora. Still
+     ends in the CJK faces, so a mixed title never loses its Han. */
+  --font-display: Lora, Georgia, "Noto Serif TC", "Source Han Serif TC", serif;
+
   --measure: 34rem;
-  --page: 68rem;
+
+  /* The design's `max-w-5xl`. It was 68rem until 2026-08-21, which ran
+     every page four rems wider than the Figma sets them. */
+  --page: 64rem;
   --radius: 3px;
+
+  /* The design rounds cards far more than the 3px the text UI uses. Its
+     own token, so a card and a button do not have to share a radius. */
+  --radius-card: 1rem;
+
+  /* And form controls sit between the two: the design rounds every
+     input, select and boxed control to 8px. Its own token for the same
+     reason — a text field is neither a card nor a rule. */
+  --radius-control: 0.5rem;
 }
 
 * {
@@ -93,29 +127,54 @@ h3 {
   padding: 0 1.5rem;
 }
 
+/*
+ * Sticky, translucent, and blurred over whatever scrolls under it. The
+ * blur is the reason the background is rgba rather than a token: a
+ * solid --paper would be indistinguishable from the page and the bar
+ * would vanish the moment it stopped having a shadow.
+ */
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   border-bottom: 1px solid var(--rule);
-  background: var(--paper);
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .site-header__inner {
   max-width: var(--page);
   margin: 0 auto;
-  padding: 1.25rem 1.5rem;
+  padding: 0 1.5rem;
+  min-height: 3.5rem;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 1.5rem;
 }
 
 .wordmark {
-  font-size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
   font-weight: 600;
   text-decoration: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .wordmark span {
   color: var(--accent);
+}
+
+/* The mark keeps its designed geometry: an 18px box on a 20-unit
+   viewBox, never scaled by a descendant rule. */
+.wordmark svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: block;
 }
 
 .site-nav {
@@ -132,17 +191,154 @@ h3 {
   color: var(--ink-soft);
 }
 
+/* The accent rule under the current page. An inset shadow rather than
+   a border, so the link does not move by a pixel when it becomes the
+   current one. */
+.site-nav a[aria-current='page'],
+.site-nav__panel a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: inset 0 -1px 0 0 var(--accent);
+}
+
 .site-nav a:hover {
   color: var(--ink);
 }
 
+/* The one nav item that reads as an action rather than a destination. */
+.site-nav__signin {
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.3rem 0.95rem;
+  color: var(--ink);
+}
+
+.site-nav__signin:hover {
+  border-color: var(--ink-faint);
+}
+
+/*
+ * The hamburger, and the panel it opens.
+ *
+ * Both exist at every width and are swapped by the 48rem query below,
+ * rather than being mounted and unmounted — a menu that unmounts on
+ * resize loses its open state, and the header is one component for both
+ * layouts.
+ */
+.site-nav__toggle {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0.4rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.site-nav__toggle:hover {
+  color: var(--ink);
+}
+
+.site-nav__panel {
+  display: none;
+  border-top: 1px solid var(--rule-soft);
+  background: var(--paper-raised);
+  padding: 1rem 1.5rem 1.25rem;
+  flex-direction: column;
+  gap: 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+}
+
+.site-nav__panel a {
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 48rem) {
+  .site-nav {
+    display: none;
+  }
+
+  .site-nav__toggle {
+    display: block;
+  }
+
+  .site-nav__panel[data-open='true'] {
+    display: flex;
+  }
+}
+
+/*
+ * The signed-in reader's own face in the header.
+ *
+ * `.account-link` had no rules at all until the header was rebuilt —
+ * left behind when the account dropdown became a plain link and the
+ * `.account-menu` styles below stopped being reachable from here.
+ */
+.account-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.2rem 0.2rem 0.2rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+
+.account-link:hover {
+  color: var(--ink);
+}
+
+.account-link__name {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* In the narrow panel the name has room, so it comes back. */
+@media (max-width: 30rem) {
+  .site-nav .account-link__name {
+    display: none;
+  }
+}
+
+/*
+ * One row: the mark, the links, the copyright — which is all the design
+ * puts here. It carried two paragraphs of prose above this bar until
+ * 2026-08-21; the design says what those paragraphs said on the About
+ * page instead, where someone is actually reading.
+ */
 .site-footer {
   border-top: 1px solid var(--rule);
   margin-top: 5rem;
-  padding: 2.5rem 0 4rem;
+  padding: 2rem 0;
+  background: var(--paper-raised);
   color: var(--ink-faint);
   font-family: var(--font-sans);
   font-size: 0.8125rem;
+}
+
+.site-footer__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+/* The wordmark, a size down from the header's. */
+.site-footer .wordmark {
+  font-size: 0.875rem;
+}
+
+.site-footer__note {
+  margin: 0;
 }
 
 .button-quiet {
@@ -327,6 +523,16 @@ h3 {
 
 /* --- account area ------------------------------------------------- */
 
+/*
+ * The account area. It sat flush under the site header until
+ * 2026-08-21; the design gives every page air above its first line, and
+ * on this one the first line is your own name.
+ */
+.account {
+  padding-top: 2.75rem;
+  padding-bottom: 4rem;
+}
+
 .account__body {
   display: grid;
   grid-template-columns: 15rem 1fr;
@@ -412,10 +618,18 @@ h3 {
   letter-spacing: 0.08em;
 }
 
+/* The account of how a balance got where it is, on the same card the
+   history timeline uses. `separate` rather than `collapse` so the
+   card's corners actually clip the first and last rows. */
 .ledger {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin: 1.5rem 0;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
+  overflow: hidden;
   font-family: var(--font-sans);
   font-size: 0.8125rem;
 }
@@ -423,8 +637,12 @@ h3 {
 .ledger th,
 .ledger td {
   text-align: left;
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--rule);
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.ledger tr:last-child td {
+  border-bottom: none;
 }
 
 .ledger th {
@@ -442,10 +660,26 @@ h3 {
 
 /* --- history ------------------------------------------------------ */
 
+/*
+ * One card holding the whole timeline, rather than a card per entry.
+ *
+ * The opposite call from `.my-books`, and for a reason: a history has
+ * a hundred rows and they are read as a sequence, so carding each one
+ * would turn scanning down a column of dates into stepping over a
+ * hundred separate objects. My Books has five rows and each is a thing
+ * you act on.
+ */
 .history {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.25rem 1.25rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
+}
+
+.history__item:last-child {
+  border-bottom: none;
 }
 
 .history__item {
@@ -510,13 +744,30 @@ h3 {
   padding: 0;
 }
 
+/*
+ * A row per book, each on its own card.
+ *
+ * They were rule-separated rows in one block until 2026-08-21. The
+ * design makes each an object you can point at — which is what they
+ * are: every row is a book with its own state, its own actions and its
+ * own page, and a shared block of rules said they were lines in a
+ * table.
+ */
+.my-books {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
 .my-books__item {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--rule);
+  padding: 1.1rem 1.25rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
 }
 
 .my-books__item h3 {
@@ -564,25 +815,196 @@ h3 {
   color: var(--accent);
 }
 
+/* --- the conversion flow ------------------------------------------ */
+
+/* The flow's own title, above the stepper: what you are doing, and to
+   what. The design sets it once and keeps it on every screen. */
+.wizard-head {
+  margin-bottom: 1.5rem;
+}
+
+.wizard-head h2 {
+  margin: 0 0 0.15rem;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.wizard-head p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-faint);
+}
+
+/* The card's own heading, what it accepts, and the month's allowance —
+   the three things the design puts above the drop zone, ruled off from
+   it. */
+.upload-form__head {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.upload-form__head h3 {
+  margin: 0 0 0.25rem;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+}
+
+.upload-form__head p {
+  margin: 0 0 0.35rem;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.upload-form__head p:last-child {
+  margin-bottom: 0;
+}
+
+/* The heading of the step you are on, inside the flow. */
+.wizard-step-head {
+  margin-bottom: 0.25rem;
+}
+
+.wizard-step-head h3 {
+  margin: 0 0 0.15rem;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+}
+
+.wizard-step-head p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-faint);
+}
+
+/* --- where you are in the flow ------------------------------------ */
+
+/*
+ * Four steps with a rule running between them, as the design draws it.
+ *
+ * The connector is a child of each step rather than a separate element
+ * between them, so the list stays four items long — which is what it
+ * is, and what a screen reader should hear.
+ */
+.stepper {
+  display: flex;
+  align-items: flex-start;
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+  font-family: var(--font-sans);
+}
+
+.stepper__step {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  gap: 0;
+}
+
+.stepper__step:last-child {
+  flex: 0 0 auto;
+}
+
+.stepper__mark {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--rule);
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.stepper__step--done .stepper__mark,
+.stepper__step--current .stepper__mark {
+  background: var(--accent);
+  color: var(--paper-raised);
+}
+
+/* Under its own mark, not in the row: the label belongs to the circle,
+   and the connector has to run between the circles rather than around
+   the text. Absolute so a long label cannot widen the step. */
+.stepper__label {
+  position: absolute;
+  margin-top: 2.35rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.stepper__step--current .stepper__label {
+  color: var(--accent);
+}
+
+.stepper__step {
+  position: relative;
+}
+
+.stepper__line {
+  flex: 1;
+  height: 1px;
+  margin: 1rem 0.5rem 0;
+  background: var(--rule);
+}
+
+.stepper__step--done .stepper__line {
+  background: var(--accent);
+}
+
+/* The labels sit below the row, so the block needs room for them. */
+.stepper {
+  padding-bottom: 1.5rem;
+}
+
 /* --- upload form -------------------------------------------------- */
 
+/*
+ * The portal's forms — choosing a file, and confirming what we read out
+ * of it — on the design's white card. Both are a step in a flow rather
+ * than a field or two appended to a page, and the card is what says so.
+ */
 .upload-form {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  max-width: 32rem;
+  max-width: 34rem;
   margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
   font-family: var(--font-sans);
 }
 
-.upload-form label {
+/*
+ * A field: its label above its control.
+ *
+ * Excluding `.plan-card`, which is also a `label` in this form and is
+ * not a field — it is a card you choose between. Both of these rules
+ * out-specify the card's own, so without the exclusion the card became
+ * a stretch-aligned flex column: its "Recommended" pill stretched into
+ * a full-width band, and this rule's colour repainted the pill's text
+ * to the same ink as the card, leaving an unreadable accent bar.
+ */
+.upload-form label:not(.plan-card) {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.875rem;
 }
 
-.upload-form label > span {
+.upload-form label:not(.plan-card) > span {
   color: var(--ink-soft);
   font-weight: 600;
 }
@@ -595,42 +1017,43 @@ h3 {
 .upload-form textarea {
   font: inherit;
   font-family: var(--font-serif);
-  padding: 0.5rem 0.6rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--rule);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   background: var(--paper-raised);
   color: var(--ink);
   resize: vertical;
 }
 
-/* Two ways out of the summary form. The private one reads as the
-   primary because keeping your own book to yourself is the normal
-   case, not the lesser one. */
+/*
+ * The row a form ends on. It held two buttons side by side — "convert
+ * privately" and "convert and submit for review" — and styled the first
+ * of them as the primary. Submitting moved to the finished book, so
+ * there is one button here now, and the rule that painted it pale was
+ * silently overriding `.cta`: it out-specifies the class, so the
+ * design's filled accent pill was rendering as a soft outline
+ * everywhere in the portal. Removed rather than rewritten, because
+ * `.cta` already says what a primary action looks like.
+ */
 .upload-form__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-.upload-form__actions button:first-child {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
 .upload-form input[type='text'],
 .upload-form select {
   font: inherit;
-  padding: 0.45rem 0.6rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--rule);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   background: var(--paper-raised);
   color: var(--ink);
 }
 
 .upload-form__collections {
   border: 1px solid var(--rule);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   padding: 0.85rem 1rem;
 }
 
@@ -648,7 +1071,16 @@ h3 {
   margin-top: 0.6rem;
 }
 
-.upload-form__check {
+/*
+ * A checkbox beside its label, not above it.
+ *
+ * Qualified with `label` to out-specify the field rule above, which is
+ * `.upload-form label:not(.plan-card)` and stacks its children in a
+ * column. Unqualified this rule has lost that fight since the class
+ * existed, and every collection checkbox has been sitting on its own
+ * line above its name.
+ */
+.upload-form label.upload-form__check {
   flex-direction: row;
   align-items: center;
   gap: 0.4rem;
@@ -656,10 +1088,22 @@ h3 {
 
 /* --- managing your own upload ------------------------------------- */
 
+/*
+ * The sections of a book's own page — what to do with it, where it is
+ * in the pipeline, its master, and whether to submit it.
+ *
+ * Each is a card. They were separated by a top rule until 2026-08-21,
+ * which read as one continuous document; they are not one document.
+ * Each answers a different question and several of them appear and
+ * disappear as the book moves, so a rule between two of them said
+ * something different depending on which happened to be showing.
+ */
 .book-manage {
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
 }
 
 .book-manage h3 {
@@ -711,14 +1155,11 @@ h3 {
 /* --- the conversion pipeline -------------------------------------- */
 
 .pipeline {
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
-}
-
-.pipeline h3 {
-  margin: 0 0 1rem;
-  font-size: 1rem;
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
 }
 
 .pipeline__stages {
@@ -788,9 +1229,11 @@ h3 {
 }
 
 .submit-review {
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
 }
 
 .submit-review h3 {
@@ -801,9 +1244,11 @@ h3 {
 /* --- a draft's master file ---------------------------------------- */
 
 .master {
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
 }
 
 .master h3 {
@@ -855,20 +1300,33 @@ h3 {
   border-bottom: 1px solid var(--rule);
 }
 
+/*
+ * Reading is the primary action on every page that offers a book, so it
+ * gets the design's primary control: the filled accent pill, the same
+ * one the homepage uses to send a reader into the library. It was a
+ * pale bordered rectangle until 2026-08-21, which read as the peer of
+ * the format badges beside it — and it is not their peer. Sending a
+ * book to a device costs credits; reading it here never does.
+ *
+ * A shade smaller than `.cta` because it sits in a row with metadata
+ * rather than at the end of a section of prose.
+ */
 .book-actions__read {
-  border: 1px solid var(--accent);
-  background: var(--accent-soft);
-  border-radius: var(--radius);
-  padding: 0.4rem 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--accent);
+  padding: 0.5rem 1.25rem;
   text-decoration: none;
   font-family: var(--font-sans);
   font-size: 0.9375rem;
-  color: var(--ink);
+  font-weight: 600;
+  color: var(--paper-raised);
 }
 
 .book-actions__read:hover {
-  background: var(--accent);
-  color: var(--paper);
+  opacity: 0.9;
 }
 
 /* The price reads as a fact about the book, like its page count. */
@@ -877,11 +1335,17 @@ h3 {
 }
 
 /* The same identity block, on the account page itself. */
+/* Who you are and what you have, on the design's white card — the
+   same one the shelves and the forms use. */
 .account-identity {
   display: flex;
   align-items: center;
   gap: 1rem;
   margin: 0 0 2rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
 }
 
 .account-identity div {
@@ -904,20 +1368,392 @@ h3 {
 
 /* --- home -------------------------------------------------------- */
 
+/*
+ * The small uppercase line above a heading. Used often enough across
+ * the homepage bands to be worth a name, and it is always sans — it is
+ * a label, not prose.
+ */
+.eyebrow {
+  margin: 0 0 1.1rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
 .hero {
-  padding: 4.5rem 0 3rem;
-  max-width: var(--measure);
+  padding: 3.5rem 0 2.5rem;
+}
+
+.hero__lede {
+  max-width: 38rem;
 }
 
 .hero h1 {
-  font-size: clamp(2rem, 5vw, 2.75rem);
-  margin: 0 0 1rem;
+  font-family: var(--font-display);
+  font-size: clamp(2.125rem, 6vw, 3.5rem);
+  line-height: 1.15;
+  margin: 0 0 1.25rem;
 }
 
 .hero p {
   color: var(--ink-soft);
-  font-size: 1.125rem;
-  margin: 0 0 1.5rem;
+  font-size: 1.0625rem;
+  margin: 0 0 2rem;
+  max-width: var(--measure);
+}
+
+
+/* The pill the design uses for its primary calls to action. */
+/* The design breaks the headline in three deliberate places, and only
+   where there is room for them — below 40rem it sets as one wrapped
+   paragraph. */
+.hero__break {
+  display: none;
+}
+
+@media (min-width: 40rem) {
+  .hero__break {
+    display: block;
+  }
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.8rem 1.6rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--paper-raised);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cta:hover {
+  opacity: 0.9;
+}
+
+/* Sized to sit on a heading row rather than at the end of a section of
+   prose, where `.cta`'s full padding would tower over the heading. */
+.cta--compact {
+  padding: 0.45rem 1.1rem;
+}
+
+.cta--onaccent {
+  background: var(--paper-raised);
+  color: var(--accent);
+}
+
+/* --- the library, grouped by collection --------------------------- */
+
+/*
+ * The shelves stack; each one's rail scrolls sideways on its own. The
+ * negative margin is what lets a rail run to the viewport edge from
+ * inside a `.page` container, and `.shelf__books` pays the padding back
+ * so the first tile still lines up with the heading above it.
+ */
+.shelves {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.shelves .shelf__books {
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+}
+
+@media (min-width: 40rem) {
+  .shelves {
+    gap: 3.5rem;
+  }
+}
+
+/* The collection name, with a rule running out to the right of it. */
+.shelf__head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.shelf__head a,
+.shelf__head span {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shelf__head a:hover {
+  color: var(--ink);
+}
+
+.shelf__rule {
+  flex: 1;
+  border-top: 1px solid var(--rule);
+}
+
+/*
+ * Two columns of horizontal cards on a laptop, one on a phone.
+ *
+ * Exactly two, which is what the design specifies. It was `auto-fill`
+ * with a 20rem floor until 2026-08-21, on the argument that one rule
+ * covered every width; at the page's 65rem of content that yields
+ * three tracks, so a shelf holding one or two books left a third of
+ * the row empty and its cards narrower than the shelf above. A shelf
+ * with a single book on it looked like a mistake.
+ */
+.shelf__books {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 40rem) {
+  .shelf__books {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* --- chips -------------------------------------------------------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.chip:hover {
+  border-color: var(--ink-faint);
+  color: var(--ink);
+}
+
+/* The collection you are looking at. Same treatment the level filter
+   uses, so "which of these am I on" reads identically in both rows. */
+.chip[aria-current="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.chip--quiet {
+  background: none;
+  border-style: dashed;
+  color: var(--ink-faint);
+}
+
+/* --- full-bleed bands --------------------------------------------- */
+
+/*
+ * A band spans the viewport while its contents stay on the page grid,
+ * so it has to sit outside `.page` in the markup and re-apply the
+ * padding inside itself. `.band__inner` is that inner page.
+ */
+.band {
+  width: 100%;
+  padding: 3rem 0;
+  margin-top: 3.5rem;
+}
+
+.band--tint {
+  background: var(--paper-band);
+}
+
+.band--accent {
+  background: var(--accent);
+  color: var(--paper-raised);
+}
+
+.band--accent .eyebrow {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.band--accent h2 {
+  color: var(--paper-raised);
+}
+
+.band--accent p {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.band__inner {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.band__inner > h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  margin: 0 0 2rem;
+}
+
+.band__lede {
+  max-width: 34rem;
+}
+
+.band__lede h2 {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  margin: 0 0 0.75rem;
+}
+
+.band__lede p {
+  margin: 0 0 1.75rem;
+}
+
+/* The numbered "how it works" columns. */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: 2rem 1.75rem;
+}
+
+.steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.steps__num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.steps h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.steps p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+/* --- the "share a book" invitation -------------------------------- */
+
+/* The design's share CTA sits well clear of the last shelf. */
+.shelves__foot {
+  margin-top: 3.5rem;
+}
+
+.invite__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 3rem 0 0;
+  padding: 2rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
+}
+
+.invite > div {
+  flex: 1 1 18rem;
+}
+
+.invite h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+}
+
+.invite p {
+  margin: 0.4rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+}
+
+/* Full width on a phone, where a right-aligned pill next to wrapped
+   text reads as an orphan. */
+@media (max-width: 40rem) {
+  .invite .cta {
+    width: 100%;
+  }
+}
+
+/*
+ * The heading a standalone page leads with — Library, About.
+ *
+ * Distinct from `.section-head`, which labels a band *within* a page
+ * and is therefore set small, uppercase and in the sans face. This one
+ * is the page's own title, so it is the display serif at something
+ * under the homepage hero: a hero announces the product, a page title
+ * only says where you are.
+ */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding-top: 3.5rem;
+  margin-bottom: 2.25rem;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 4.5vw, 2.5rem);
+  line-height: 1.15;
+}
+
+.page-head__note {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink-faint);
+}
+
+/* A panel opens on its own heading, so the 3rem that separates one
+   section from the next would only push it away from the card above. */
+.account__panel > .section-head:first-child {
+  margin-top: 0;
 }
 
 .section-head {
@@ -940,7 +1776,16 @@ h3 {
   color: var(--ink-soft);
 }
 
-.section-head a {
+/*
+ * The quiet link at the right of a section heading — "All books →".
+ *
+ * Excluding `.cta` deliberately. A heading row sometimes carries a real
+ * action rather than a link, and a bare `.section-head a` out-specifies
+ * the class, so a pill dropped in here came out with accent text on an
+ * accent fill: an invisible button. The same collision `.upload-form__
+ * actions button:first-child` was making, so the fix is the same shape.
+ */
+.section-head a:not(.cta) {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   color: var(--ink-soft);
@@ -950,20 +1795,12 @@ h3 {
 
 /* --- catalog ----------------------------------------------------- */
 
-.book-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-  gap: 2.5rem 1.75rem;
-}
-
-.book-card a {
-  text-decoration: none;
-  display: block;
-}
-
+/*
+ * The cover block on a book's own page, where a 2:3 portrait has room
+ * to be large. The shelves use `.tile__face`, which is the same shape
+ * at shelf size; this one is not shared with it because the book page
+ * wants a border and a bigger fallback than a shelf tile does.
+ */
 .book-card__cover {
   aspect-ratio: 2 / 3;
   background: var(--accent-soft);
@@ -990,19 +1827,6 @@ h3 {
   text-align: center;
   color: var(--accent);
   line-height: 1.4;
-}
-
-.book-card h3 {
-  margin: 0 0 0.2rem;
-  font-size: 1.0625rem;
-  font-weight: 600;
-}
-
-.book-card p {
-  margin: 0;
-  color: var(--ink-faint);
-  font-size: 0.875rem;
-  font-family: var(--font-sans);
 }
 
 .filters {
@@ -1136,27 +1960,22 @@ h3 {
   min-width: 3.5rem;
 }
 
+/*
+ * What a book is available as, beside the button that sends it.
+ *
+ * A bare flex row and nothing more. It used to draw a bordered box
+ * around every `a` and `span` inside it, from when the formats were
+ * download links; they are `.fmt` badges now, and that rule
+ * out-specified the badge — so a PDF and an EPUB came out the same
+ * grey, in a row whose whole job is telling them apart.
+ */
 .formats {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   font-family: var(--font-sans);
   font-size: 0.8125rem;
-}
-
-.formats a,
-.formats span {
-  text-decoration: none;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: 0.2rem 0.6rem;
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
-
-.formats a:hover {
-  border-color: var(--accent);
-  color: var(--ink);
 }
 
 .locked {
@@ -1199,6 +2018,22 @@ h3 {
   margin: 0 0 2rem;
 }
 
+/* The design puts every form on a white card. Here it also does
+   something useful: it separates the two ways in — Google above the
+   rule, an email and a password below it — from the page's own words. */
+.auth-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
+  padding: 1.75rem;
+}
+
+@media (min-width: 40rem) {
+  .auth-card {
+    padding: 2rem;
+  }
+}
+
 .auth-page__alt {
   margin-top: 1.75rem;
   font-family: var(--font-sans);
@@ -1226,7 +2061,7 @@ h3 {
   font-size: 1rem;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--rule);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   background: var(--paper-raised);
   color: var(--ink);
 }
@@ -1237,16 +2072,22 @@ h3 {
   border-color: var(--accent);
 }
 
+/* Full width and filled, like every primary control in the design.
+   Aligned rather than left as a soft outline because on this page it is
+   the only action there is. */
 .auth-form button[type='submit'] {
   font: inherit;
   font-weight: 600;
-  align-self: flex-start;
-  padding: 0.6rem 1.5rem;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--ink);
+  padding: 0.7rem 1.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--paper-raised);
   cursor: pointer;
+}
+
+.auth-form button[type='submit']:hover:not(:disabled) {
+  opacity: 0.9;
 }
 
 .auth-form button[type='submit']:disabled {
@@ -1258,7 +2099,7 @@ h3 {
   margin: 0;
   padding: 0.75rem 1rem;
   border: 1px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   background: var(--accent-soft);
   font-size: 0.875rem;
 }
@@ -1310,17 +2151,31 @@ h3 {
   font-size: 0.8125rem;
 }
 
+/* The month's allowance. The design colours this line and nothing else
+   on the page, and it is right to: every other hint is background, and
+   this is the one that can stop the upload happening. */
+.hint--quota {
+  color: var(--accent);
+}
+
 .plain-list {
   list-style: none;
-  padding: 0;
+  padding: 0.25rem 1.25rem;
   margin: 1rem 0 0;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
   font-family: var(--font-sans);
   font-size: 0.9375rem;
 }
 
 .plain-list li {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--rule);
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.plain-list li:last-child {
+  border-bottom: none;
 }
 
 /* --- reader --------------------------------------------------------- */
@@ -1503,8 +2358,14 @@ h3 {
 
 /* --- Send to Kindle ------------------------------------------------- */
 
+/* Setting up delivery is a task, not a footnote, so it gets the card
+   the other tasks on this page have. */
 .kindle-settings {
-  margin-top: 2.5rem;
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
 }
 
 /*
@@ -1539,10 +2400,10 @@ h3 {
   width: 100%;
   max-width: 26rem;
   margin-top: 0.35rem;
-  padding: 0.5rem 0.7rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--paper);
+  border-radius: var(--radius-control);
+  background: var(--paper-raised);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 0.9375rem;
@@ -1557,14 +2418,19 @@ h3 {
 
 .kindle-settings button[type='submit'] {
   margin-top: 0.85rem;
-  padding: 0.45rem 1rem;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--ink);
+  padding: 0.55rem 1.2rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--paper-raised);
   font-family: var(--font-sans);
   font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
+}
+
+.kindle-settings button[type='submit']:hover:not(:disabled) {
+  opacity: 0.9;
 }
 
 .kindle-settings button[type='submit']:disabled {
@@ -1637,11 +2503,24 @@ h3 {
 }
 
 /* Shown in place of the send control when the reader cannot use it yet. */
+/*
+ * The way out when there is something to send but nowhere to send it.
+ *
+ * Sized and shaped as a secondary control beside the read pill — dashed
+ * because it is not the action, it is the setting that would make the
+ * action possible. It inherited the body serif at full size until
+ * 2026-08-21, which made a quiet aside as tall as the primary button
+ * next to it.
+ */
 .send-hint {
+  display: inline-flex;
+  align-items: center;
   text-decoration: none;
   border: 1px dashed var(--rule);
-  border-radius: var(--radius);
-  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  padding: 0.45rem 1.1rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
   color: var(--ink-faint);
   white-space: nowrap;
 }
@@ -1661,11 +2540,667 @@ h3 {
   font-size: 0.8125rem;
 }
 
-/* What the book is available as — informational, never a link. */
-.format-tag {
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: 0.2rem 0.6rem;
-  color: var(--ink-faint);
+
+/* --- a page that is mostly words ---------------------------------- */
+
+/*
+ * Capped at the reading measure, in the soft ink the design sets body
+ * copy in. The same rule the reader itself obeys: a line of prose that
+ * runs the full width of a laptop is a line the eye loses its place
+ * returning from.
+ */
+.prose {
+  max-width: var(--measure);
+  color: var(--ink-soft);
+}
+
+.prose p {
+  margin: 0 0 1.25rem;
+}
+
+/* --- a book as a portrait tile ------------------------------------ */
+
+/*
+ * The shelf: tiles in a row that scrolls sideways rather than wrapping.
+ *
+ * Full-bleed on purpose — the row runs to the edge of the viewport so a
+ * partly-visible tile at the right edge says "there is more here",
+ * which is the whole reason a shelf scrolls instead of wrapping. Its
+ * heading stays on the page grid; only the rail breaks out.
+ */
+.shelf__books {
+  list-style: none;
+  margin: 0;
+  padding: 0 1.5rem 0.5rem;
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.shelf__books::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 40rem) {
+  .shelf__books {
+    gap: 1rem;
+  }
+}
+
+.tile {
+  flex: 0 0 auto;
+  width: clamp(110px, 16vw, 152px);
+}
+
+.tile a {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+}
+
+.tile__face {
+  aspect-ratio: 2 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.625rem;
+  border-radius: 0.75rem;
+  background: var(--paper-band);
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.tile a:hover .tile__face {
+  box-shadow: 0 4px 14px rgb(35 32 27 / 12%);
+}
+
+.tile__face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tile__glyph {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--accent);
+  user-select: none;
+  transition: transform 0.2s;
+}
+
+.tile a:hover .tile__glyph {
+  transform: scale(1.1);
+}
+
+/* Both clamp to one line: a shelf is scanned, and a title that wraps to
+   three lines pushes its neighbours out of alignment. */
+.tile__title,
+.tile__author {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tile__title {
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.tile__author {
+  margin-top: 0.125rem;
+  color: var(--ink-faint);
+}
+
+/* --- the conversion portal ---------------------------------------- */
+
+/*
+ * The drop zone.
+ *
+ * A label wrapping a visually-hidden file input, not a div with a
+ * click handler: the label keeps the input keyboard-reachable and
+ * screen-reader-announced for free, which a div would have to
+ * reimplement with a tabindex and a key handler.
+ */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 2.5rem 1.5rem;
+  border: 2px dashed var(--rule);
+  border-radius: var(--radius-card);
+  /* Paper, because the card behind it is now white. It was a wash of
+     white for the opposite reason, back when the form stood on the
+     page's own ground. */
+  background: var(--paper);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dropzone:hover,
+.dropzone:focus-within {
+  border-color: var(--accent-muted);
+}
+
+.dropzone[data-dragging='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dropzone__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.75rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.dropzone__icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.dropzone__primary {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.dropzone__secondary {
+  margin: 0 0 0.9rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+/* The chosen file, replacing the invitation once there is one. */
+.dropzone__chosen {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* --- format badges ------------------------------------------------ */
+
+.formats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.fmt {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fmt--pdf {
+  background: #fbe6e4;
+  color: #a5342a;
+}
+
+.fmt--docx {
+  background: #e2ecf9;
+  color: #24548f;
+}
+
+.fmt--epub {
+  background: #ece4f7;
+  color: #5b3a8e;
+}
+
+.fmt--txt {
+  background: #ece9e2;
+  color: var(--ink-soft);
+}
+
+/*
+ * The file this book came from, carried through the flow.
+ *
+ * The design keeps a chip at the top of every step naming the file you
+ * uploaded — which sounds cosmetic and is not: this page changes shape
+ * as the book converts, and the one fixed fact through all of it is
+ * which file it is. Especially so for a reader with several drafts.
+ */
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  margin: 0 0 1.25rem;
+  padding: 0.3rem 0.8rem 0.3rem 0.45rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+.file-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- "we read this from your file" -------------------------------- */
+
+/* Scoped to a class rather than `.upload-form label > span`: that
+   selector also caught the collection checkboxes and the drop zone's
+   own spans, and turned each of them into a flex row. */
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.field-mark {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--accent-soft);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-family: var(--font-sans);
+  font-size: 0.625rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--accent);
+}
+
+.field-mark--locked {
+  border-color: var(--rule);
+  background: var(--paper);
+  color: var(--ink-faint);
+}
+
+.upload-form input[readonly] {
+  background: var(--paper);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+/* --- choosing what to do with a PDF ------------------------------- */
+
+/*
+ * Two cards, side by side on a laptop and stacked on a phone. The
+ * radio itself is hidden and the card carries the selected state, so
+ * the whole card is the hit target — but it is still a real radio, so
+ * arrow keys and the form both behave.
+ */
+.plan-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.plan-cards legend {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  padding: 0 0 0.75rem;
+}
+
+.plan-card {
+  display: block;
+  padding: 1rem;
+  border: 2px solid var(--rule);
+  border-radius: 0.75rem;
+  background: var(--paper-raised);
+  cursor: pointer;
+}
+
+.plan-card:hover {
+  border-color: var(--ink-faint);
+}
+
+.plan-card:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.plan-card:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.plan-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.plan-card__tag {
+  display: inline-block;
+  margin-bottom: 0.65rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--rule-soft);
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.plan-card__tag--recommended {
+  background: var(--accent);
+  color: var(--paper-raised);
+}
+
+.plan-card strong {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+}
+
+/* The card's body copy. Excluding the tag, which is a `span` too and
+   whose whole point is to be an inline pill in the accent — this rule
+   out-specifies it and was flattening it into a full-width band of
+   accent with accent-coloured text on it, i.e. an unreadable one. */
+.plan-card span:not(.plan-card__tag) {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* --- where did this book come from? ------------------------------- */
+
+.rights {
+  margin: 1.25rem 0;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.75rem;
+  background: var(--paper-raised);
+}
+
+.rights > p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.rights__hint {
+  margin: 0.15rem 0 1rem !important;
+  font-size: 0.8125rem !important;
+  font-weight: 400 !important;
+  color: var(--ink-faint);
+}
+
+.rights__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.rights__options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.rights__options input {
+  margin: 0.3rem 0 0;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+
+/* The calm consequence of an answer that cannot lead to publication.
+   Framed as a note, never as an error — the book still converts, still
+   reads, still sends to a Kindle. */
+.rights__note {
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: 0.6rem;
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* --- the review timeline ------------------------------------------ */
+
+.timeline {
+  list-style: none;
+  margin: 1.25rem 0;
+  padding: 0;
+}
+
+.timeline li {
+  display: flex;
+  gap: 0.85rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--ink-faint);
+}
+
+/* The rail is drawn by the marker column, not by a border on the row,
+   so the last step has no tail hanging off it. */
+.timeline__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.timeline__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.2rem;
+  border-radius: 999px;
+  background: var(--rule);
+  color: var(--paper-raised);
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.timeline__line {
+  width: 1px;
+  flex: 1;
+  min-height: 1.25rem;
+  margin: 0.25rem 0;
+  background: var(--rule);
+}
+
+.timeline li[data-done='true'] {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.timeline li[data-done='true'] .timeline__dot,
+.timeline li[data-done='true'] .timeline__line {
+  background: var(--done);
+}
+
+.timeline__label {
+  padding-bottom: 1rem;
+}
+
+/* --- the editor's note -------------------------------------------- */
+
+.editor-note {
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.75rem;
+  background: var(--paper);
+}
+
+.editor-note strong {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.editor-note p {
+  margin: 0;
+  font-style: italic;
+  line-height: 1.7;
+}
+
+/* --- my books ----------------------------------------------------- */
+
+/* The row grows a card of its own, to match the shelf cards the rest
+   of the site now uses. */
+.my-books__item {
+  align-items: center;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+  border-radius: 0.75rem;
+  background: var(--paper-raised);
+}
+
+.pill--queued,
+.pill--ocr,
+.pill--ocr_ready,
+.pill--mastering,
+.pill--master_ready,
+.pill--formatting {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--paper-raised);
+}
+
+/* Status is the strongest signal in the row, so it goes first on a
+   phone rather than being pushed under the links. */
+@media (max-width: 40rem) {
+  .my-books__item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+
+  .my-books__right {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+}
+
+/* --- narrow screens ----------------------------------------------- */
+
+@media (max-width: 40rem) {
+  .page,
+  .band__inner {
+    padding: 0 1.125rem;
+  }
+
+  .hero {
+    padding: 2.5rem 0 1.5rem;
+  }
+
+  .band {
+    padding: 2.5rem 0;
+    margin-top: 2.5rem;
+  }
+
+  .invite {
+    padding: 1.5rem;
+  }
+
+  .site-header__inner {
+    padding: 0 1.125rem;
+  }
+
+  /* A card is already a container; nesting its padding inside the
+     page's at 375px leaves about 280px of text. */
+  .rights {
+    padding: 1rem;
+  }
+}
+
+/* --- an in-progress stage ----------------------------------------- */
+
+/*
+ * Indeterminate on purpose. Nothing in the pipeline reports a
+ * percentage, so the bar says "moving" and nothing more — see the
+ * `WORKING` set in `ConversionProgress`.
+ */
+.pipeline__working {
+  display: block;
+  height: 3px;
+  margin-top: 0.6rem;
+  max-width: 14rem;
+  border-radius: 999px;
+  background: var(--rule-soft);
+  overflow: hidden;
+  position: relative;
+}
+
+.pipeline__working::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: pipeline-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes pipeline-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* A reader who asked for less motion gets a steady bar instead. */
+@media (prefers-reduced-motion: reduce) {
+  .pipeline__working::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* The uploaded format, badged above the title in the My Books list. */
+.my-books__item .fmt {
+  margin-bottom: 0.35rem;
 }

@@ -2,6 +2,7 @@ import config from '@payload-config'
 import { getPayload } from 'payload'
 import React from 'react'
 
+import { Stepper } from '../../../../components/Stepper'
 import { UploadForm } from '../../../../components/UploadForm'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../../lib/auth'
@@ -21,27 +22,23 @@ export default async function UploadPage() {
 
   return (
     <>
-      <div className="section-head">
-        <h2>Upload a book</h2>
+      <div className="wizard-head">
+        <h2>Upload a Book</h2>
+        <p>Prepare your manuscript for NobleSee</p>
       </div>
 
-      <p>
-        A scanned PDF, an ordinary PDF, a DOCX or plain text. You get back a clean EPUB, PDFs in
-        three sizes, and an editable DOCX master.
-      </p>
-      <p className="hint">
-        Just the file — we read the details from it and show them to you next. Uploads are
-        private to you, and free to send to your own device.
-      </p>
+      <Stepper step={0} />
 
-      {usage ? (
-        <p className="hint">
-          {`This month: ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books, ${usage.pages} of ${MONTHLY_PAGE_LIMIT} pages. `}
-          Drafts are free; only converting counts.
-        </p>
-      ) : null}
-
-      <UploadForm />
+      <UploadForm
+        quota={
+          usage ? (
+            <p className="hint hint--quota">
+              {`This month: ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books, ${usage.pages.toLocaleString('en-US')} of ${MONTHLY_PAGE_LIMIT.toLocaleString('en-US')} pages. `}
+              <span className="hint">Drafts are free — converting counts.</span>
+            </p>
+          ) : null
+        }
+      />
     </>
   )
 }

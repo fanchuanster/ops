@@ -212,6 +212,24 @@ export const Books: CollectionConfig = {
           admin: { condition: (_, siblingData) => siblingData?.state !== 'unsubmitted' },
         },
         {
+          // The uploader's suggestion, and nothing more. It lives in
+          // the review group rather than beside `level` because that is
+          // what it is: part of what was said when the book was
+          // submitted, not a property of the book. Nothing in the
+          // catalog reads it, and approving a submission does not copy
+          // it across — `level` above is still set by hand, by whoever
+          // is deciding.
+          name: 'proposedLevel',
+          type: 'number',
+          admin: {
+            readOnly: true,
+            description: `The uploader’s suggestion: ${BOOK_LEVELS.map(
+              (level) => `${LEVEL_IDS[level]} = ${level}`,
+            ).join('  ·  ')}. Never applied automatically — set “level” above yourself, whether or not you agree.`,
+            condition: (_, siblingData) => Boolean(siblingData?.proposedLevel),
+          },
+        },
+        {
           name: 'reviewedBy',
           type: 'relationship',
           relationTo: 'users',

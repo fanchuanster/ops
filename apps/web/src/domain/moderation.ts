@@ -28,6 +28,38 @@ export const REVIEW_STATES = ['unsubmitted', 'submitted', 'approved', 'rejected'
 
 export type ReviewState = (typeof REVIEW_STATES)[number]
 
+/**
+ * What each review state is called where a person can see it.
+ *
+ * `rejected` is labelled "Changes needed", and that is not a
+ * euphemism — it is what the state means. `canSubmitForReview` above
+ * lets a rejected book be submitted again precisely because rejection
+ * here is "this is not ready", not "this is not welcome", and the
+ * uploader's own screen has said "Changes requested" since the
+ * submission form was written. A reviewer's queue calling the same row
+ * "Rejected" would be the two halves of one conversation using
+ * different words for the same act.
+ *
+ * The design carries a fourth chip, a permanent Rejected distinct from
+ * Changes needed. There is no such state and one was not invented for
+ * it: a fifth review state means a migration, a rule about whether it
+ * can be reversed, and an answer to what the uploader is told — none of
+ * which the queue screen can decide on its own.
+ */
+export const REVIEW_LABELS: Record<ReviewState, string> = {
+  unsubmitted: 'Draft',
+  submitted: 'Pending',
+  approved: 'Approved',
+  rejected: 'Changes needed',
+}
+
+/** The states a submitted book can be sitting in, newest concern first. */
+export const REVIEW_QUEUE_STATES: readonly ReviewState[] = [
+  'submitted',
+  'rejected',
+  'approved',
+]
+
 export interface SubmissionRequest {
   reviewState: ReviewState
   /** What the uploader declared this material to be. */
@@ -117,6 +149,15 @@ export function canPublishToLibrary(request: PublicationRequest): PublicationDec
  * makes rather than the uploader — a reader marking their own upload
  * `public_domain` and `essential` would otherwise walk it straight into
  * the front of the library.
+ *
+ * `level` stays on this list even though an uploader may now *propose*
+ * one when they submit (`review.proposedLevel`, and
+ * `parseProposedLevel` in `levels.ts`). A proposal is a sentence
+ * addressed to the reviewer, stored beside the submission rather than
+ * on the book: nothing reads it when deciding what a reader sees, and
+ * approving a submission does not apply it. Someone has to type the
+ * level in, and that someone is an administrator — which is the whole
+ * distinction between asking and deciding.
  */
 export const ADMIN_ONLY_BOOK_FIELDS = ['visibility', 'rightsStatus', 'level', 'review'] as const
 

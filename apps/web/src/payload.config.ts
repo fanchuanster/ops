@@ -51,10 +51,32 @@ export default buildConfig({
   serverURL,
   cors: [serverURL],
   csrf: [serverURL],
+  /**
+   * Payload's generated admin lives at `/cms`, not at `/admin`.
+   *
+   * `/admin` is NobleSee's own editorial UI — the review queue, the
+   * library, the collections and the readers — built to the design and
+   * speaking the product's vocabulary. Payload's admin stays, because
+   * it is the right tool for everything that UI has no screen for:
+   * Media, the delivery ledger, entitlements, the credit ledger, and
+   * any field a form has not been written for yet.
+   *
+   * The route folder must match this value, so `app/(payload)/admin`
+   * moved to `app/(payload)/cms` with it, and `importMapFile` is stated
+   * rather than defaulted — `generate:importmap` derives its default
+   * path from the old convention and would otherwise write the file
+   * back to a directory nothing serves.
+   */
+  routes: {
+    admin: '/cms',
+  },
   admin: {
     user: Users.slug,
     meta: {
       titleSuffix: '— NobleSee',
+    },
+    importMap: {
+      importMapFile: path.resolve(dirname, 'app/(payload)/cms/importMap.js'),
     },
   },
   collections: [

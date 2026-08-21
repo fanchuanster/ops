@@ -4,13 +4,15 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
+import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
 import { BookActions } from '../../../../../components/BookActions'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
 import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
-import { isConversionState } from '../../../../../domain/pipeline'
+import { Stepper } from '../../../../../components/Stepper'
+import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
+import { uploadStep } from '../../../../../domain/pipeline'
 import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
-import { UPLOADER_RIGHTS } from '../../../../../domain/rights'
 import { shareDescription } from '../../../../../domain/uploaderShare'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
 import { getCurrentUser } from '../../../../../lib/auth'
@@ -61,36 +63,81 @@ export default async function BookDetailsPage({
   // What was uploaded, and what its owner chose to do with it. Both
   // decide which stages this book will actually pass through, so they
   // are read once here and shared by the form and the progress list.
+  // Everything this book can be delivered as. A reader's own upload is
+  // free to send — it is their book (CLAUDE.md section 5.2) — so the
+  // price is zero here without consulting the ledger. The action
+  // re-derives all of it regardless; this only decides what the button
+  // says.
+  const deliverable = (book.artifacts ?? [])
+    .map((artifact) => artifact.format)
+    .filter((format) => isKindleDeliverableFormat(format))
+
   const sourceKind = readSourceKind(book.conversion ?? {})
   const plan = resolvePlan(sourceKind, book.conversion?.plan)
-  const rightsDeclared = UPLOADER_RIGHTS.some((o) => o.value === book.rightsStatus)
   const share = shareDescription(book.rightsStatus)
 
   return (
     <>
-      <div className="section-head">
-        <h2>{draft ? 'Check the details' : 'Book details'}</h2>
+      <div className="wizard-head">
+        <h2>Upload a Book</h2>
+        <p>Prepare your manuscript for NobleSee</p>
       </div>
 
+      <Stepper step={uploadStep({ state, reviewState: book.review?.state })} />
+
+      {/* The file this book came from, kept in view at every stage. The
+          page changes shape as the book converts; which file it is does
+          not, and for a reader with several drafts open that is the one
+          thing worth never having to go and check. */}
+      <p className="file-chip">
+        <span className={`fmt fmt--${sourceKind === 'text' ? 'txt' : sourceKind}`}>
+          {sourceKind === 'text' ? 'txt' : sourceKind}
+        </span>
+        <span className="file-chip__name">
+          {book.conversion?.sourceFilename ?? 'your file'}
+        </span>
+      </p>
+
       {draft ? (
-        <p>
-          Read from <strong>{book.conversion?.sourceFilename ?? 'your file'}</strong>. Correct
-          anything wrong, then convert.
-        </p>
+        <div className="wizard-step-head">
+          <h3>We read these from your file</h3>
+          <p>Correct anything wrong.</p>
+        </div>
       ) : null}
 
-      {readable ? (
+      {/* The finished book, offered in the order the reading mission
+          puts them in: read it here first, take it away second. Sending
+          is only shown once there is something to send *and* somewhere
+          to send it — otherwise the reader is pointed at the setting
+          that would make it work. */}
+      {readable || deliverable.length > 0 ? (
         <p className="book-actions">
-          <a className="book-actions__read" href={`/read/${book.slug}`}>
-            Read it
-          </a>
-          <span className="hint">Private to you.</span>
+          {readable ? (
+            <a className="book-actions__read" href={`/read/${book.slug}`}>
+              Read it
+            </a>
+          ) : null}
+
+          {deliverable.length === 0 ? null : user.kindleEmail ? (
+            <SendToKindleButton
+              bookId={Number(book.id)}
+              formats={deliverable}
+              price={0}
+              balance={user.credits ?? 0}
+            />
+          ) : (
+            <a className="send-hint" href="/account">
+              Add a Kindle address to send
+            </a>
+          )}
+
+          <span className="hint">Private to you, and free to send.</span>
         </p>
       ) : null}
 
       {usage && draft ? (
-        <p className="hint">
-          {`This month you have converted ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books and ${usage.pages} of ${MONTHLY_PAGE_LIMIT} pages.`}
+        <p className="hint hint--quota">
+          {`This month you have converted ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books and ${usage.pages.toLocaleString('en-US')} of ${MONTHLY_PAGE_LIMIT.toLocaleString('en-US')} pages.`}
           {book.estimatedPages
             ? ` This one looks like about ${book.estimatedPages} pages.`
             : ' We could not tell how long this one is, so it counts as one book and no pages.'}
@@ -101,9 +148,16 @@ export default async function BookDetailsPage({
         book={{
           id: Number(book.id),
           title: book.title,
+          originalTitle: book.originalTitle ?? '',
           author: book.author ?? '',
+          translator: book.translator ?? '',
           language: book.language ?? '',
-          rightsStatus: book.rightsStatus,
+          // The counted length once there is one, the estimate read
+          // from the file before that. Both are shown the same way and
+          // labelled differently, because the difference is real: the
+          // estimate is what the monthly allowance was charged against.
+          pageCount: book.pageCount ?? book.estimatedPages ?? null,
+          pagesAreEstimated: !book.pageCount && Boolean(book.estimatedPages),
           collections: (book.collections ?? [])
             .map((c) => (typeof c === 'object' && c ? Number(c.id) : Number(c)))
             .filter(Number.isFinite),
@@ -111,7 +165,8 @@ export default async function BookDetailsPage({
           plan,
         }}
         collections={collections.map((c) => ({ id: Number(c.id), title: c.title }))}
-        submitLabel={draft ? 'Convert this book' : 'Save changes'}
+        draft={draft}
+        submitLabel={draft ? 'Next' : 'Save changes'}
       />
 
       {share && book.visibility === 'public' ? <p className="hint">{share}</p> : null}
@@ -133,7 +188,9 @@ export default async function BookDetailsPage({
           <SubmitForReview
             bookId={Number(book.id)}
             reviewState={book.review?.state ?? 'unsubmitted'}
-            rightsDeclared={rightsDeclared}
+            rightsStatus={book.rightsStatus}
+            reviewNote={book.review?.note}
+            proposedLevel={book.review?.proposedLevel}
           />
         </>
       )}

@@ -9,6 +9,7 @@ import {
   type SubmissionBlockedReason,
   canSubmitForReview,
 } from '../../../domain/moderation'
+import { levelId, parseProposedLevel } from '../../../domain/levels'
 import { hasMaster, isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
 import { isUploaderSelectableRights } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
@@ -17,6 +18,7 @@ import { getCurrentUser } from '../../../lib/auth'
 import { objectBucket } from '../../../lib/storage'
 import { checkQuotaFor } from '../../../lib/uploadQuota'
 import { logError } from '../../../lib/logError'
+import { settleQueuedBook } from '../../../lib/masterPipeline'
 
 /**
  * Confirming the details of an uploaded book.
@@ -34,9 +36,11 @@ import { logError } from '../../../lib/logError'
  *   - **Convert** — the book stays private to them, forever if they
  *     like. This is the normal case and needs nobody's approval.
  *   - **Convert and submit for review** — the same, plus a request that
- *     an administrator consider it for the public library. Blocked when
- *     the rights are `unknown`, because that question is the uploader's
- *     to answer and nobody downstream can answer it for them.
+ *     an administrator consider it for the public library. That is a
+ *     separate act on a finished book now, and it is where the rights
+ *     question is asked (`submitForReview` below). This action still
+ *     accepts a `rightsStatus` if one is posted, so a page cached from
+ *     before the move does not silently drop the answer.
  */
 
 export type DetailsState = { error?: string }
@@ -118,13 +122,19 @@ export async function saveBookDetails(
       data: {
         title,
         author: String(formData.get('author') || '').trim() || null,
-        // Original title, translator and description are not on this
-        // form. The first only means something when the title is a
-        // translation — 道德經 under "Tao Te Ching" — which is a
-        // curatorial decision, not something an uploader confirming
-        // their own scan can answer. All three stay editable in the
-        // admin. Every field not worth filling in makes the ones that
-        // are look optional too.
+        // Original title and translator joined the form on 2026-08-21.
+        // They were left off it on the argument that they are
+        // curatorial rather than something an uploader confirming their
+        // own scan can answer — which does not survive how extraction
+        // actually works: for a Chinese classic the file's own metadata
+        // usually *is* the original title, so the field arrives filled
+        // in and the reader is confirming rather than composing.
+        //
+        // Description is still not here, and that one does hold: it is
+        // written, not read off anything, and an empty box asking for
+        // prose is the field that stops a form being finished.
+        originalTitle: String(formData.get('originalTitle') || '').trim() || null,
+        translator: String(formData.get('translator') || '').trim() || null,
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collections: collectionIds,
@@ -150,6 +160,17 @@ export async function saveBookDetails(
     return { error: 'Could not save those details. Please try again.' }
   }
 
+  // A book with nothing to convert is finished the moment its original
+  // is filed under it, so finish it here rather than leaving it queued
+  // for a converter with no work to do. Without this, "publish it as it
+  // stands" produced a book that could not be read, reviewed or
+  // published on any deployment where no converter happened to be
+  // polling — which is most of them, since such a book needs none.
+  //
+  // Never throws, and a false answer is not an error: anything it
+  // declines to settle is still queued for the pipeline tick.
+  if (!needsConverter(sourceKind, plan)) await settleQueuedBook(payload, bookId)
+
   revalidatePath('/account/books')
   revalidatePath(`/account/books/${bookId}`)
   redirect(`/account/books/${bookId}`)
@@ -167,6 +188,21 @@ export async function saveBookDetails(
  * book belongs in the library; it is not a finding that it is legally
  * distributable, which is what the rights status decides separately
  * (domain/moderation.ts).
+ *
+ * The reading level is posted with it too, and it is a *proposal*: the
+ * uploader knows their book better than anyone and is the cheapest
+ * person to ask where it sits, but where it sits is a curatorial
+ * judgement and stays the administrator's. So the answer is recorded on
+ * the submission and nothing acts on it — `level` is not written here,
+ * and approving does not copy it across (`domain/moderation.ts`).
+ *
+ * The rights answer is posted with the submission, and this is the only
+ * place it is asked. It used to be a select on the details form, which
+ * put a legal question in front of someone whose book was still a
+ * private draft they might never publish — and made an optional flow
+ * read like a submission. Recorded here *before* the gate is evaluated,
+ * so an answer that turns out to block publication is still saved: the
+ * book keeps it, the reader is told why, and nothing has to be retyped.
  */
 export async function submitForReview(
   _prev: DetailsState,
@@ -188,9 +224,27 @@ export async function submitForReview(
     return { error: 'That book is not yours to submit.' }
   }
 
+  // Saved whatever it says, including an answer that cannot lead to
+  // publication. `user_owned` is a true fact about the book and the
+  // reader should not have to state it twice; the gate below is what
+  // decides what follows from it.
+  const rightsStatus = String(formData.get('rightsStatus') || '')
+  if (rightsStatus && !isUploaderSelectableRights(rightsStatus)) {
+    return { error: 'Say where this book came from.' }
+  }
+
+  if (rightsStatus && rightsStatus !== book.rightsStatus) {
+    await payload.update({
+      collection: 'books',
+      id: bookId,
+      data: { rightsStatus: rightsStatus as 'user_owned' },
+      overrideAccess: true,
+    })
+  }
+
   const decision = canSubmitForReview({
     reviewState: book.review?.state ?? 'unsubmitted',
-    rightsStatus: book.rightsStatus,
+    rightsStatus: (rightsStatus || book.rightsStatus) as typeof book.rightsStatus,
     // The DOCX master, not the EPUB. Review now comes *before* the
     // reader-facing formats are built — that is the whole point of the
     // gate — so requiring an EPUB here would mean no book could ever be
@@ -201,11 +255,21 @@ export async function submitForReview(
   })
   if (!decision.allowed) return { error: SUBMISSION_ERRORS[decision.reason] }
 
+  // No preference is the ordinary answer and is stored as one: null,
+  // rather than the default level, so a reviewer can tell "they think
+  // it is normal" apart from "they did not say".
+  const proposed = parseProposedLevel(formData.get('proposedLevel'))
+
   await payload.update({
     collection: 'books',
     id: bookId,
     data: {
-      review: { ...book.review, state: 'submitted', submittedAt: new Date().toISOString() },
+      review: {
+        ...book.review,
+        state: 'submitted',
+        submittedAt: new Date().toISOString(),
+        proposedLevel: proposed ? levelId(proposed) : null,
+      },
     },
     overrideAccess: true,
   })

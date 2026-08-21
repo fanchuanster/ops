@@ -32,9 +32,13 @@ import {
   levelId,
   levelsVisibleAt,
   parseBrowseLevel,
+  parseProposedLevel,
 } from './levels'
 import {
   DELETION_ERRORS,
+  REVIEW_LABELS,
+  REVIEW_QUEUE_STATES,
+  REVIEW_STATES,
   canDeleteUpload,
   canPublishToLibrary,
   canSubmitForReview,
@@ -42,12 +46,15 @@ import {
 } from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
 import {
+  RIGHTS_LABELS,
+  RIGHTS_STATUSES,
   UPLOADER_RIGHTS,
   canAccessArtifact,
   canReadOnline,
   effectiveRightsStatus,
   isPubliclyDistributable,
   isUploaderSelectableRights,
+  rightsRisk,
 } from './rights'
 
 const NOW = new Date('2026-08-12T12:00:00Z')
@@ -319,8 +326,36 @@ describe('publication review', () => {
   it('keeps rights, visibility and level out of the uploader’s hands', () => {
     expect(requiresAdmin('rightsStatus')).toBe(true)
     expect(requiresAdmin('visibility')).toBe(true)
-    expect(requiresAdmin('level')).toBe(true)
     expect(requiresAdmin('title')).toBe(false)
+  })
+
+  it('leaves level an administrator field even though it can be proposed', () => {
+    // The uploader may suggest one with their submission; nothing in
+    // the flow applies it. Asking and deciding are different acts.
+    expect(requiresAdmin('level')).toBe(true)
+  })
+})
+
+describe('proposing a level with a submission', () => {
+  it('takes the three levels by name', () => {
+    for (const level of BOOK_LEVELS) {
+      expect(parseProposedLevel(level)).toBe(level)
+    }
+  })
+
+  it('reads anything else as no preference', () => {
+    // No preference is the ordinary answer, so it must be storable as
+    // one: a fallback to the default would put a suggestion in the
+    // uploader's mouth that a reviewer would then read as theirs.
+    expect(parseProposedLevel('')).toBe(null)
+    expect(parseProposedLevel(null)).toBe(null)
+    expect(parseProposedLevel('ESSENTIAL')).toBe(null)
+    expect(parseProposedLevel(20)).toBe(null)
+  })
+
+  it('does not fall back the way the browse control does', () => {
+    expect(parseBrowseLevel('nonsense')).toBe(DEFAULT_BROWSE_LEVEL)
+    expect(parseProposedLevel('nonsense')).toBe(null)
   })
 })
 
@@ -652,5 +687,57 @@ describe('deleting your own upload', () => {
     for (const reason of ['not_owner', 'bought_by_others'] as const) {
       expect(DELETION_ERRORS[reason]).toBeTruthy()
     }
+  })
+})
+
+describe('what a reviewer is shown about a submission', () => {
+  it('names every rights status and every review state', () => {
+    // A missing key here is a blank cell in the queue, which reads as
+    // "no rights declared" rather than as a gap in this table.
+    for (const status of RIGHTS_STATUSES) {
+      expect(RIGHTS_LABELS[status]).toBeTruthy()
+    }
+    for (const state of REVIEW_STATES) {
+      expect(REVIEW_LABELS[state]).toBeTruthy()
+    }
+  })
+
+  it('marks a status as blocking exactly when publication is impossible', () => {
+    for (const status of RIGHTS_STATUSES) {
+      const risk = rightsRisk(status)
+      // The badge and the gate must never disagree: an "ok" badge on a
+      // book the publish hook would refuse is the one failure that
+      // wastes a reviewer's decision.
+      expect(risk === 'ok').toBe(isPubliclyDistributable(status))
+    }
+  })
+
+  it('separates "we know it cannot be published" from "nobody has said"', () => {
+    expect(rightsRisk('user_owned')).toBe('block')
+    expect(rightsRisk('restricted')).toBe('block')
+    // Unknown is an unanswered question, not a refusal, and only the
+    // uploader can answer it.
+    expect(rightsRisk('unknown')).toBe('warn')
+  })
+
+  it('keeps drafts out of the review queue', () => {
+    // A private upload nobody has offered is a workspace, not a queue
+    // item — reviewing one would quietly undo "you may keep this
+    // private forever".
+    expect(REVIEW_QUEUE_STATES).not.toContain('unsubmitted')
+    expect(REVIEW_QUEUE_STATES).toContain('submitted')
+  })
+
+  it('calls a rejection what the uploader was told it was', () => {
+    // canSubmitForReview lets a rejected book be submitted again, so
+    // the state means "not yet", and the uploader's own screen says
+    // "Changes requested". The queue must not call the same row
+    // something harsher.
+    expect(canSubmitForReview({
+      reviewState: 'rejected',
+      rightsStatus: 'public_domain',
+      hasContent: true,
+    })).toEqual({ allowed: true })
+    expect(REVIEW_LABELS.rejected).toBe('Changes needed')
   })
 })

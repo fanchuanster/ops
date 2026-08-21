@@ -135,6 +135,22 @@ const STAGE_OF: Record<string, string> = {
 const AWAITING_CONVERTER = new Set(['queued', 'ocr_ready', 'master_ready'])
 
 /**
+ * States where something is actually running right now.
+ *
+ * The complement of `AWAITING_CONVERTER` among the unfinished states,
+ * and the distinction is the whole reason the bar below is worth
+ * drawing: "a worker is reading your pages" and "nothing has picked
+ * this up yet" look identical on a stage list, and they mean opposite
+ * things to someone deciding whether to wait.
+ *
+ * The bar is deliberately indeterminate. Nothing reports a percentage —
+ * Adobe's export and the converter's render are both opaque until they
+ * finish — and a bar that creeps to 90% on a timer is a lie told
+ * smoothly. This one says "moving", which is all we know.
+ */
+const WORKING = new Set(['ocr', 'mastering', 'formatting'])
+
+/**
  * How long a book may sit queued before the wait is worth explaining.
  *
  * A converter polls every thirty seconds, so a book that has been
@@ -172,8 +188,11 @@ export function ConversionProgress({
     Date.now() - new Date(queuedSince!).getTime() > STALE_AFTER_MS
 
   return (
-    <section className="pipeline">
-      <h3>What happens to your book</h3>
+    // Labelled for assistive technology rather than with a heading. On
+    // the draft page this list sits directly under the details form in
+    // one wizard flow, and a second heading over it read as a new
+    // section starting rather than as the next thing that happens.
+    <section className="pipeline" aria-label="What happens to your book">
       <ol className="pipeline__stages">
         {stages.map((stage, index) => {
           const done = !failed && index < reached
@@ -192,6 +211,9 @@ export function ConversionProgress({
               <span className="pipeline__text">
                 <strong>{stage.label}</strong>
                 <span>{stage.detail}</span>
+                {current && WORKING.has(state) ? (
+                  <span className="pipeline__working" aria-label="In progress" />
+                ) : null}
               </span>
             </li>
           )

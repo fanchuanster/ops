@@ -1,5 +1,6 @@
 import React from 'react'
 
+import { readSourceKind } from '../../../../domain/publication'
 import { getCurrentUser } from '../../../../lib/auth'
 import { getBooksOwnedBy } from '../../../../lib/catalog'
 
@@ -35,8 +36,10 @@ export default async function MyBooksPage() {
   return (
     <>
       <div className="section-head">
-        <h2>My books</h2>
-        <a href="/account/upload">Upload another</a>
+        <h2>My Books</h2>
+        <a className="cta cta--compact" href="/account/upload">
+          + New book
+        </a>
       </div>
 
       {books.length === 0 ? (
@@ -48,6 +51,12 @@ export default async function MyBooksPage() {
         <ul className="my-books">
           {books.map((book) => {
             const state = book.conversion?.state ?? 'none'
+            // What was uploaded, badged the way the drop zone badges the
+            // formats it accepts — so the row and the upload screen name
+            // the same thing the same way. `text` is badged "txt"
+            // because that is what the reader dropped on it.
+            const kind = readSourceKind(book.conversion ?? {})
+            const badge = kind === 'text' ? 'txt' : kind
             const ready = state === 'none' || state === 'ready'
             const collections = (book.collections ?? [])
               .map((c) => (typeof c === 'object' && c ? c.title : null))
@@ -56,6 +65,7 @@ export default async function MyBooksPage() {
             return (
               <li key={book.id} className="my-books__item">
                 <div>
+                  <span className={`fmt fmt--${badge}`}>{badge}</span>
                   {/* Always its own page: that is where editing,
                       converting, submitting and deleting live, whatever
                       state the book is in. */}
@@ -92,9 +102,8 @@ export default async function MyBooksPage() {
         </ul>
       )}
 
-      <p className="hint" style={{ marginTop: '2rem' }}>
-        Uploads stay private to you. Publishing one to the library needs an administrator’s
-        approval and clear rights — owning a copy is not the right to publish it.
+      <p className="hint" style={{ marginTop: '2rem', textAlign: 'center' }}>
+        Reviewed by an editor before joining the public library.
       </p>
     </>
   )
