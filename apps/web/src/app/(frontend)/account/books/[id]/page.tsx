@@ -9,7 +9,7 @@ import { ConversionProgress } from '../../../../../components/ConversionProgress
 import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { isConversionState } from '../../../../../domain/pipeline'
-import { readSourceKind, resolvePlan } from '../../../../../domain/publication'
+import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
 import { UPLOADER_RIGHTS } from '../../../../../domain/rights'
 import { shareDescription } from '../../../../../domain/uploaderShare'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
@@ -49,7 +49,10 @@ export default async function BookDetailsPage({
 
   const collections = await getCollections()
   const draft = book.conversion?.state === 'draft'
-  const readable = (book.artifacts ?? []).some((a) => a.format === 'epub')
+  // The same rule the reader authorizes with: a book published as it
+  // stands has no EPUB and is still read in the browser, and this is
+  // the page its owner opens it from (`domain/publication.ts`).
+  const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
   const hasMaster = (book.artifacts ?? []).some((a) => a.format === 'docx')
   const isAdmin = Boolean(user.roles?.includes('admin'))
   const usage = isAdmin ? null : await usageThisMonth(payload, user.id)

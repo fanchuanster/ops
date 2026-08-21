@@ -11,7 +11,12 @@ import {
 } from '../../../../../lib/storage'
 
 /**
- * Streams the EPUB to the in-browser reader.
+ * Streams a book's reading edition to the in-browser reader.
+ *
+ * Usually the EPUB. For a book published as it stands there is no EPUB
+ * and never will be, so this serves its PDF instead — the route was
+ * called `epub` until 2026-08-21 and it lied about half the library.
+ * `authorizeReading` picks which one; nothing here chooses.
  *
  * Deliberately not a redirect to a public object URL: epub.js fetches
  * with XHR, and a cross-origin URL would mean opening CORS on the
@@ -42,7 +47,15 @@ export async function GET(
   if (!decision.allowed) return Response.json({ error: 'Not available' }, { status: 404 })
 
   const headers = {
-    'Content-Type': 'application/epub+zip',
+    // The reader is told which edition it is getting; the browser has
+    // to be told too, and a PDF served as an EPUB is a download prompt
+    // rather than a rendered page.
+    'Content-Type':
+      decision.format === 'epub' ? 'application/epub+zip' : 'application/pdf',
+    // The PDF is rendered by the browser's own viewer in a frame, not
+    // handed over as a file. Books are read here or sent to a device;
+    // they are never a file to collect (CLAUDE.md section 1).
+    'Content-Disposition': 'inline',
     // Public-domain library text served to anyone, but a private upload
     // is served only to its owner through the same route — so the safe
     // default is to let nothing cache it.

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import React from 'react'
 
+import { PdfReader } from '../../../../components/PdfReader'
 import { Reader } from '../../../../components/Reader'
 import { getCurrentUser } from '../../../../lib/auth'
 import { authorizeReading, markBookStarted } from '../../../../lib/authorizeDownload'
@@ -26,6 +27,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  *
  * Signing in adds exactly one thing here: the book is recorded as
  * started, so it appears in their history.
+ *
+ * Which reader opens depends on what the book actually has. Almost
+ * always the EPUB one; for a book published as it stands there is no
+ * EPUB to reflow, so its own pages are shown instead rather than the
+ * reader failing at a book that is sitting right there in storage.
  */
 export default async function ReadPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -53,7 +59,7 @@ export default async function ReadPage({ params }: { params: Promise<{ slug: str
         <h1>Not available to read</h1>
         <p className="notice">
           {decision.refusal.reason === 'format_unavailable'
-            ? 'No EPUB edition has been generated for this book yet.'
+            ? 'No readable edition has been generated for this book yet.'
             : 'This book is not available to read online.'}
         </p>
         <p>
@@ -71,12 +77,20 @@ export default async function ReadPage({ params }: { params: Promise<{ slug: str
         <a href={`/books/${slug}`}>← {book.title}</a>
       </nav>
 
-      <Reader
-        epubUrl={`/read/${slug}/epub`}
-        bookTitle={book.title}
-        partTitle={book.author ?? ''}
-        progressKey={`noblesee-position-${slug}`}
-      />
+      {decision.format === 'epub' ? (
+        <Reader
+          epubUrl={`/read/${slug}/edition`}
+          bookTitle={book.title}
+          partTitle={book.author ?? ''}
+          progressKey={`noblesee-position-${slug}`}
+        />
+      ) : (
+        <PdfReader
+          url={`/read/${slug}/edition`}
+          bookTitle={book.title}
+          subtitle={book.author ?? ''}
+        />
+      )}
     </main>
   )
 }

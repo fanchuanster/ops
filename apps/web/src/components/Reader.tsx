@@ -97,11 +97,10 @@ export function Reader({
     //
     // Given a bare URL, epub.js guesses what it is *from the file
     // extension* (`determineType` in epubjs/src/book.js). Our URL is
-    // `/read/<slug>/<order>/epub` — authorization is a route, not a
-    // file, so there is no `.epub` on the end. epub.js reads the empty
-    // extension as `DIRECTORY` and goes looking for
-    // `/read/<slug>/<order>/epub/META-INF/container.xml`, which is a
-    // 404.
+    // `/read/<slug>/edition` — authorization is a route, not a file, so
+    // there is no `.epub` on the end. epub.js reads the empty extension
+    // as `DIRECTORY` and goes looking for
+    // `/read/<slug>/edition/META-INF/container.xml`, which is a 404.
     //
     // What made this hard to see is how it fails. epub.js catches that
     // rejection, emits `openFailed` and swallows it, so `book.opened`
@@ -164,7 +163,12 @@ export function Reader({
     return (
       <div className="reader__error">
         <p>{error}</p>
-        <p className="hint">The EPUB download on the book page may still work.</p>
+        {/* Not "try the download": there is none, by design (CLAUDE.md
+            section 1). What the book page can still offer is sending
+            the book to a device, which does not go through epub.js. */}
+        <p className="hint">
+          You can still send this book to your e-reader from the book page.
+        </p>
       </div>
     )
   }

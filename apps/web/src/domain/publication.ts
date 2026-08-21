@@ -255,3 +255,31 @@ export function readSourceKind(conversion: {
   const filename = typeof conversion.sourceFilename === 'string' ? conversion.sourceFilename : ''
   return sourceKindOf(filename) ?? 'pdf'
 }
+
+/**
+ * Which edition the online reader should open, given what a book has.
+ *
+ * EPUB first, because EPUB is the point: reflowable, resizable, the
+ * reading experience the whole project exists to provide.
+ *
+ * The PDF is not a consolation prize, it is the only honest answer for
+ * a book published as it stands. Its owner chose a faithful copy of the
+ * original over a reflowable one (`plansFor` above), so the original
+ * *is* its edition and there will never be an EPUB to wait for.
+ * Refusing to open it meant such a book could not be read by the one
+ * reader entitled to it, and could not be reviewed by the administrator
+ * deciding whether to publish it — while the file sat in storage the
+ * whole time.
+ *
+ * The DOCX never appears here whatever else is missing: the master is
+ * the editorial source of truth, not an edition (CLAUDE.md section 5).
+ *
+ * Takes formats rather than artifacts so the catalog page — which asks
+ * only whether a book is readable at all — can call it with the same
+ * rule the authorization uses, instead of re-deriving the order.
+ */
+export function readingFormat(formats: readonly string[]): 'epub' | 'pdf' | null {
+  if (formats.includes('epub')) return 'epub'
+  if (formats.includes('pdf')) return 'pdf'
+  return null
+}

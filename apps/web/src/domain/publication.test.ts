@@ -12,6 +12,7 @@ import {
   originalKey,
   plansFor,
   readSourceKind,
+  readingFormat,
   resolvePlan,
   sourceKindOf,
 } from './publication'
@@ -163,5 +164,24 @@ describe('the size limit the framework enforces', () => {
       null,
     )
     expect(Number(declared![1]) * 1024 * 1024).toBeGreaterThan(MAX_UPLOAD_BYTES)
+  })
+})
+
+describe('which edition the reader opens', () => {
+  it('prefers the EPUB, which is the point', () => {
+    expect(readingFormat(['pdf', 'epub', 'docx'])).toBe('epub')
+  })
+
+  it('opens the PDF for a book published as it stands', () => {
+    // This is the whole regression: such a book has no EPUB and never
+    // will, and refusing it left the one reader entitled to it — and
+    // the administrator reviewing it — looking at an error while the
+    // file sat in storage.
+    expect(readingFormat(['pdf'])).toBe('pdf')
+  })
+
+  it('never offers the master, whatever else is missing', () => {
+    expect(readingFormat(['docx'])).toBe(null)
+    expect(readingFormat([])).toBe(null)
   })
 })

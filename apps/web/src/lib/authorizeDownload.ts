@@ -27,6 +27,7 @@ import type { Payload } from 'payload'
 
 import { type DeliveryDecision, decideDelivery, priceInCredits } from '../domain/credits'
 import type { Book } from '../payload-types'
+import { readingFormat } from '../domain/publication'
 import { canAccessArtifact, canReadOnline, isPubliclyDistributable } from '../domain/rights'
 import { logError } from './logError'
 
@@ -85,7 +86,8 @@ export async function authorizeReading({
   bookId: string | number
   userId: string | number | null
 }): Promise<
-  { allowed: true; storageKey: string } | { allowed: false; refusal: DownloadRefusal }
+  | { allowed: true; storageKey: string; format: 'epub' | 'pdf' }
+  | { allowed: false; refusal: DownloadRefusal }
 > {
   const book = await loadBook(payload, bookId)
   if (!book) return { allowed: false, refusal: { reason: 'not_found' } }
@@ -93,12 +95,24 @@ export async function authorizeReading({
   const gate = gateBook(book, userId, canReadOnline)
   if (gate) return { allowed: false, refusal: gate }
 
-  const artifact = (book.artifacts ?? []).find((a) => a.format === 'epub')
-  if (!artifact?.storageKey) {
-    return { allowed: false, refusal: { reason: 'format_unavailable' } }
-  }
+  // Which edition a book is read in is a rule about the book, not
+  // about this request, so it lives in the domain layer — and the
+  // catalog page decides whether to offer "Read online" with the same
+  // call, so the button and the authorization cannot disagree.
+  const artifacts = (book.artifacts ?? []).filter((a) => Boolean(a.storageKey))
+  const format = readingFormat(artifacts.map((a) => a.format))
 
-  return { allowed: true, storageKey: artifact.storageKey }
+  if (!format) return { allowed: false, refusal: { reason: 'format_unavailable' } }
+
+  return {
+    allowed: true,
+    storageKey: artifacts.find((a) => a.format === format)!.storageKey!,
+    // Which of the two it found. The reader page renders a different
+    // thing for each, and the stream needs a different content type, so
+    // guessing from the key would be one more place for them to
+    // disagree.
+    format,
+  }
 }
 
 /**

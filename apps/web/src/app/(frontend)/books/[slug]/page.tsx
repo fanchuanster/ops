@@ -6,6 +6,7 @@ import React from 'react'
 import { SendToKindleButton } from '../../../../components/SendToKindleButton'
 import { priceInCredits } from '../../../../domain/credits'
 import { isKindleDeliverableFormat } from '../../../../domain/kindle'
+import { readingFormat } from '../../../../domain/publication'
 import { isPubliclyDistributable } from '../../../../domain/rights'
 import { getCurrentUser } from '../../../../lib/auth'
 import { getBookBySlug } from '../../../../lib/catalog'
@@ -58,7 +59,11 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
     .filter((a) => a.downloadable !== false)
     .sort((a, b) => FORMAT_ORDER.indexOf(a.format) - FORMAT_ORDER.indexOf(b.format))
 
-  const readable = artifacts.some((a) => a.format === 'epub')
+  // Not just the EPUB. A book published as it stands has only its own
+  // pages and is still read here, in the browser — the same rule the
+  // reader authorizes with, so the button never offers a page that then
+  // refuses (`domain/publication.ts`).
+  const readable = readingFormat(artifacts.map((a) => a.format)) !== null
   const distributable = isPubliclyDistributable(book.rightsStatus)
 
   // Stored on the book, but recomputed as a fallback so a record saved
