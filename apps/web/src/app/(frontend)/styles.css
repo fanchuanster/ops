@@ -168,9 +168,10 @@ h3 {
   color: var(--accent);
 }
 
-/* The mark keeps its designed geometry: an 18px box on a 20-unit
-   viewBox, never scaled by a descendant rule. */
-.wordmark svg {
+/* The mark keeps its designed geometry: an 18px box, never scaled by a
+   descendant rule. The image is 86px square, so the browser is drawing
+   it down and it stays sharp on a 2x screen. */
+.brand-mark {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;

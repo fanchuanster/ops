@@ -1,6 +1,7 @@
 import React from 'react'
 
 import { AdminNav } from '../../components/admin/AdminNav'
+import { BrandMark } from '../../components/BrandMark'
 import { countAwaitingReview } from '../../lib/adminData'
 import { requireAdmin } from '../../lib/adminAuth'
 import '../(frontend)/styles.css'
@@ -61,18 +62,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 Back to site
               </a>
               <div className="admin-side__mark">
-                {/* The same wordmark the site header carries, at the
+                {/* The same mark the site header carries, at the
                     size the design sets it here. */}
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path
-                    d="M3 4C3 3.44772 3.44772 3 4 3H9C9.55228 3 10 3.44772 10 4V16C10 16.5523 9.55228 17 9 17H4C3.44772 17 3 16.5523 3 16V4Z"
-                    fill="var(--accent)"
-                  />
-                  <path
-                    d="M10 5.5C10 5.5 11.5 4.5 13.5 4.5C15.5 4.5 17 5.5 17 5.5V16.5C17 16.5 15.5 15.5 13.5 15.5C11.5 15.5 10 16.5 10 16.5V5.5Z"
-                    fill="var(--accent-muted)"
-                  />
-                </svg>
+                <BrandMark />
                 <span>
                   <strong>NobleSee</strong>
                   <em>Admin</em>
