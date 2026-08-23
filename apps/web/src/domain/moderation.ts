@@ -19,6 +19,18 @@
  * a copy", and it never clears public distribution — a reader owning a
  * book confers no right to publish it to everyone else.
  *
+ * Since 2026-08-23 an administrator does not have to *record* the first
+ * gate before walking through it: publishing a book is approving it, by
+ * the same person, in the same act, so `canPublishToLibrary` accepts
+ * `byAdmin` and the write records the approval it implies. Nothing
+ * about the second gate changed, and nothing about it can.
+ *
+ * There is a third thing, easy to mistake for the first: **the uploader
+ * offering the book**. An administrator's approval is theirs to give
+ * early; the offer is not theirs at all. A private upload that was
+ * never submitted stays private, whoever is asking — unless the
+ * administrator is its uploader, in which case they are both parties.
+ *
  * Framework-independent, like everything in `src/domain`.
  */
 
@@ -104,6 +116,31 @@ export interface PublicationRequest {
   reviewState: ReviewState
   /** The book's effective rights status — see `effectiveRightsStatus`. */
   rightsStatus: RightsStatus
+  /**
+   * Whether the person publishing is an administrator.
+   *
+   * An administrator does not have to approve a submission before
+   * publishing it, because publishing it *is* approving it — the same
+   * person making the same editorial judgement. Requiring the approved
+   * state first was asking them to record their decision, then take it
+   * again.
+   */
+  byAdmin?: boolean
+  /**
+   * Whether that administrator is the book's own uploader.
+   *
+   * The one thing an administrator may not skip. Two gates stand
+   * between a private upload and the library, and only one of them is
+   * theirs: the uploader offering the book is the *other* one. A book
+   * that has never been submitted has never been offered, and CLAUDE.md
+   * section 6.2 promises an upload may stay private forever — so
+   * publishing someone else's unsubmitted book would break a promise
+   * made to the person who uploaded it.
+   *
+   * An administrator publishing their *own* upload is both parties at
+   * once, so nothing is being skipped.
+   */
+  ownedByRequester?: boolean
 }
 
 export type PublicationDecision =
@@ -114,6 +151,7 @@ export type PublicationBlockedReason =
   | 'not_submitted'
   | 'awaiting_review'
   | 'rejected'
+  | 'not_offered'
   | 'rights_not_cleared'
 
 /**
@@ -121,17 +159,33 @@ export type PublicationBlockedReason =
  *
  * Fails closed at every branch. Call it before flipping `visibility` to
  * `public`, never after.
+ *
+ * The review gate is waived for an administrator (`byAdmin`), and only
+ * the review gate. The rights gate is never waived by anybody — an
+ * approval is not a finding that the material is distributable, which
+ * is the distinction this whole module exists to keep.
  */
 export function canPublishToLibrary(request: PublicationRequest): PublicationDecision {
-  switch (request.reviewState) {
-    case 'unsubmitted':
-      return { allowed: false, reason: 'not_submitted' }
-    case 'submitted':
-      return { allowed: false, reason: 'awaiting_review' }
-    case 'rejected':
-      return { allowed: false, reason: 'rejected' }
-    case 'approved':
-      break
+  const { byAdmin = false, ownedByRequester = false } = request
+
+  if (byAdmin) {
+    // Publishing is the approval, so the state it would have left
+    // behind is not required to already be there. The uploader's offer
+    // is a different gate and is not an administrator's to skip.
+    if (request.reviewState === 'unsubmitted' && !ownedByRequester) {
+      return { allowed: false, reason: 'not_offered' }
+    }
+  } else {
+    switch (request.reviewState) {
+      case 'unsubmitted':
+        return { allowed: false, reason: 'not_submitted' }
+      case 'submitted':
+        return { allowed: false, reason: 'awaiting_review' }
+      case 'rejected':
+        return { allowed: false, reason: 'rejected' }
+      case 'approved':
+        break
+    }
   }
 
   if (!isPubliclyDistributable(request.rightsStatus)) {

@@ -94,14 +94,22 @@ export async function requestChanges(
 }
 
 /**
- * Put an approved book into the public library.
+ * Put a book into the public library.
+ *
+ * "Approved" is no longer a precondition. An administrator publishing a
+ * book *is* the approval — the same person, the same judgement — so the
+ * decision and the act can be one click, and the hook on the write
+ * records the approval so the queue and the audit trail stay honest.
+ *
+ * What did not move is the rights gate. Approving a book is not a
+ * finding that it may be distributed, and no amount of administrator
+ * gets past `isPubliclyDistributable`.
  *
  * The gate is checked here *and* again by `enforcePublicationReview` on
  * the write itself. That is deliberate duplication: this call answers
  * with a sentence a person can read, and the hook is what makes the
  * rule true for every writer, including the CMS and a future script
  * that has never heard of this file.
- *
  */
 export async function publishToLibrary(
   _prev: ReviewState,
@@ -119,9 +127,12 @@ export async function publishToLibrary(
     .catch(() => null)
   if (!book) return { error: 'That book is no longer there.' }
 
+  const ownerId = typeof book.owner === 'object' && book.owner ? book.owner.id : book.owner
   const decision = canPublishToLibrary({
     reviewState: book.review?.state ?? 'unsubmitted',
     rightsStatus: (book.rightsStatus ?? 'unknown') as RightsStatus,
+    byAdmin: true,
+    ownedByRequester: String(ownerId) === String(admin.id),
   })
 
   if (!decision.allowed) {
@@ -134,6 +145,10 @@ export async function publishToLibrary(
       id: bookId,
       data: { visibility: 'public' },
       overrideAccess: true,
+      // Passed so the hook knows whose act this is. Access is overridden
+      // either way; this is what tells `enforcePublicationReview` that an
+      // administrator is publishing, and who to record the approval to.
+      user: admin,
     })
   } catch (error) {
     logError('admin.review.publish', error)
@@ -151,6 +166,8 @@ const PUBLISH_REFUSALS: Record<string, string> = {
   not_submitted: 'It has not been submitted for review.',
   awaiting_review: 'Approve the submission first.',
   rejected: 'Changes were requested. It has to be submitted again.',
+  not_offered:
+    'Its uploader has not offered it to the library. You can approve a submission early; you cannot make one for somebody else.',
   rights_not_cleared:
     'Its rights do not permit public distribution. Approval says a book belongs in the library; it does not clear the rights, and nothing here can.',
 }

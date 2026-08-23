@@ -43,6 +43,18 @@ oversight.
   in hundredths so small books actually pay.
 - **Site** — catalog with collection filtering, book pages, reading-first
   typography with Traditional Chinese first in the font stack.
+- **The uploader is private** — `owner` is readable only by its own owner and
+  by an administrator, as field-level access, so it never reaches the UI or the
+  API for anyone else (2026-08-23).
+- **Administrators publish directly** — the Publish control no longer waits for
+  an approved review, because publishing a book is approving it (2026-08-23).
+  The write records the approval so the queue and the audit trail stay honest.
+  Two things are unchanged: the rights gate, which nobody waives, and the
+  uploader's offer — an administrator cannot publish someone else's unsubmitted
+  book, only their own. An admin's own submission publishes itself.
+- **A way in to the admin** — nothing on the public site linked to `/admin`, so
+  an editor had to know the URL. The account nav now carries "Editors' desk"
+  for administrators.
 - **Nested collections** — a shelf can stand on another shelf, and a parent
   shows every book beneath it (2026-08-23). The `parent` field had been on the
   collection since the first migration with nothing reading it; what makes it

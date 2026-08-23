@@ -21,6 +21,13 @@ import type { ReviewState } from '../../domain/moderation'
  *   Publish          — the separate act that actually makes it public,
  *                      offered only when the rights permit it.
  *
+ * Publish no longer waits for Approve. An administrator publishing a
+ * book is approving it, so the button is offered on a submission that
+ * has not been approved yet and the write records the approval it
+ * implies. Approve still exists on its own, because approving without
+ * publishing is a real thing to want — a book whose rights are not
+ * cleared can be judged worth having and still stay private.
+ *
  * The design has a fourth, a permanent Reject distinct from requesting
  * changes. There is no such state in `domain/moderation.ts` and one was
  * not invented here — `rejected` is explicitly resubmittable, the
@@ -39,12 +46,15 @@ export function ReviewDecision({
   note: savedNote,
   canPublish,
   alreadyPublic,
+  rightsCleared,
 }: {
   bookId: number
   reviewState: ReviewState
   note: string
   canPublish: boolean
   alreadyPublic: boolean
+  /** Whether the rights permit public distribution — the gate nobody waives. */
+  rightsCleared: boolean
 }) {
   const [approveState, approve, approving] = useActionState<ActionState, FormData>(
     approveSubmission,
@@ -109,14 +119,16 @@ export function ReviewDecision({
             {publishing ? 'Publishing…' : 'Publish to the library'}
           </button>
           <p className="admin-quiet">
-            A second, separate act. Approving said it belongs here; this is what puts it in front
-            of everyone.
+            {reviewState === 'approved'
+              ? 'Approving said it belongs here; this is what puts it in front of everyone.'
+              : 'This approves it and publishes it in one act — you do not have to approve it first.'}
           </p>
         </form>
-      ) : reviewState === 'approved' ? (
+      ) : !rightsCleared ? (
         <p className="admin-quiet admin-decision__state">
-          Approved, but its rights do not permit public distribution — so it stays private, and
-          its uploader keeps every other thing the library offers.
+          Its rights do not permit public distribution, so it stays private whatever you decide
+          here — and its uploader keeps every other thing the library offers. That gate is not an
+          administrator’s to open.
         </p>
       ) : null}
 

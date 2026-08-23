@@ -294,6 +294,78 @@ describe('publication review', () => {
       canPublishToLibrary({ reviewState: 'approved', rightsStatus: 'public_domain' }),
     ).toEqual({ allowed: true })
   })
+})
+
+describe('an administrator publishing directly', () => {
+  it('does not have to approve a submission first', () => {
+    // Publishing *is* the approval — one person, one judgement — so
+    // requiring the recorded state beforehand was asking them to take
+    // the same decision twice.
+    expect(
+      canPublishToLibrary({
+        reviewState: 'submitted',
+        rightsStatus: 'public_domain',
+        byAdmin: true,
+      }),
+    ).toEqual({ allowed: true })
+  })
+
+  it('may publish a book it had previously asked for changes on', () => {
+    expect(
+      canPublishToLibrary({
+        reviewState: 'rejected',
+        rightsStatus: 'public_domain',
+        byAdmin: true,
+      }),
+    ).toEqual({ allowed: true })
+  })
+
+  it('may not publish somebody else’s book that was never offered', () => {
+    // The other gate, and it is not an administrator's. CLAUDE.md
+    // section 6.2 promises an upload may stay private forever, and an
+    // unsubmitted book has never been offered to anyone.
+    expect(
+      canPublishToLibrary({
+        reviewState: 'unsubmitted',
+        rightsStatus: 'public_domain',
+        byAdmin: true,
+      }),
+    ).toEqual({ allowed: false, reason: 'not_offered' })
+  })
+
+  it('may publish its own upload without submitting it to itself', () => {
+    expect(
+      canPublishToLibrary({
+        reviewState: 'unsubmitted',
+        rightsStatus: 'public_domain',
+        byAdmin: true,
+        ownedByRequester: true,
+      }),
+    ).toEqual({ allowed: true })
+  })
+
+  it('never gets past the rights gate, on its own book or anyone’s', () => {
+    for (const rightsStatus of ['unknown', 'restricted', 'user_owned'] as const) {
+      expect(
+        canPublishToLibrary({
+          reviewState: 'approved',
+          rightsStatus,
+          byAdmin: true,
+          ownedByRequester: true,
+        }),
+      ).toEqual({ allowed: false, reason: 'rights_not_cleared' })
+    }
+  })
+
+  it('changes nothing for a reader', () => {
+    expect(
+      canPublishToLibrary({
+        reviewState: 'submitted',
+        rightsStatus: 'public_domain',
+        ownedByRequester: true,
+      }),
+    ).toEqual({ allowed: false, reason: 'awaiting_review' })
+  })
 
   it('requires the uploader to declare rights before review', () => {
     expect(

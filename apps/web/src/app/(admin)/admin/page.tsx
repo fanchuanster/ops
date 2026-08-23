@@ -9,7 +9,12 @@ import {
   type ReviewState,
 } from '../../../domain/moderation'
 import { readSourceKind, readingFormat } from '../../../domain/publication'
-import { RIGHTS_LABELS, rightsRisk, type RightsStatus } from '../../../domain/rights'
+import {
+  RIGHTS_LABELS,
+  isPubliclyDistributable,
+  rightsRisk,
+  type RightsStatus,
+} from '../../../domain/rights'
 import { getQueueBook, getReviewQueue } from '../../../lib/adminData'
 import { requireAdmin } from '../../../lib/adminAuth'
 
@@ -44,7 +49,7 @@ export default async function ReviewQueuePage({
 }: {
   searchParams: Promise<{ state?: string; book?: string }>
 }) {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const params = await searchParams
 
   const filter = (REVIEW_QUEUE_STATES as readonly string[]).includes(params.state ?? '')
@@ -179,7 +184,11 @@ export default async function ReviewQueuePage({
       </div>
 
       {selected ? (
-        <SubmissionPanel book={selected} closeHref={query({ book: null })} />
+        <SubmissionPanel
+          book={selected}
+          adminId={admin.id}
+          closeHref={query({ book: null })}
+        />
       ) : null}
     </div>
   )
@@ -187,9 +196,12 @@ export default async function ReviewQueuePage({
 
 function SubmissionPanel({
   book,
+  adminId,
   closeHref,
 }: {
   book: Awaited<ReturnType<typeof getQueueBook>> & object
+  /** Who is reviewing, so a book they uploaded themselves is recognised. */
+  adminId: number | string
   closeHref: string
 }) {
   const state = (book.review?.state ?? 'unsubmitted') as ReviewState
@@ -202,7 +214,18 @@ function SubmissionPanel({
   // The Publish button appears only when it would actually work. The
   // gate is the domain's, so the button and the write agree by
   // construction rather than by being kept in step.
-  const publication = canPublishToLibrary({ reviewState: state, rightsStatus: rights })
+  //
+  // `byAdmin` is unconditional here: this page is behind `requireAdmin`,
+  // so there is nobody else looking at it. It is what makes Publish
+  // available on a book that has been submitted but not yet approved —
+  // the approval and the publication are one act by one person, and the
+  // write records the approval either way.
+  const publication = canPublishToLibrary({
+    reviewState: state,
+    rightsStatus: rights,
+    byAdmin: true,
+    ownedByRequester: String(owner?.id ?? '') === String(adminId),
+  })
   const alreadyPublic = book.visibility === 'public'
 
   return (
@@ -284,6 +307,7 @@ function SubmissionPanel({
           note={book.review?.note ?? ''}
           canPublish={publication.allowed && !alreadyPublic}
           alreadyPublic={alreadyPublic}
+          rightsCleared={isPubliclyDistributable(rights)}
         />
       </div>
     </aside>

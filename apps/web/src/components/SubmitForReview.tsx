@@ -82,6 +82,7 @@ export function SubmitForReview({
   rightsStatus,
   reviewNote,
   proposedLevel,
+  byAdmin = false,
 }: {
   bookId: number
   reviewState: string
@@ -91,6 +92,15 @@ export function SubmitForReview({
   reviewNote?: string | null
   /** The level id this uploader suggested last time, if they did. */
   proposedLevel?: number | null
+  /**
+   * Whether the uploader looking at this is an administrator.
+   *
+   * They are both parties to their own book's review, so this form
+   * publishes rather than queues — the words change to say so, because a
+   * button labelled "submit for review" that puts a book in front of
+   * everybody is a button that lies.
+   */
+  byAdmin?: boolean
 }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(submitForReview, {})
 
@@ -165,6 +175,12 @@ export function SubmitForReview({
             </div>
           ) : null}
         </>
+      ) : byAdmin ? (
+        <p className="hint">
+          Optional. Keeping it private changes nothing about how it works for you. You are an
+          administrator, so this publishes the book rather than queueing it — the rights answer
+          below still decides, exactly as it would for anyone else.
+        </p>
       ) : (
         <p className="hint">
           Optional. Keeping it private changes nothing about how it works for you. Submitting asks
@@ -209,7 +225,9 @@ export function SubmitForReview({
         <fieldset className="rights">
           <p>Where does it belong in the library?</p>
           <p className="rights__hint">
-            Optional, and only a suggestion — an editor decides where it sits.
+            {byAdmin
+              ? 'Optional. You are the editor, so set it here or from the library screen.'
+              : 'Optional, and only a suggestion — an editor decides where it sits.'}
           </p>
 
           <div className="rights__options">
@@ -244,7 +262,13 @@ export function SubmitForReview({
         </fieldset>
 
         <button type="submit" className="cta" disabled={pending || chosen === '' || blocked}>
-          {pending ? 'Submitting…' : 'Submit to the public library'}
+          {pending
+            ? byAdmin
+              ? 'Publishing…'
+              : 'Submitting…'
+            : byAdmin
+              ? 'Publish to the library'
+              : 'Submit to the public library'}
         </button>
 
         {state.error ? <p className="form-error">{state.error}</p> : null}

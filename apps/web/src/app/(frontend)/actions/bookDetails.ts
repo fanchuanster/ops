@@ -7,13 +7,15 @@ import { getPayload } from 'payload'
 
 import {
   type SubmissionBlockedReason,
+  canPublishToLibrary,
   canSubmitForReview,
 } from '../../../domain/moderation'
 import { levelId, parseProposedLevel } from '../../../domain/levels'
 import { hasMaster, isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
-import { isUploaderSelectableRights } from '../../../domain/rights'
+import { isUploaderSelectableRights, type RightsStatus } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import { needsConverter, readSourceKind, resolvePlan } from '../../../domain/publication'
+import { isAdmin } from '../../../lib/adminAuth'
 import { getCurrentUser } from '../../../lib/auth'
 import { objectBucket } from '../../../lib/storage'
 import { checkQuotaFor } from '../../../lib/uploadQuota'
@@ -273,6 +275,45 @@ export async function submitForReview(
     },
     overrideAccess: true,
   })
+
+  // An administrator submitting their *own* book is both parties to the
+  // review: they are offering it and they are the person who would
+  // approve it. Sending it to a queue for themselves to find would be a
+  // round trip through a screen to reach a decision they have already
+  // made — so it goes straight into the library.
+  //
+  // Only the review gate is skipped. The rights answer they just gave is
+  // still what decides, exactly as it would for anybody else, and an
+  // administrator whose own book is `user_owned` gets the same private
+  // book a reader would.
+  if (isAdmin(user)) {
+    const publication = canPublishToLibrary({
+      reviewState: 'submitted',
+      rightsStatus: (rightsStatus || book.rightsStatus || 'unknown') as RightsStatus,
+      byAdmin: true,
+      ownedByRequester: true,
+    })
+
+    if (publication.allowed) {
+      try {
+        await payload.update({
+          collection: 'books',
+          id: bookId,
+          data: { visibility: 'public' },
+          overrideAccess: true,
+          // The hook reads this to know whose act it is, and records the
+          // approval against them (`collections/Books.ts`).
+          user,
+        })
+        revalidatePath('/')
+        revalidatePath('/books')
+      } catch (error) {
+        // The submission stands whatever happened here. It is in the
+        // queue, and the queue's Publish button is the other way in.
+        logError('bookDetails.submit.publishAsAdmin', error)
+      }
+    }
+  }
 
   revalidatePath(`/account/books/${bookId}`)
   return {}

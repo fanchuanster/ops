@@ -198,6 +198,7 @@ export default async function BookDetailsPage({
             rightsStatus={book.rightsStatus}
             reviewNote={book.review?.note}
             proposedLevel={book.review?.proposedLevel}
+            byAdmin={isAdmin}
           />
         </>
       )}

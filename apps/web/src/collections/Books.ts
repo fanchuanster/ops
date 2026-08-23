@@ -52,15 +52,37 @@ export const readBooks: Access = ({ req }) => {
  * owner and no submission to review — requiring one would mean an
  * editor could not publish a book without first submitting it to
  * themselves.
+ *
+ * ## An administrator publishes directly
+ *
+ * `req.user` is what decides it, so this holds for every door into the
+ * table — our own screens, `/cms`, and a script written next year. A
+ * write that carries no user is not an administrator's, which is the
+ * safe direction: it falls back to requiring the approved review.
+ *
+ * Publishing then **records the approval it implies**. Without that the
+ * book would sit public with a `submitted` review — still in the
+ * reviewer's queue, and, worse, refused by this very hook the next time
+ * its owner saved anything, because that save is not an administrator's
+ * and would find an unapproved public book. The invariant worth keeping
+ * is simple: a public owned book has an approved review. This is what
+ * keeps it true.
  */
-const enforcePublicationReview: CollectionBeforeChangeHook = ({ data, originalDoc }) => {
+const enforcePublicationReview: CollectionBeforeChangeHook = ({ data, originalDoc, req }) => {
   const owner = data?.owner ?? originalDoc?.owner
   if (!owner) return data
   if ((data?.visibility ?? originalDoc?.visibility) !== 'public') return data
 
+  const actor = req?.user
+  const byAdmin = Boolean(actor?.roles?.includes('admin'))
+  const ownerId = typeof owner === 'object' && owner ? owner.id : owner
+  const reviewState = data?.review?.state ?? originalDoc?.review?.state ?? 'unsubmitted'
+
   const decision = canPublishToLibrary({
-    reviewState: data?.review?.state ?? originalDoc?.review?.state ?? 'unsubmitted',
+    reviewState,
     rightsStatus: data?.rightsStatus ?? originalDoc?.rightsStatus ?? 'unknown',
+    byAdmin,
+    ownedByRequester: Boolean(actor && String(ownerId) === String(actor.id)),
   })
 
   if (!decision.allowed) {
@@ -68,6 +90,18 @@ const enforcePublicationReview: CollectionBeforeChangeHook = ({ data, originalDo
       `This book cannot be made public: ${PUBLICATION_ERRORS[decision.reason]}`,
       403,
     )
+  }
+
+  if (byAdmin && reviewState !== 'approved') {
+    return {
+      ...data,
+      review: {
+        ...(originalDoc?.review ?? {}),
+        ...(data?.review ?? {}),
+        state: 'approved',
+        reviewedBy: actor!.id,
+      },
+    }
   }
 
   return data
@@ -90,6 +124,8 @@ const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {
   not_submitted: 'it has not been submitted for review.',
   awaiting_review: 'its submission is still awaiting review.',
   rejected: 'its submission was rejected.',
+  not_offered:
+    'its uploader has not offered it to the library. An administrator can approve a submission early, but not make one on someone else’s behalf.',
   rights_not_cleared:
     'its rights status does not permit public distribution. Approval says a book belongs in the library; it does not clear the rights.',
 }
@@ -218,6 +254,44 @@ export const Books: CollectionConfig = {
       name: 'owner',
       type: 'relationship',
       relationTo: 'users',
+      /**
+       * Who uploaded a book is nobody else's business.
+       *
+       * The field is readable by its own owner and by an administrator,
+       * and by nobody else — not in the UI, not in a populated
+       * relationship, and not through `/api/books` or GraphQL. Payload
+       * deletes the field from the response when this returns false.
+       *
+       * The uploader's *identity* was already protected: the Users
+       * collection only lets you read yourself, so a populated `owner`
+       * came back as a bare id to a stranger. What that still leaked is
+       * the correlation — that these eleven books were all uploaded by
+       * the same person, and which one of them is yours — and a reader
+       * who wanted to publish anonymously had no way to know it.
+       *
+       * Field access is skipped entirely under `overrideAccess: true`,
+       * which is how every ownership check in the application still
+       * works: `authorizeDownload`, the account pages, the quota and
+       * the admin all read the book with access overridden. The one
+       * path that does not is the public book page, and there a
+       * stranger seeing no owner is the correct answer — they are not
+       * the owner.
+       *
+       * It also stops `?where[owner][equals]=7` being a usable query
+       * for anyone but its subject, because Payload validates query
+       * paths against this same rule.
+       */
+      access: {
+        read: ({ req, doc, data }) => {
+          if (!req.user) return false
+          if (req.user.roles?.includes('admin')) return true
+
+          const record = (doc ?? data) as { owner?: unknown } | undefined
+          const owner = record?.owner
+          const ownerId = typeof owner === 'object' && owner ? (owner as { id?: unknown }).id : owner
+          return ownerId !== undefined && ownerId !== null && String(ownerId) === String(req.user.id)
+        },
+      },
       admin: { description: 'Set for private, user-owned conversions.' },
     },
     {

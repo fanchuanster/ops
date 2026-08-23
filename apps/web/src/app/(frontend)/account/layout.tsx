@@ -4,6 +4,7 @@ import React from 'react'
 import { AccountNav } from '../../../components/AccountNav'
 import { Avatar } from '../../../components/Avatar'
 import { readerName, type ReaderIdentity } from '../../../domain/avatar'
+import { isAdmin } from '../../../lib/adminAuth'
 import { getCurrentUser } from '../../../lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -42,7 +43,7 @@ export default async function AccountLayout({ children }: { children: React.Reac
       </header>
 
       <div className="account__body">
-        <AccountNav />
+        <AccountNav isAdmin={isAdmin(user)} />
         <section className="account__panel">{children}</section>
       </div>
     </main>

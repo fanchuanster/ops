@@ -819,6 +819,39 @@ enforces both gates, and `unknown` rights block submission entirely: the
 uploader is the only person who knows where their material came from, and
 that is the one moment in the flow when the question is easy to answer.
 
+**An administrator does not have to record the first gate before
+walking through it.** Since 2026-08-23, publishing a book *is* approving
+it — the same person, the same editorial judgement, in one act — so the
+Publish control is offered on a submission that has not been approved
+yet, and the write records the approval it implies
+(`enforcePublicationReview` in `collections/Books.ts`). Recording it is
+not optional bookkeeping: without it a public book would sit in the
+queue as pending, and would be refused by that same hook the next time
+its own uploader saved anything. The invariant is that a public owned
+book has an approved review.
+
+Nothing about the second gate changed, and nothing about it can. An
+administrator publishing their own upload is refused exactly as a reader
+would be if its rights are not cleared.
+
+There is a third thing here, easy to mistake for the first: **the
+uploader offering the book**. The approval is an administrator's to give
+early; the offer is not theirs at all. A private upload that was never
+submitted stays private whoever is asking — section 6.2 promises it may
+stay private forever — unless the administrator is its uploader, in
+which case they are both parties and their own submission publishes
+itself rather than queueing for them to find.
+
+**Who uploaded a book is not public.** The `owner` field is readable by
+its own owner and by an administrator, and by nobody else — enforced as
+field-level read access in `collections/Books.ts`, so it is absent from
+the UI, from a populated relationship, and from `/api/books` and
+GraphQL alike. The uploader's *identity* was always protected by the
+Users collection's read rule; what this closes is the correlation, that
+a given set of books shares an uploader. Field access is skipped under
+`overrideAccess: true`, which is how every ownership check in the
+application still reads it.
+
 Rights status, visibility and reading level are administrator fields. An
 uploader who could set their own would walk their upload straight into
 the front of the library.

@@ -17,13 +17,33 @@ const SECTIONS = [
   { href: '/account/upload', label: 'Upload a book', hint: 'Convert your own' },
 ] as const
 
-export function AccountNav() {
+/**
+ * The way in to the editorial admin, for the people who have one.
+ *
+ * Nothing on the public site linked to `/admin` at all — an editor had
+ * to know the URL and type it, which meant the review queue was, in
+ * practice, missing. It belongs here rather than in the header: the
+ * header is a reader's, and this is the one place already given over to
+ * "things about you".
+ *
+ * Rendered only for an administrator, and that is presentation, not
+ * access control — `requireAdmin` guards the pages themselves, and a
+ * reader who guesses the URL is sent home either way.
+ */
+const ADMIN_SECTION = {
+  href: '/admin',
+  label: 'Editors’ desk',
+  hint: 'Review, publish and curate',
+} as const
+
+export function AccountNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname()
+  const sections = isAdmin ? [...SECTIONS, ADMIN_SECTION] : SECTIONS
 
   return (
     <nav className="account-nav" aria-label="Account sections">
       <ul>
-        {SECTIONS.map((section) => {
+        {sections.map((section) => {
           // Exact match only. A prefix match would light up Overview on
           // every page, since every path here starts with /account.
           const current = pathname === section.href
