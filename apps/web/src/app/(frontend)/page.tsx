@@ -2,6 +2,7 @@ import React from 'react'
 
 import { BookTile } from '../../components/BookTile'
 import { ShareCta } from '../../components/ShareCta'
+import { buildTree, subtreeIds } from '../../domain/collectionTree'
 import { getCatalog, getCollections } from '../../lib/catalog'
 
 // Rendered per-request: it queries the database, which is deliberately
@@ -51,17 +52,25 @@ export default async function HomePage() {
   // homepage, rather than a flat grid that says nothing about why these
   // books are together. A book in two collections appears on both
   // shelves, which is correct — it is in both.
-  const shelves = collections
-    .map((collection) => ({
-      collection,
-      books: books
-        .filter((book) =>
-          (book.collections ?? []).some(
-            (c) => String(typeof c === 'object' && c ? c.id : c) === String(collection.id),
-          ),
-        )
-        .slice(0, PER_SHELF),
-    }))
+  //
+  // Top-level collections only, each carrying everything beneath it.
+  // The home page shows two shelves; spending one of them on a
+  // sub-shelf would show a visitor the library's filing rather than its
+  // subjects (`domain/collectionTree.ts`).
+  const shelves = buildTree(collections)
+    .map((node) => {
+      const ids = new Set(subtreeIds(collections, node.collection.id).map(String))
+      return {
+        collection: node.collection,
+        books: books
+          .filter((book) =>
+            (book.collections ?? []).some((c) =>
+              ids.has(String(typeof c === 'object' && c ? c.id : c)),
+            ),
+          )
+          .slice(0, PER_SHELF),
+      }
+    })
     .filter((shelf) => shelf.books.length > 0)
     .slice(0, MAX_SHELVES)
 

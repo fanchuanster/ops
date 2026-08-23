@@ -729,6 +729,42 @@ move a balance, and it writes both together.
 
 ---
 
+## 5.3 Collections nest
+
+A collection is a shelf, and a shelf can stand on another shelf:
+"Confucian" under "Chinese Classics", "Nan Huaijin" under "Authors".
+The rule that makes it worth having is that **a parent carries
+everything beneath it** — a reader who opens "Chinese Classics" gets the
+books filed directly on it and the books on every shelf standing on it.
+Anything less and nesting is only filing.
+
+The tree, the subtree filter behind `?collection=`, and the rules about
+what may be filed under what are `apps/web/src/domain/collectionTree.ts`.
+Three of those rules earn their place:
+
+- A collection may not be its own ancestor. Enforced in a collection
+  hook rather than only in the admin screen, because `/cms` is a second
+  door into the same table — and a ring of collections would strand
+  every shelf in it.
+- The tree is three levels deep at most, counting a *moved subtree's*
+  own height rather than just the node being moved. The limit is
+  editorial: past a grandchild a reader is navigating a filesystem
+  rather than browsing a library.
+- A parent that no longer exists reads as a root. Deleting a shelf
+  therefore never makes its children vanish, which matters because the
+  foreign key clears the reference rather than refusing the delete.
+
+Ordering is per-parent: the arrows in `/admin/collections` move a shelf
+among its own siblings and can never lift it out of the one it stands
+on. Where it is filed is a separate decision, made with the parent
+picker on the same card.
+
+The browse page shows one level at a time — root shelves in the library,
+a collection's own children inside it — because a nested library
+rendered flat is a wall of every shelf at once.
+
+---
+
 # 6. COPYRIGHT / RIGHTS MANAGEMENT
 
 The system must include metadata describing the legal status of a book.

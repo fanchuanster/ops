@@ -3,6 +3,12 @@ import React from 'react'
 import { BookTile } from '../../../components/BookTile'
 import { ShareCta } from '../../../components/ShareCta'
 import {
+  ancestryOf,
+  buildTree,
+  flattenTree,
+  subtreeIds,
+} from '../../../domain/collectionTree'
+import {
   BOOK_LEVELS,
   DEFAULT_BROWSE_LEVEL,
   LEVEL_DESCRIPTIONS,
@@ -57,41 +63,70 @@ export default async function BooksPage({
     getCollections(),
   ])
 
-  // One shelf per collection, from the single catalog query above
-  // rather than one query per collection. A book in two collections
-  // stands on both shelves, which is correct — it is in both.
-  const shelves = collections
-    .map((c) => ({
-      collection: c,
-      books: books.filter((book) =>
-        (book.collections ?? []).some(
-          (ref) => String(typeof ref === 'object' && ref ? ref.id : ref) === String(c.id),
+  const selected = collection ? collections.find((c) => c.slug === collection) : null
+  const trail = selected ? ancestryOf(collections, selected.id) : []
+
+  // One level of shelves at a time. Unfiltered that is the root
+  // collections; inside one it is that collection's own children, which
+  // is what makes a nested library browsable rather than a wall of
+  // every shelf at once.
+  //
+  // A leaf collection has no children, so this is empty and every book
+  // falls through to the single list below — which is exactly right:
+  // there is nothing left to divide it by.
+  const tree = buildTree(collections)
+  const shelfNodes = selected
+    ? (flattenTree(tree).find((node) => node.collection.id === selected.id)?.children ?? [])
+    : tree
+
+  // A shelf carries its own books *and* everything beneath it. Built
+  // from the single catalog query above rather than one query per
+  // shelf. A book in two collections stands on both, which is correct —
+  // it is in both.
+  const shelves = shelfNodes
+    .map((node) => {
+      const ids = new Set(subtreeIds(collections, node.collection.id).map(String))
+      return {
+        collection: node.collection,
+        books: books.filter((book) =>
+          (book.collections ?? []).some((ref) =>
+            ids.has(String(typeof ref === 'object' && ref ? ref.id : ref)),
+          ),
         ),
-      ),
-    }))
+      }
+    })
     .filter((shelf) => shelf.books.length > 0)
 
   // Every published book belongs to a collection eventually, but not
   // today — so anything uncollected still gets a shelf rather than
-  // being invisible in the library.
+  // being invisible in the library. Inside a selected collection this is
+  // instead the books filed on it directly rather than on a child.
   const shelved = new Set(shelves.flatMap((s) => s.books.map((b) => String(b.id))))
   const loose = books.filter((book) => !shelved.has(String(book.id)))
-
-  const selected = collection ? collections.find((c) => c.slug === collection) : null
 
   return (
     <main className="page">
       <div className="page-head">
         <h1>{selected ? selected.title : 'Library'}</h1>
         {/* Only when a shelf is being shown on its own, because that is
-            the only time there is anywhere else to go. The design's
-            heading row is otherwise just the word. */}
-        {collection ? (
+            the only time there is anywhere else to go. With nesting
+            there is more than one somewhere: a child shelf's reader
+            wants the shelf above it, not only the whole library. The
+            trail below is the path down to here, itself excluded. */}
+        {selected ? (
           <span className="page-head__note">
-            <a href={href({ collection: undefined })}>The whole library →</a>
+            <a href={href({ collection: undefined })}>Library</a>
+            {trail.slice(0, -1).map((ancestor) => (
+              <React.Fragment key={ancestor.id}>
+                {' / '}
+                <a href={href({ collection: ancestor.slug })}>{ancestor.title}</a>
+              </React.Fragment>
+            ))}
           </span>
         ) : null}
       </div>
+
+      {selected?.description ? <p className="page-lede">{selected.description}</p> : null}
 
       <nav className="filters" aria-label="Reading level">
         {BOOK_LEVELS.map((value) => (
@@ -134,7 +169,13 @@ export default async function BooksPage({
           {loose.length > 0 ? (
             <section>
               <div className="shelf__head">
-                <span>{shelves.length > 0 ? 'Also in the library' : 'All books'}</span>
+                <span>
+                  {shelves.length === 0
+                    ? 'All books'
+                    : selected
+                      ? `Also in ${selected.title}`
+                      : 'Also in the library'}
+                </span>
                 <span className="shelf__rule" />
               </div>
               <ul className="shelf__books">

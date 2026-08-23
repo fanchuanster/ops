@@ -166,8 +166,15 @@ export async function getAdminCollections(): Promise<BookCollection[]> {
   return result.docs
 }
 
-/** How many books sit in each collection, keyed by collection id. */
-export async function countBooksPerCollection(): Promise<Map<number, number>> {
+/**
+ * Which books sit in each collection, keyed by collection id.
+ *
+ * Book *ids* rather than a count, because collections nest: a parent
+ * shelf's total is the union of its subtree, and a book filed on both a
+ * parent and one of its children must be counted once. Summing counts
+ * would count it twice.
+ */
+export async function booksPerCollection(): Promise<Map<number, Set<number>>> {
   const payload = await getPayload({ config })
   const result = await payload.find({
     collection: 'books',
@@ -177,12 +184,14 @@ export async function countBooksPerCollection(): Promise<Map<number, number>> {
     overrideAccess: true,
   })
 
-  const tally = new Map<number, number>()
+  const tally = new Map<number, Set<number>>()
   for (const book of result.docs) {
     for (const entry of book.collections ?? []) {
       const id = typeof entry === 'object' && entry ? entry.id : entry
       if (typeof id !== 'number') continue
-      tally.set(id, (tally.get(id) ?? 0) + 1)
+      const shelf = tally.get(id)
+      if (shelf) shelf.add(book.id)
+      else tally.set(id, new Set([book.id]))
     }
   }
   return tally

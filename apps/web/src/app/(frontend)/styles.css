@@ -1751,6 +1751,27 @@ h3 {
   color: var(--ink-faint);
 }
 
+/* The trail back up through a nested shelf. Links are only underlined
+   on hover here: a breadcrumb of four underlined words reads as a
+   sentence with something wrong with it. */
+.page-head__note a {
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.page-head__note a:hover {
+  text-decoration: underline;
+}
+
+/* A collection's own description, under its heading. It is editorial
+   writing — what this shelf is *for* — so it is set in the reading
+   serif at the reading measure, not as UI text. */
+.page-lede {
+  margin: -1.5rem 0 2rem;
+  max-width: var(--measure);
+  color: var(--ink-soft);
+}
+
 /* A panel opens on its own heading, so the 3rem that separates one
    section from the next would only push it away from the card above. */
 .account__panel > .section-head:first-child {

@@ -1,23 +1,49 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import React, { useActionState, useState } from 'react'
 
 import {
   createCollection,
   moveCollection,
-  renameCollection,
+  saveCollection,
   type CollectionsState,
 } from '../../app/(admin)/actions/collections'
+
+export interface ParentOption {
+  id: number
+  title: string
+  /** Only to indent the option, so a nested choice reads as nested. */
+  depth: number
+}
 
 export interface AdminCollectionRow {
   id: number
   title: string
   description: string
   books: number
+  /** 1 for a top-level shelf; deeper rows are indented by it. */
+  depth: number
+  /** The shelf this one stands on, or null. */
+  parentId: number | null
+  /** Books on this shelf *and* every shelf beneath it, as a reader sees it. */
+  booksInSubtree: number
+  /** Which shelves this one may legally be filed under. */
+  parentOptions: ParentOption[]
+  /** Whether it is first or last among its own siblings. */
+  first: boolean
+  last: boolean
 }
 
 /**
  * The shelves as editable cards.
+ *
+ * Collections nest, and the list arrives already flattened in tree
+ * order with a depth on each row — parents immediately before their
+ * children — so the nesting is drawn by indenting rather than by
+ * rendering a tree of components. The arrows move a shelf among its own
+ * siblings only; filing it somewhere else is the parent picker inside
+ * the card, because those are different decisions and conflating them
+ * into drag-and-drop would make both harder.
  *
  * Client-side only for the two things that genuinely need it: which
  * card is open for editing, and whether the "add" form is showing.
@@ -26,7 +52,14 @@ export interface AdminCollectionRow {
  * goes back to the server, and a save that fails leaves the card
  * showing what is actually stored rather than what someone hoped.
  */
-export function CollectionsPanel({ collections }: { collections: AdminCollectionRow[] }) {
+export function CollectionsPanel({
+  collections,
+  newParentOptions,
+}: {
+  collections: AdminCollectionRow[]
+  /** Where a collection that does not exist yet may be filed. */
+  newParentOptions: ParentOption[]
+}) {
   const [editing, setEditing] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
 
@@ -37,12 +70,10 @@ export function CollectionsPanel({ collections }: { collections: AdminCollection
 
   return (
     <div className="admin-cards">
-      {collections.map((collection, index) => (
+      {collections.map((collection) => (
         <CollectionCard
           key={collection.id}
           collection={collection}
-          first={index === 0}
-          last={index === collections.length - 1}
           editing={editing === collection.id}
           onEdit={() => setEditing(collection.id)}
           onDone={() => setEditing(null)}
@@ -69,6 +100,18 @@ export function CollectionsPanel({ collections }: { collections: AdminCollection
             name="description"
             placeholder="What is this shelf for? Readers see this."
           />
+          <label className="visually-hidden" htmlFor="new-collection-parent">
+            Stands on
+          </label>
+          <select id="new-collection-parent" name="parentId" defaultValue="">
+            <option value="">A shelf of its own</option>
+            {newParentOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {'— '.repeat(option.depth - 1)}
+                Under {option.title}
+              </option>
+            ))}
+          </select>
           <div className="admin-card__actions">
             <button type="submit" className="admin-btn admin-btn--small" disabled={creating}>
               {creating ? 'Adding…' : 'Add'}
@@ -95,35 +138,33 @@ export function CollectionsPanel({ collections }: { collections: AdminCollection
 
 function CollectionCard({
   collection,
-  first,
-  last,
   editing,
   onEdit,
   onDone,
 }: {
   collection: AdminCollectionRow
-  first: boolean
-  last: boolean
   editing: boolean
   onEdit: () => void
   onDone: () => void
 }) {
-  const [renameState, rename, renaming] = useActionState<CollectionsState, FormData>(
-    renameCollection,
-    {},
-  )
+  const [saveState, save, saving] = useActionState<CollectionsState, FormData>(saveCollection, {})
   const [moveState, move, moving] = useActionState<CollectionsState, FormData>(moveCollection, {})
 
   return (
-    <div className="admin-card">
+    <div
+      className={collection.depth > 1 ? 'admin-card admin-card--nested' : 'admin-card'}
+      // Indented by depth rather than nested in the DOM, so a card is
+      // the same card wherever it sits and the arrows keep working.
+      style={{ '--depth': collection.depth - 1 } as React.CSSProperties}
+    >
       <form action={move} className="admin-card__move">
         <input type="hidden" name="collectionId" value={collection.id} />
         <button
           type="submit"
           name="direction"
           value="up"
-          disabled={first || moving}
-          aria-label={`Move ${collection.title} up`}
+          disabled={collection.first || moving}
+          aria-label={`Move ${collection.title} up, among its own siblings`}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
             <path
@@ -139,8 +180,8 @@ function CollectionCard({
           type="submit"
           name="direction"
           value="down"
-          disabled={last || moving}
-          aria-label={`Move ${collection.title} down`}
+          disabled={collection.last || moving}
+          aria-label={`Move ${collection.title} down, among its own siblings`}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
             <path
@@ -156,7 +197,7 @@ function CollectionCard({
 
       <div className="admin-card__body">
         {editing ? (
-          <form action={rename} className="admin-card__edit">
+          <form action={save} className="admin-card__edit">
             <input type="hidden" name="collectionId" value={collection.id} />
             <label className="visually-hidden" htmlFor={`title-${collection.id}`}>
               Name
@@ -176,15 +217,34 @@ function CollectionCard({
               defaultValue={collection.description}
               placeholder="What is this shelf for? Readers see this."
             />
+            <label className="visually-hidden" htmlFor={`parent-${collection.id}`}>
+              Stands on
+            </label>
+            {/* Only shelves this one may legally stand on are offered,
+                so an administrator is never shown a choice that will be
+                refused when they save it. */}
+            <select
+              id={`parent-${collection.id}`}
+              name="parentId"
+              defaultValue={collection.parentId ?? ''}
+            >
+              <option value="">A shelf of its own</option>
+              {collection.parentOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {'— '.repeat(option.depth - 1)}
+                  Under {option.title}
+                </option>
+              ))}
+            </select>
             <div className="admin-card__actions">
-              <button type="submit" className="admin-btn admin-btn--small" disabled={renaming}>
-                {renaming ? 'Saving…' : 'Save'}
+              <button type="submit" className="admin-btn admin-btn--small" disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="admin-linkbtn" onClick={onDone} disabled={renaming}>
+              <button type="button" className="admin-linkbtn" onClick={onDone} disabled={saving}>
                 Cancel
               </button>
             </div>
-            {renameState.error ? <p className="form-error">{renameState.error}</p> : null}
+            {saveState.error ? <p className="form-error">{saveState.error}</p> : null}
           </form>
         ) : (
           <>
@@ -192,6 +252,12 @@ function CollectionCard({
               {collection.title}
               <span className="admin-quiet">
                 {collection.books} {collection.books === 1 ? 'book' : 'books'}
+                {/* A parent shelf shows everything beneath it, so the
+                    direct count alone would understate what a reader
+                    actually finds there. */}
+                {collection.booksInSubtree > collection.books
+                  ? ` · ${collection.booksInSubtree} with sub-shelves`
+                  : null}
               </span>
             </p>
             {collection.description ? (

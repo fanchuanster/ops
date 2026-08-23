@@ -14,6 +14,7 @@
 import config from '@payload-config'
 import { getPayload, type TypedUser, type Where } from 'payload'
 
+import { subtreeIds } from '../domain/collectionTree'
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
 import { slugFromParam } from './slugParam'
 
@@ -28,18 +29,29 @@ export async function getCatalog({
 } = {}) {
   const payload = await getPayload({ config })
 
-  let collectionId: string | number | undefined
+  // The subtree, not the one shelf. A reader who opens "Chinese
+  // Classics" is asking for the books on it *and* on every shelf
+  // standing on it — that is what nesting means, and this query is
+  // where it is honoured (`domain/collectionTree.ts`).
+  //
+  // One query for the whole list rather than a recursive walk of the
+  // table: there are tens of collections, D1 has no recursive CTE
+  // through this adapter, and the tree is computed in memory in
+  // microseconds.
+  let collectionIds: number[] | undefined
   if (collectionSlug) {
-    const found = await payload.find({
+    const all = await payload.find({
       collection: 'book-collections',
-      where: { slug: { equals: collectionSlug } },
-      limit: 1,
+      limit: 500,
+      depth: 0,
+      pagination: false,
       overrideAccess: false,
     })
+    const found = all.docs.find((doc) => doc.slug === collectionSlug)
     // An unknown slug must yield an empty catalog, never the whole
     // catalog — otherwise a typo silently defeats the filter.
-    if (found.docs.length === 0) return { books: [], collection: null, level }
-    collectionId = found.docs[0].id
+    if (!found) return { books: [], collection: null, level }
+    collectionIds = subtreeIds(all.docs, found.id)
   }
 
   // The catalog is the *public* library, said here rather than left to
@@ -57,7 +69,7 @@ export async function getCatalog({
     { status: { equals: 'published' } },
     { level: { less_than_equal: levelId(level) } },
   ]
-  if (collectionId) filters.push({ collections: { equals: collectionId } })
+  if (collectionIds) filters.push({ collections: { in: collectionIds } })
 
   const books = await payload.find({
     collection: 'books',

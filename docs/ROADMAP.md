@@ -43,6 +43,12 @@ oversight.
   in hundredths so small books actually pay.
 - **Site** — catalog with collection filtering, book pages, reading-first
   typography with Traditional Chinese first in the font stack.
+- **Nested collections** — a shelf can stand on another shelf, and a parent
+  shows every book beneath it (2026-08-23). The `parent` field had been on the
+  collection since the first migration with nothing reading it; what makes it
+  mean something is `domain/collectionTree.ts` — the subtree filter behind
+  `?collection=`, the depth cap, and the refusal to file a collection under its
+  own descendant. Three levels deep at most, and the limit is editorial.
 - **Default covers** — page one of the book, rendered by the converter and used
   wherever nobody has uploaded a cover (2026-08-23). Its own claimable job kind
   rather than a pipeline stage, because the books that most need one are the

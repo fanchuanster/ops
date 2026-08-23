@@ -10,6 +10,7 @@ import { ConversionProgress } from '../../../../../components/ConversionProgress
 import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { Stepper } from '../../../../../components/Stepper'
+import { buildTree, flattenTree } from '../../../../../domain/collectionTree'
 import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
 import { uploadStep } from '../../../../../domain/pipeline'
 import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
@@ -164,7 +165,13 @@ export default async function BookDetailsPage({
           sourceKind,
           plan,
         }}
-        collections={collections.map((c) => ({ id: Number(c.id), title: c.title }))}
+        // Flattened in tree order so a sub-shelf appears directly under
+        // the shelf it stands on, indented (`domain/collectionTree.ts`).
+        collections={flattenTree(buildTree(collections)).map((node) => ({
+          id: Number(node.collection.id),
+          title: node.collection.title,
+          depth: node.depth,
+        }))}
         draft={draft}
         submitLabel={draft ? 'Next' : 'Save changes'}
       />

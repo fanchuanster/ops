@@ -843,7 +843,9 @@
 }
 
 .admin-card__edit input,
-.admin-card--new input {
+.admin-card__edit select,
+.admin-card--new input,
+.admin-card--new select {
   font: inherit;
   font-size: 0.875rem;
   color: var(--ink);
@@ -852,6 +854,17 @@
   border-radius: var(--radius-control);
   padding: 0.375rem 0.75rem;
   width: 100%;
+}
+
+/* A sub-shelf, indented by how deep it sits. Indentation rather than a
+   nested list: a card is the same card wherever it stands, and the
+   reorder arrows keep working on a flat list of siblings.
+
+   The rule down the left is what makes the indent read as "under the
+   one above" rather than as an accident of alignment. */
+.admin-card--nested {
+  margin-left: calc(var(--depth, 0) * 2rem);
+  border-left: 2px solid var(--accent-soft);
 }
 
 .admin-card__actions {

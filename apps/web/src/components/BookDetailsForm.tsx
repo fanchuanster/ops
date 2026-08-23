@@ -103,7 +103,8 @@ export function BookDetailsForm({
   submitLabel = 'Next',
 }: {
   book: EditableBook
-  collections: { id: number; title: string }[]
+  /** In tree order, parents before their children; `depth` indents them. */
+  collections: { id: number; title: string; depth: number }[]
   /** Before conversion, when the values on show were guessed. */
   draft?: boolean
   /** "Next" for a draft, which is a step in a flow; "Save changes" after. */
@@ -195,7 +196,14 @@ export function BookDetailsForm({
           <small>Only used if the book is ever published.</small>
           <div>
             {collections.map((collection) => (
-              <label key={collection.id} className="upload-form__check">
+              <label
+                key={collection.id}
+                className="upload-form__check"
+                // Collections nest, and a sub-shelf that reads as a peer
+                // of the shelf above it is a different choice from the
+                // one being offered.
+                style={{ marginLeft: `${(collection.depth - 1) * 1.25}rem` }}
+              >
                 <input
                   type="checkbox"
                   name="collections"
