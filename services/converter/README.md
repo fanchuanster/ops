@@ -313,8 +313,19 @@ says which one it is:
 | `master` | `source_key` — always a text source since 2026-08-19 | the DOCX master |
 | `formats` | `master_key` | the EPUB, and the PDF when the source needs one |
 | `full` | `source_key` | everything, in one pass |
+| `cover` | `source_key` — one finished artifact | `cover_key`, a JPEG of page one |
 
 `full` is what the CLI and the job API do; the handoff never asks for it.
+
+`cover` is not a phase and does not move the book through one
+(`app/cover/`). It renders page one of a finished book as its default
+cover, from whichever artifact the web side names — the PDF where there
+is one, because for a scan page one *is* the cover the publisher
+printed. Its own kind rather than a stage of `formats`, because the
+books that need it most are the two `formats` never runs for: an EPUB
+upload and a PDF published as it stands. A source that carries no cover
+— an EPUB whose manifest declares none — fails the cover alone; the book
+is untouched and its tile falls back to the title's own first character.
 The split exists so that a corrected master is cheap to act on: an
 editor fixes what the OCR misread, and only `formats` runs again.
 Re-running `master` would pay Adobe a second time to read pages already

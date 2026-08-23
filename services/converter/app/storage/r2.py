@@ -84,4 +84,7 @@ CONTENT_TYPES = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".epub": "application/epub+zip",
     ".pdf": "application/pdf",
+    # Generated covers (`app/cover/`). Not an artifact — it lives beside
+    # them in the bucket, not in the book's format list.
+    ".jpg": "image/jpeg",
 }

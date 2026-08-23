@@ -127,6 +127,9 @@ class Poller:
             # set. None preserves exactly that, so the two sides may be
             # deployed in either order.
             formats=_formats(job.get("formats")),
+            # Only a cover job sends these; both are None otherwise.
+            source_format=job.get("source_format"),
+            cover_key=job.get("cover_key"),
             title=job.get("title"),
             author=job.get("author"),
             # Taken from the server's answer, never assumed here. The
@@ -140,6 +143,20 @@ class Poller:
         # makes the book readable. Reporting the wrong one would either
         # publish a book with no EPUB or rebuild it forever.
         body: dict = {"book_id": job.book_id, "kind": job.kind.value}
+
+        # A cover reports the one key it wrote and nothing else. It is
+        # not an artifact and must not arrive as one — a completion
+        # carrying an empty artifact list is refused, and a cover that
+        # moved the book's conversion state would publish or fail a book
+        # over a picture.
+        if job.kind is JobKind.COVER:
+            if job.state.value == "completed":
+                body |= {"state": "completed", "cover_key": job.cover}
+            else:
+                body |= {"state": "failed", "message": job.error or "No cover could be rendered."}
+            self._client.post("/api/conversion", json=body).raise_for_status()
+            return
+
         if job.state.value == "completed":
             body |= {
                 "state": "completed",

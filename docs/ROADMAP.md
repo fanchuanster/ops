@@ -43,6 +43,12 @@ oversight.
   in hundredths so small books actually pay.
 - **Site** — catalog with collection filtering, book pages, reading-first
   typography with Traditional Chinese first in the font stack.
+- **Default covers** — page one of the book, rendered by the converter and used
+  wherever nobody has uploaded a cover (2026-08-23). Its own claimable job kind
+  rather than a pipeline stage, because the books that most need one are the
+  two the pipeline never touches: an EPUB upload and a PDF published as it
+  stands. Taken from the PDF where there is one, since for a scan page one *is*
+  the cover the publisher printed. `domain/cover.ts` and `app/cover/`.
 - **Authorized delivery** — the three domain rules wired to artifact streaming
   through the Worker (`src/lib/authorizeDownload.ts`). Not signed URLs: the R2
   binding has no presigning, and streaming turned out to be the better shape.
@@ -121,8 +127,10 @@ oversight.
   reproducible artifacts into `content/seed/`.
 
 - **Cover image processing** — Payload uses `sharp`, a native binary that cannot
-  run on a Worker. Covers are currently stored at the size they are uploaded.
+  run on a Worker, so an *uploaded* cover is stored at whatever size it arrives.
   Either move the resizing into the converter or use Cloudflare Images.
+  Generated covers are unaffected: the converter renders them into a fixed box
+  already (`app/cover/first_page.py`).
 
 ### Monetization
 

@@ -150,6 +150,36 @@ export const Books: CollectionConfig = {
     { name: 'description', type: 'textarea' },
     { name: 'cover', type: 'upload', relationTo: 'media' },
     {
+      name: 'generatedCover',
+      type: 'group',
+      admin: {
+        description:
+          'Page one of the book, rendered by the converter and used when no cover has been uploaded. The upload above always wins; this is only ever the default. See domain/cover.ts.',
+      },
+      fields: [
+        {
+          name: 'state',
+          type: 'select',
+          defaultValue: 'pending',
+          index: true,
+          options: [
+            { label: 'Waiting for a converter', value: 'pending' },
+            { label: 'Rendering', value: 'rendering' },
+            { label: 'Ready', value: 'ready' },
+            // Terminal. A cover is cosmetic, so a source the renderer
+            // cannot open is not re-offered to every poll forever;
+            // clearing this by hand is how a fixed renderer retries.
+            { label: 'Could not be rendered', value: 'failed' },
+          ],
+        },
+        {
+          name: 'key',
+          type: 'text',
+          admin: { readOnly: true, description: 'The rendered cover in object storage.' },
+        },
+      ],
+    },
+    {
       name: 'rightsStatus',
       type: 'select',
       required: true,

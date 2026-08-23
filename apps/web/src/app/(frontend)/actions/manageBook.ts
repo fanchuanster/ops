@@ -70,6 +70,9 @@ export async function deleteBook(_prev: ManageState, formData: FormData): Promis
   const keys = [
     ...(book.artifacts ?? []).map((artifact) => artifact.storageKey),
     book.conversion?.sourceKey,
+    // Not an artifact, but it is under the book's prefix and outlives
+    // the row exactly as they would (`domain/cover.ts`).
+    book.generatedCover?.key,
   ].filter((key): key is string => typeof key === 'string' && key.length > 0)
 
   try {

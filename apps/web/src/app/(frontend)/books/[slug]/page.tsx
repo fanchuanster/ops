@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { SendToKindleButton } from '../../../../components/SendToKindleButton'
+import { coverImageUrl } from '../../../../domain/cover'
 import { priceInCredits } from '../../../../domain/credits'
 import { isKindleDeliverableFormat } from '../../../../domain/kindle'
 import { readingFormat } from '../../../../domain/publication'
@@ -59,7 +60,14 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
   const book = await getBookBySlug(slug, reader)
   if (!book) notFound()
 
-  const cover = typeof book.cover === 'object' && book.cover !== null ? book.cover : null
+  const uploaded = typeof book.cover === 'object' && book.cover !== null ? book.cover : null
+  // The uploaded cover first, then page one of the book. Only when there
+  // is neither does the title itself stand in (`domain/cover.ts`).
+  const cover = coverImageUrl({
+    uploadedUrl: uploaded?.url,
+    bookId: book.id,
+    generated: book.generatedCover ?? {},
+  })
 
   const kindleReady = Boolean(reader?.kindleEmail)
 
@@ -91,8 +99,8 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
       <article>
         <header className="book-head">
           <div className="book-card__cover">
-            {cover?.url ? (
-              <img src={cover.url} alt={cover.alt || `Cover of ${book.title}`} />
+            {cover ? (
+              <img src={cover} alt={uploaded?.alt || `Cover of ${book.title}`} />
             ) : (
               <span className="book-card__cover--empty cjk" aria-hidden="true">
                 {book.originalTitle || book.title}

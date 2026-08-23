@@ -272,6 +272,16 @@ export function isInFlight(state: ConversionState): boolean {
 }
 
 /**
+ * The states above, for a database `not_in` clause.
+ *
+ * The cover claim uses it: page one is rendered from the best artifact a
+ * book has, so a book still gaining artifacts is left alone until it has
+ * stopped — otherwise a text upload's cover would be taken from its DOCX
+ * master seconds before its PDF existed (`domain/cover.ts`).
+ */
+export const IN_FLIGHT_STATES: ConversionState[] = CONVERSION_STATES.filter(isInFlight)
+
+/**
  * Whether phase 1's export still has to be started for this book.
  *
  * Kept beside the states rather than in `adobe.ts` because it is a

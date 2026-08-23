@@ -634,6 +634,20 @@ book's PDF; a DOCX upload *is* its master; an EPUB upload *is* its
 EPUB. That is what makes "always keep the original" cost nothing extra
 rather than doubling every book (`apps/web/src/domain/publication.ts`).
 
+The cover is a fifth file and is not one of those four. Since
+2026-08-23 a book with no uploaded cover gets **page one of itself**,
+rendered by the converter as a JPEG beside its artifacts
+(`apps/web/src/domain/cover.ts`, `services/converter/app/cover/`). For a
+scan that page *is* the cover the publisher printed, which is why the
+PDF is preferred over the EPUB's declared cover and the master's first
+typeset page.
+
+Two covers, and the order between them is the whole rule: an uploaded
+`cover` is an editor's decision and always wins; `generatedCover` is
+only ever the default. When there is neither, the tile still draws the
+book's own first character, which was the only answer before this and
+remains the right one for a book nothing can be rendered from.
+
 What the split bought was staged release — a per-reader clock that paced
 someone through a book. That is also gone. The credit price in section
 5.2 is what governs access now.
@@ -1116,10 +1130,23 @@ The endpoint authenticates with `CONVERTER_SECRET` and **fails closed**:
 with no secret configured it 404s as though it does not exist, so
 deploying ahead of the secret exposes nothing.
 
-A job now carries a `kind`, because there are two of them:
+A job now carries a `kind`, because there are three of them:
 
     kind: "master"    source_key              → DOCX master
     kind: "formats"   master_key              → EPUB, PDF…
+    kind: "cover"     source_key + cover_key  → page one, as a JPEG
+
+`cover` is not a phase and moves the book through none: it is claimed
+separately, from books whose conversion has stopped moving, and both its
+outcomes are recorded on the cover alone. A page that will not render
+leaves a whole and readable book without a picture, which is not a
+failed conversion. It is offered last, after both phases, because it is
+the only cosmetic work here.
+
+Its own kind rather than a stage of `formats` for one reason: the books
+that most need a cover are the two `formats` never runs for — an EPUB
+upload and a PDF published as it stands are finished the moment they are
+filed, and would otherwise never see a converter at all.
 
 A `formats` job also carries a **`formats` list** saying which editions
 to build. Absent means "all of them", which is what the CLI and the job
@@ -1248,12 +1275,11 @@ Suggested structure:
 
 books/
   {book_id}/
+    cover.jpg          page one, when nobody uploaded a cover
     book/
       master.docx
       book.epub
-      standard.pdf
-      large.pdf
-      xl.pdf
+      book.pdf
 
 conversion/
   {job_id}/

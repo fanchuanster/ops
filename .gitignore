@@ -65,6 +65,14 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# ...but not the converter's own `cover` package, which renders a book's
+# first page as its default cover. The rule above is coverage.py's
+# output directory, from the standard Python template, and it catches
+# ours by name alone. The directory is re-included rather than the files
+# inside it: git does not descend into an excluded directory, so
+# unignoring a path within one has no effect.
+!services/converter/app/cover/
+
 # Translations
 *.mo
 *.pot

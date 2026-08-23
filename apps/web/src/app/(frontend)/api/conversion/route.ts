@@ -33,7 +33,13 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
 import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
-import { claimFor, completedState, inProgressState } from '../../../../domain/pipeline'
+import { acceptCoverKey, coverKey, coverSourceFormat, needsCover } from '../../../../domain/cover'
+import {
+  IN_FLIGHT_STATES,
+  claimFor,
+  completedState,
+  inProgressState,
+} from '../../../../domain/pipeline'
 import { readSourceKind } from '../../../../domain/publication'
 import { advanceMasterPipeline } from '../../../../lib/masterPipeline'
 import { logError } from '../../../../lib/logError'
@@ -193,7 +199,97 @@ export async function GET(request: Request) {
     }
   }
 
+  // Nothing to build. A cover is the last thing offered, because it is
+  // the only cosmetic job here: a book with no picture is still
+  // perfectly readable, and a converter's time belongs to the editions
+  // first.
+  const cover = await claimCover(payload)
+  if (cover) return NextResponse.json({ job: cover })
+
   return NextResponse.json({ job: null })
+}
+
+/**
+ * Claim the rendering of a book's default cover — page one of the book.
+ *
+ * Its own claim rather than a stage of the pipeline, because the books
+ * that need it most are the two the pipeline never touches: an EPUB
+ * upload and a PDF published as it stands are finished the moment they
+ * are filed, and would otherwise never see a converter at all.
+ *
+ * Restricted to books whose conversion has stopped moving. Page one is
+ * taken from the best artifact a book has, so rendering one mid-pipeline
+ * would take a text upload's cover from its DOCX master seconds before
+ * its PDF existed.
+ *
+ * Compare-and-swap on the cover state, exactly like the claim above and
+ * for the same reason: two converters polling at once must not both
+ * render the same page.
+ */
+async function claimCover(payload: Awaited<ReturnType<typeof getPayload>>) {
+  const waiting = await payload.find({
+    collection: 'books',
+    where: {
+      and: [
+        { 'generatedCover.state': { equals: 'pending' } },
+        { 'conversion.state': { not_in: IN_FLIGHT_STATES } },
+      ],
+    },
+    sort: 'createdAt',
+    limit: 10,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  for (const book of waiting.docs) {
+    const formats = (book.artifacts ?? []).map((artifact) => artifact.format)
+    if (
+      !needsCover({
+        state: book.generatedCover?.state,
+        // Depth 0, so this is the media id rather than the document —
+        // which is all the question needs.
+        hasUploadedCover: Boolean(book.cover),
+        formats,
+      })
+    ) {
+      continue
+    }
+
+    const format = coverSourceFormat(formats)
+    const source = (book.artifacts ?? []).find((artifact) => artifact.format === format)
+    if (!source?.storageKey) continue
+
+    const claimed = await payload.update({
+      collection: 'books',
+      where: {
+        and: [{ id: { equals: book.id } }, { 'generatedCover.state': { equals: 'pending' } }],
+      },
+      data: { generatedCover: { ...book.generatedCover, state: 'rendering' } },
+      overrideAccess: true,
+    })
+    // Lost the race — another converter has it.
+    if (claimed.docs.length === 0) continue
+
+    return {
+      job_id: `cover-${book.id}`,
+      book_id: String(book.id),
+      kind: 'cover' as const,
+      // Which artifact page one comes out of, and how to read it. Sent
+      // rather than inferred from the key's extension, because the key
+      // is ours to name and the format is the actual instruction.
+      source_key: source.storageKey,
+      source_format: format,
+      // Where to put it. Named by this side so the containment rule and
+      // the serving route agree without either guessing (domain/cover.ts).
+      cover_key: coverKey(book.id),
+      formats: [],
+      title: book.title,
+      author: book.author ?? null,
+      allow_third_party_ai: false,
+    }
+  }
+
+  return null
 }
 
 interface CompletionBody {
@@ -203,6 +299,7 @@ interface CompletionBody {
   page_count?: unknown
   message?: unknown
   artifacts?: unknown
+  cover_key?: unknown
 }
 
 /** Report a conversion finished, or failed. */
@@ -231,6 +328,36 @@ export async function POST(request: Request) {
     .catch(() => null)
   if (!book) return NextResponse.json({ error: 'No such book.' }, { status: 404 })
 
+  // Which phase finished. Defaulted to 'formats' so a converter that
+  // predates the two-phase split still lands a book on 'ready' rather
+  // than stalling it in a state it will never report again.
+  const kind =
+    body.kind === 'master' ? 'master' : body.kind === 'cover' ? 'cover' : ('formats' as const)
+
+  // A cover is not a phase of the pipeline and must not move the book
+  // through one. Both outcomes are recorded on the cover alone: a page
+  // that would not render leaves a perfectly good book with no picture,
+  // which is not a failed conversion.
+  if (kind === 'cover') {
+    const key = body.state === 'failed' ? null : acceptCoverKey({ bookId, key: body.cover_key })
+    await payload.update({
+      collection: 'books',
+      id: bookId,
+      data: {
+        generatedCover: {
+          ...book.generatedCover,
+          // A rejected key is a failure too: the converter believes it
+          // wrote something, and leaving the book 'pending' would have
+          // every later poll render the same page again.
+          state: key ? 'ready' : 'failed',
+          ...(key ? { key } : {}),
+        },
+      },
+      overrideAccess: true,
+    })
+    return NextResponse.json({ ok: true })
+  }
+
   if (body.state === 'failed') {
     await payload.update({
       collection: 'books',
@@ -249,11 +376,6 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ ok: true })
   }
-
-  // Which phase finished. Defaulted to 'formats' so a converter that
-  // predates the two-phase split still lands a book on 'ready' rather
-  // than stalling it in a state it will never report again.
-  const kind = body.kind === 'master' ? 'master' : 'formats'
 
   // What the converter may attach, and only under this book's own
   // prefix. Decided in the domain layer so the containment rule is
