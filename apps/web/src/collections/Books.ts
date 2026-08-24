@@ -175,10 +175,17 @@ export const Books: CollectionConfig = {
     {
       name: 'language',
       type: 'select',
-      defaultValue: 'zh-Hant',
+      // Simplified first, and the default, since 2026-08-24: it is what
+      // most uploads actually are, and this value is what an uploader
+      // gets when the file said nothing about itself
+      // (`actions/upload.ts` only overrides it when extraction found a
+      // language). Traditional remains the fallback for a file that
+      // says bare `zh` — that is a signal rather than a silence, and
+      // `normalizeLanguage` in `domain/metadata.ts` decides it.
+      defaultValue: 'zh-Hans',
       options: [
-        { label: 'Traditional Chinese', value: 'zh-Hant' },
         { label: 'Simplified Chinese', value: 'zh-Hans' },
+        { label: 'Traditional Chinese', value: 'zh-Hant' },
         { label: 'English', value: 'en' },
         { label: 'Mixed Chinese/English', value: 'zh-en' },
       ],

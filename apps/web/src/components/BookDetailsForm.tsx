@@ -41,10 +41,21 @@ import { type PublicationPlan, type SourceKind, plansFor } from '../domain/publi
  * (`domain/publication.ts`).
  */
 
+/**
+ * Simplified Chinese leads the list and is what a book arrives with
+ * when its file said nothing (the `language` default in
+ * `collections/Books.ts`), because it is what most uploads are. The
+ * order is the same one the admin select uses, so an uploader and an
+ * editor are reading the same list.
+ *
+ * "Not sure" stays at the top as the empty value rather than being
+ * ranked among the languages — it is the absence of an answer, and a
+ * reader looking for it is looking for the way out of the question.
+ */
 const LANGUAGES = [
   { value: '', label: 'Not sure' },
-  { value: 'zh-Hant', label: 'Traditional Chinese' },
   { value: 'zh-Hans', label: 'Simplified Chinese' },
+  { value: 'zh-Hant', label: 'Traditional Chinese' },
   { value: 'en', label: 'English' },
   { value: 'zh-en', label: 'Chinese / English' },
 ]
