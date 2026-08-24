@@ -3,11 +3,20 @@
 import React, { useActionState, useState } from 'react'
 
 import {
+  applyShelfLevel,
   createCollection,
   moveCollection,
   saveCollection,
   type CollectionsState,
 } from '../../app/(admin)/actions/collections'
+import {
+  BOOK_LEVELS,
+  DEFAULT_BOOK_LEVEL,
+  LEVEL_APPLY_DESCRIPTIONS,
+  LEVEL_APPLY_LABELS,
+  LEVEL_APPLY_MODES,
+  LEVEL_LABELS,
+} from '../../domain/levels'
 
 export interface ParentOption {
   id: number
@@ -270,6 +279,7 @@ function CollectionCard({
           </>
         )}
         {moveState.error ? <p className="form-error">{moveState.error}</p> : null}
+        {editing ? <ShelfLevel collection={collection} /> : null}
       </div>
 
       {editing ? null : (
@@ -278,5 +288,80 @@ function CollectionCard({
         </button>
       )}
     </div>
+  )
+}
+
+/**
+ * Hand a reading level down a whole shelf.
+ *
+ * Levelling eighty books one at a time is not a thing anybody does, so
+ * a shelf can set the level for every book beneath it — the whole
+ * subtree, because a parent carries the shelves standing on it.
+ *
+ * Two modes, and the form makes an editor choose rather than guessing
+ * for them, because the difference is not cosmetic: a **cap** can only
+ * move a book shallower and leaves a curated one alone; an **exact**
+ * level overwrites whatever was there. `domain/levels.ts` owns both
+ * rules and the server applies them — this is only the question.
+ *
+ * Nothing is stored on the collection. A shelf has no level of its own;
+ * this is an act performed on the books, and the result is visible in
+ * their own level pills on the Books screen. Storing it would imply
+ * that a book filed onto the shelf later inherits it, which would need
+ * a rule about what happens when the two disagree — a bigger change
+ * than the button that prompted it.
+ *
+ * Inside the edit form, not on every card: it writes to every book
+ * beneath a shelf, which is not something to leave one click away from
+ * a list an editor is scrolling.
+ */
+function ShelfLevel({ collection }: { collection: AdminCollectionRow }) {
+  const [state, apply, applying] = useActionState<CollectionsState, FormData>(applyShelfLevel, {})
+
+  return (
+    <form action={apply} className="admin-shelflevel">
+      <p className="admin-shelflevel__head">
+        Level the {collection.booksInSubtree}{' '}
+        {collection.booksInSubtree === 1 ? 'book' : 'books'} on this shelf
+        {collection.booksInSubtree > collection.books ? ' and the shelves under it' : ''}
+      </p>
+      <input type="hidden" name="collectionId" value={collection.id} />
+
+      <div className="admin-shelflevel__row">
+        <label className="visually-hidden" htmlFor={`shelflevel-${collection.id}`}>
+          Level
+        </label>
+        <select id={`shelflevel-${collection.id}`} name="level" defaultValue={DEFAULT_BOOK_LEVEL}>
+          {BOOK_LEVELS.map((level) => (
+            <option key={level} value={level}>
+              {LEVEL_LABELS[level]}
+            </option>
+          ))}
+        </select>
+
+        <label className="visually-hidden" htmlFor={`shelfmode-${collection.id}`}>
+          How to apply it
+        </label>
+        <select id={`shelfmode-${collection.id}`} name="mode" defaultValue="cap">
+          {LEVEL_APPLY_MODES.map((mode) => (
+            <option key={mode} value={mode} title={LEVEL_APPLY_DESCRIPTIONS[mode]}>
+              {LEVEL_APPLY_LABELS[mode]}
+            </option>
+          ))}
+        </select>
+
+        <button type="submit" className="admin-btn admin-btn--small" disabled={applying}>
+          {applying ? 'Applying…' : 'Apply'}
+        </button>
+      </div>
+
+      <p className="admin-quiet admin-shelflevel__note">
+        {LEVEL_APPLY_DESCRIPTIONS.cap} Choose “{LEVEL_APPLY_LABELS.exact}” to overwrite every book
+        instead.
+      </p>
+
+      {state.error ? <p className="form-error">{state.error}</p> : null}
+      {state.ok && !state.error ? <p className="admin-ok">{state.ok}</p> : null}
+    </form>
   )
 }

@@ -15,7 +15,7 @@ import {
   rightsRisk,
   type RightsStatus,
 } from '../../../domain/rights'
-import { getQueueBook, getReviewQueue } from '../../../lib/adminData'
+import { getAdminBook, getReviewQueue } from '../../../lib/adminData'
 import { requireAdmin } from '../../../lib/adminAuth'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +30,13 @@ export const metadata = { title: 'Review queue' }
  * query parameter renders on the server, survives a decision being
  * saved, gives every row a real link, and means the whole screen needs
  * no client state at all. Only the decision form itself is interactive.
+ *
+ * There is one decision here and not two. Approving a submission puts
+ * it in the public library in the same act — see `actions/review.ts` —
+ * so the panel carries no separate Publish control and no visibility
+ * setting. What it still carries is the rights declaration, because
+ * that is the one gate an administrator cannot open: a book declared
+ * "owns a copy" cannot be approved at all.
  *
  * What a reviewer is deciding *about* is the finished book, so the
  * panel's main affordance is Read it — `/read/<slug>`, which the Books
@@ -63,7 +70,7 @@ export default async function ReviewQueuePage({
   // the current filter, and the panel should still show what happened
   // rather than closing itself.
   const selectedId = Number(params.book)
-  const selected = Number.isInteger(selectedId) ? await getQueueBook(selectedId) : null
+  const selected = Number.isInteger(selectedId) ? await getAdminBook(selectedId) : null
 
   const awaiting = books.filter((book) => book.review?.state === 'submitted').length
   const query = (extra: Record<string, string | null>) => {
@@ -199,7 +206,7 @@ function SubmissionPanel({
   adminId,
   closeHref,
 }: {
-  book: Awaited<ReturnType<typeof getQueueBook>> & object
+  book: Awaited<ReturnType<typeof getAdminBook>> & object
   /** Who is reviewing, so a book they uploaded themselves is recognised. */
   adminId: number | string
   closeHref: string
@@ -211,15 +218,13 @@ function SubmissionPanel({
   const kind = readSourceKind(book.conversion ?? {})
   const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
 
-  // The Publish button appears only when it would actually work. The
-  // gate is the domain's, so the button and the write agree by
-  // construction rather than by being kept in step.
+  // Approving is publishing, so the question "may this be approved" is
+  // literally `canPublishToLibrary`. The gate is the domain's, so the
+  // button and the write agree by construction rather than by being
+  // kept in step.
   //
   // `byAdmin` is unconditional here: this page is behind `requireAdmin`,
-  // so there is nobody else looking at it. It is what makes Publish
-  // available on a book that has been submitted but not yet approved —
-  // the approval and the publication are one act by one person, and the
-  // write records the approval either way.
+  // so there is nobody else looking at it.
   const publication = canPublishToLibrary({
     reviewState: state,
     rightsStatus: rights,
@@ -260,9 +265,9 @@ function SubmissionPanel({
             <strong>{RIGHTS_LABELS[rights]}</strong>
             {risk === 'block' ? (
               <p>
-                Owning a copy is not the right to publish it to everyone else. This book can be
-                approved, but it cannot go into the public library — and nothing on this screen can
-                change that.
+                Owning a copy is not the right to publish it to everyone else. Approving a book is
+                what puts it in the public library, so this one cannot be approved — and nothing on
+                this screen can change that.
               </p>
             ) : null}
             {risk === 'warn' ? (
@@ -305,7 +310,7 @@ function SubmissionPanel({
           bookId={book.id}
           reviewState={state}
           note={book.review?.note ?? ''}
-          canPublish={publication.allowed && !alreadyPublic}
+          canApprove={publication.allowed && !alreadyPublic}
           alreadyPublic={alreadyPublic}
           rightsCleared={isPubliclyDistributable(rights)}
         />

@@ -1,7 +1,7 @@
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-import { LEVEL_IDS } from '../../../../domain/levels'
+import { DEFAULT_BOOK_LEVEL, LEVEL_IDS } from '../../../../domain/levels'
 import {
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_LABEL,
@@ -170,10 +170,19 @@ export async function POST(request: Request): Promise<Response> {
         // exactly what blocks submission — so the question cannot be
         // skipped by never answering it.
         rightsStatus: 'unknown',
-        // Not the uploader's to choose. Both of these are what keep an
-        // upload out of the public catalog.
+        // Not the uploader's to choose. Visibility is what keeps an
+        // upload out of the public catalog until an administrator
+        // approves it.
         visibility: 'private',
-        level: LEVEL_IDS.extensive,
+        // The library's default depth, not the tail. It was `extensive`
+        // until 2026-08-24, on the reasoning that an unreviewed upload
+        // should not surface in the default browse view — but the thing
+        // keeping it out of that view is `visibility: 'private'` above,
+        // and levels are curation rather than access control
+        // (`domain/levels.ts`). All the old value achieved was that a
+        // book an administrator then approved arrived in the tail
+        // unless somebody remembered to move it.
+        level: LEVEL_IDS[DEFAULT_BOOK_LEVEL],
         status: 'draft',
         owner: Number(user.id),
         review: { state: 'unsubmitted' },

@@ -131,3 +131,63 @@ export const LEVEL_DESCRIPTIONS: Record<BookLevel, string> = {
   normal: 'The main library.',
   extensive: 'Everything, including specialist and supplementary works.',
 }
+
+/**
+ * Levelling a whole shelf at once.
+ *
+ * Setting a level book by book is right for a handful of titles and
+ * hopeless for a shelf of eighty, so a collection can hand its level
+ * down to everything beneath it — the whole subtree, because a parent
+ * carries every shelf standing on it (`collectionTree.ts`).
+ *
+ * Two modes, and the difference matters:
+ *
+ *   cap    — nothing under this shelf sits deeper than the level given.
+ *            A book already shallower keeps what it has. This is the
+ *            one to reach for on a shelf that has been curated already:
+ *            it pulls the tail forward without flattening the work
+ *            somebody did picking out the essential titles.
+ *
+ *   exact  — every book under this shelf takes the level given,
+ *            whatever it had. Destructive on purpose: it is what you
+ *            want after re-filing a batch, and what you do not want on
+ *            a shelf you have levelled by hand.
+ *
+ * Cap is the default offered because it is the reversible-looking one:
+ * it can only ever move books shallower, and it never touches a book
+ * somebody deliberately marked essential.
+ */
+export const LEVEL_APPLY_MODES = ['cap', 'exact'] as const
+
+export type LevelApplyMode = (typeof LEVEL_APPLY_MODES)[number]
+
+export function isLevelApplyMode(value: unknown): value is LevelApplyMode {
+  return typeof value === 'string' && (LEVEL_APPLY_MODES as readonly string[]).includes(value)
+}
+
+export const LEVEL_APPLY_LABELS: Record<LevelApplyMode, string> = {
+  cap: 'As a cap',
+  exact: 'Exactly',
+}
+
+export const LEVEL_APPLY_DESCRIPTIONS: Record<LevelApplyMode, string> = {
+  cap: 'Nothing under this shelf sits deeper. Books already shallower keep what they have.',
+  exact: 'Every book under this shelf takes this level, whatever it had.',
+}
+
+/**
+ * What a book beneath the shelf should become, or null to leave it be.
+ *
+ * Null rather than "the level it already has" so the caller can skip
+ * the write entirely: applying a cap to a shelf of eighty books
+ * typically moves three of them, and eighty updates to D1 to change
+ * three rows is eighty round trips a Worker pays for.
+ */
+export function shelfLevelFor(
+  mode: LevelApplyMode,
+  shelfLevel: BookLevel,
+  bookLevel: BookLevel,
+): BookLevel | null {
+  if (mode === 'exact') return bookLevel === shelfLevel ? null : shelfLevel
+  return levelId(bookLevel) > levelId(shelfLevel) ? shelfLevel : null
+}

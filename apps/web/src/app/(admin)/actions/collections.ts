@@ -4,7 +4,14 @@ import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
-import { canNest, parentIdOf } from '../../../domain/collectionTree'
+import { canNest, parentIdOf, subtreeIds } from '../../../domain/collectionTree'
+import {
+  isBookLevel,
+  isLevelApplyMode,
+  levelFromId,
+  levelId,
+  shelfLevelFor,
+} from '../../../domain/levels'
 import type { BookCollection } from '../../../payload-types'
 import { currentAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
@@ -22,7 +29,7 @@ import { logError } from '../../../lib/logError'
  * `domain/collectionTree.ts`; both callers only ask it.
  */
 
-export type CollectionsState = { error?: string }
+export type CollectionsState = { error?: string; ok?: string }
 
 /** "Chinese Classics" → "chinese-classics". */
 function slugify(name: string): string {
@@ -248,6 +255,117 @@ export async function moveCollection(
 
   revalidateCollections()
   return {}
+}
+
+/**
+ * Level every book on a shelf, and on every shelf standing on it.
+ *
+ * A shelf of eighty books cannot be levelled eighty clicks at a time,
+ * so the level is handed down the subtree in one act. The subtree and
+ * not just the shelf, because CLAUDE.md section 5.3 says a parent
+ * carries everything beneath it — an editor levelling "Chinese
+ * Classics" means the Confucian shelf standing on it too, and a version
+ * that quietly stopped at the first level would be the more surprising
+ * of the two behaviours.
+ *
+ * Two modes, and `domain/levels.ts` owns the difference: a **cap** can
+ * only ever move a book shallower and leaves a curated one alone; an
+ * **exact** level overwrites whatever was there. Neither is a default
+ * worth guessing at, so the form asks, and cap is what it offers first.
+ *
+ * Only books that would actually change are written. Applying a cap to
+ * a large shelf typically moves a handful of them, and a write per book
+ * regardless would be a round trip to D1 for every row to change three
+ * — which is what a Worker is billed for.
+ */
+/**
+ * How many books one shelf-levelling will touch, and how many at a time.
+ *
+ * The ceiling is not arithmetic: every update is a Worker subrequest,
+ * and a run that quietly stopped halfway through a shelf would be worse
+ * than one that never started. 500 is comfortably inside the budget for
+ * a library this size; past it the honest answer is a script.
+ */
+const BOOK_LIMIT = 500
+const BATCH = 20
+
+export async function applyShelfLevel(
+  _prev: CollectionsState,
+  formData: FormData,
+): Promise<CollectionsState> {
+  const admin = await currentAdmin()
+  if (!admin) return { error: 'Administrators only.' }
+
+  const collectionId = Number(formData.get('collectionId'))
+  if (!Number.isInteger(collectionId)) return { error: 'No collection named.' }
+
+  const level = formData.get('level')
+  if (!isBookLevel(level)) return { error: 'That is not a level.' }
+
+  const mode = formData.get('mode')
+  if (!isLevelApplyMode(mode)) return { error: 'Say whether that is a cap or an exact level.' }
+
+  const payload = await getPayload({ config })
+
+  try {
+    const all = await payload.find({
+      collection: 'book-collections',
+      limit: 500,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const docs = all.docs as BookCollection[]
+    // `subtreeIds` walks down from whatever it is given and always
+    // returns at least that id, so it cannot tell us the shelf is gone.
+    // The list it walked can.
+    if (!docs.some((shelf) => shelf.id === collectionId)) {
+      return { error: 'That shelf is no longer there.' }
+    }
+    const shelves = subtreeIds(docs, collectionId)
+
+    // Every book filed on any shelf in the subtree, in one query. The
+    // `in` is over an indexed join rather than a query per shelf.
+    const books = await payload.find({
+      collection: 'books',
+      where: { collections: { in: shelves } },
+      limit: BOOK_LIMIT,
+      depth: 0,
+      overrideAccess: true,
+    })
+
+    const changes = books.docs.flatMap((book) => {
+      const next = shelfLevelFor(mode, level, levelFromId(book.level))
+      return next === null ? [] : [{ id: book.id, level: levelId(next) }]
+    })
+
+    // In batches rather than all at once. Each update is a subrequest
+    // and a Worker has a bounded number of them, so a shelf of hundreds
+    // must not fan out into one flight — and each is an independent row,
+    // so there is nothing to gain from doing them strictly in turn.
+    for (let at = 0; at < changes.length; at += BATCH) {
+      await Promise.all(
+        changes.slice(at, at + BATCH).map((change) =>
+          payload.update({
+            collection: 'books',
+            id: change.id,
+            data: { level: change.level },
+            overrideAccess: true,
+          }),
+        ),
+      )
+    }
+
+    revalidateCollections()
+    return {
+      ok:
+        changes.length === 0
+          ? 'Nothing to change — every book beneath it already fits.'
+          : `${changes.length} ${changes.length === 1 ? 'book' : 'books'} moved to ${level}.`,
+    }
+  } catch (error) {
+    logError('admin.collections.applyLevel', error)
+    return { error: 'That level could not be applied.' }
+  }
 }
 
 function revalidateCollections() {

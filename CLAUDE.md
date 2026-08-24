@@ -698,7 +698,25 @@ anything. The purpose is the mission's "low visual distraction": let a
 reader start with the core and open up the tail when they want it.
 
 Level is an administrator field, like rights status and visibility
-(section 6.1).
+(section 6.1). An upload arrives at **normal** — the library's own
+default (`DEFAULT_BOOK_LEVEL`), not the tail. It arrived at `extensive`
+until 2026-08-24, on the reasoning that an unreviewed upload should not
+surface in the default browse view; but what keeps it out of that view
+is `visibility: 'private'`, and levels are curation rather than access
+control. All the old default achieved was that an approved book landed
+in the tail unless somebody remembered to move it.
+
+An editor sets a level three ways, and they are the same field:
+one book at a time from the pill in the Books list (comparative — the
+question is about the books either side of it), one book at a time in
+that screen's edit panel, and **a whole shelf at once** from
+`/admin/collections`. The shelf form hands a level down the collection's
+entire subtree, in one of two modes that `shelfLevelFor` in
+`domain/levels.ts` owns: as a **cap**, which can only ever move a book
+shallower and leaves a curated one alone, or **exactly**, which
+overwrites whatever was there. Cap is what the form offers first. A
+shelf stores no level of its own — this is an act performed on books,
+not an attribute that a book filed there later would inherit.
 
 ---
 
@@ -861,16 +879,32 @@ enforces both gates, and `unknown` rights block submission entirely: the
 uploader is the only person who knows where their material came from, and
 that is the one moment in the flow when the question is easy to answer.
 
-**An administrator does not have to record the first gate before
-walking through it.** Since 2026-08-23, publishing a book *is* approving
-it — the same person, the same editorial judgement, in one act — so the
-Publish control is offered on a submission that has not been approved
-yet, and the write records the approval it implies
-(`enforcePublicationReview` in `collections/Books.ts`). Recording it is
-not optional bookkeeping: without it a public book would sit in the
-queue as pending, and would be refused by that same hook the next time
-its own uploader saved anything. The invariant is that a public owned
-book has an approved review.
+**The two gates are two questions, not two buttons.** Since 2026-08-24
+approving a submission publishes it, in the same act: the review queue
+has one Approve control and no Publish control, and no visibility
+setting anywhere in the admin. Publishing was separate until then, on
+the argument that the questions differ — and they do — but the second
+one has exactly one person who can answer it and one moment at which
+they do. Approving without publishing produced a state nobody could
+explain to an uploader: an "Approved" chip on a book still invisible to
+every reader.
+
+So the rights gate moved in *front* of the approval rather than behind
+it. A submission whose rights do not permit distribution cannot be
+approved at all, and the queue says so with the control disabled rather
+than offering a button that would be refused. That is what the design
+draws, and `approveSubmission` in `app/(admin)/actions/review.ts`
+enforces it before the write — reading the review state **as stored**,
+not the `approved` it is about to write, because otherwise the
+`not_offered` gate would find every book offered.
+
+Nothing about the second gate itself changed and nothing about it can.
+`isPubliclyDistributable` is consulted by the action, by
+`canPublishToLibrary`, and a third time by `enforcePublicationReview` on
+the write, which is the rule for every writer including `/cms`. The
+invariant is still that a public owned book has an approved review;
+approval and publication being one act is what now makes it true by
+construction.
 
 Nothing about the second gate changed, and nothing about it can. An
 administrator publishing their own upload is refused exactly as a reader

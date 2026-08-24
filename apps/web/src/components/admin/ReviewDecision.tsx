@@ -4,7 +4,6 @@ import { useActionState, useState } from 'react'
 
 import {
   approveSubmission,
-  publishToLibrary,
   requestChanges,
   type ReviewState as ActionState,
 } from '../../app/(admin)/actions/review'
@@ -13,45 +12,47 @@ import type { ReviewState } from '../../domain/moderation'
 /**
  * The editor's decision, and the words that go with it.
  *
- * Three buttons at most, and they are not three grades of the same
- * verdict:
+ * Two buttons:
  *
- *   Approve          — editorial. This belongs in the library.
- *   Request changes  — editorial. Not yet, and here is why.
- *   Publish          — the separate act that actually makes it public,
- *                      offered only when the rights permit it.
+ *   Approve          — this belongs in the library, and publishing it
+ *                      is the same act. There is no separate Publish.
+ *   Request changes  — not yet, and here is why.
  *
- * Publish no longer waits for Approve. An administrator publishing a
- * book is approving it, so the button is offered on a submission that
- * has not been approved yet and the write records the approval it
- * implies. Approve still exists on its own, because approving without
- * publishing is a real thing to want — a book whose rights are not
- * cleared can be judged worth having and still stay private.
+ * Publish was a third button until 2026-08-24. Approving without
+ * publishing produced a state nobody could explain — an "Approved" chip
+ * on a book still invisible to every reader — so the two collapsed into
+ * one, and the rights gate moved in front: a submission whose rights do
+ * not permit distribution cannot be approved at all, and the button is
+ * disabled rather than offered and then refused. That is what the
+ * design draws, and `actions/review.ts` enforces it on the server
+ * whatever this component renders.
  *
- * The design has a fourth, a permanent Reject distinct from requesting
- * changes. There is no such state in `domain/moderation.ts` and one was
- * not invented here — `rejected` is explicitly resubmittable, the
- * uploader's own screen has always called it "Changes requested", and
- * a queue that called the identical row "Rejected" would be the two
- * halves of one conversation using different words.
- *
- * A note is required to request changes and optional to approve. That
+ * The note is required to request changes and optional to approve. That
  * asymmetry is the point: a rejection without a reason is not a review,
  * while an approval explains itself by the book appearing.
+ *
+ * The design has a fourth control, a permanent Reject distinct from
+ * requesting changes. There is no such state in `domain/moderation.ts`
+ * and one was not invented here — `rejected` is explicitly
+ * resubmittable, the uploader's own screen has always called it
+ * "Changes requested", and a queue that called the identical row
+ * "Rejected" would be the two halves of one conversation using
+ * different words.
  */
 
 export function ReviewDecision({
   bookId,
   reviewState,
   note: savedNote,
-  canPublish,
+  canApprove,
   alreadyPublic,
   rightsCleared,
 }: {
   bookId: number
   reviewState: ReviewState
   note: string
-  canPublish: boolean
+  /** Whether approving would actually work — the domain's answer, not a guess. */
+  canApprove: boolean
   alreadyPublic: boolean
   /** Whether the rights permit public distribution — the gate nobody waives. */
   rightsCleared: boolean
@@ -64,15 +65,11 @@ export function ReviewDecision({
     requestChanges,
     {},
   )
-  const [publishState, publish, publishing] = useActionState<ActionState, FormData>(
-    publishToLibrary,
-    {},
-  )
 
   const [note, setNote] = useState(savedNote)
-  const busy = approving || changing || publishing
-  const result = approveState.error || changesState.error || publishState.error
-  const done = approveState.ok || changesState.ok || publishState.ok
+  const busy = approving || changing
+  const result = approveState.error || changesState.error
+  const done = approveState.ok || changesState.ok
 
   return (
     <section className="admin-decision">
@@ -96,8 +93,16 @@ export function ReviewDecision({
         <form action={approve}>
           <input type="hidden" name="bookId" value={bookId} />
           <input type="hidden" name="note" value={note} />
-          <button type="submit" className="admin-btn admin-btn--approve" disabled={busy}>
-            {approving ? 'Approving…' : reviewState === 'approved' ? 'Approved' : 'Approve'}
+          <button
+            type="submit"
+            className="admin-btn admin-btn--approve"
+            disabled={busy || !canApprove}
+          >
+            {approving
+              ? 'Approving…'
+              : alreadyPublic
+                ? 'In the library'
+                : 'Approve and publish'}
           </button>
         </form>
 
@@ -111,24 +116,24 @@ export function ReviewDecision({
       </div>
 
       {alreadyPublic ? (
-        <p className="admin-quiet admin-decision__state">It is in the public library.</p>
-      ) : canPublish ? (
-        <form action={publish} className="admin-decision__publish">
-          <input type="hidden" name="bookId" value={bookId} />
-          <button type="submit" className="admin-btn admin-btn--publish" disabled={busy}>
-            {publishing ? 'Publishing…' : 'Publish to the library'}
-          </button>
-          <p className="admin-quiet">
-            {reviewState === 'approved'
-              ? 'Approving said it belongs here; this is what puts it in front of everyone.'
-              : 'This approves it and publishes it in one act — you do not have to approve it first.'}
-          </p>
-        </form>
+        <p className="admin-quiet admin-decision__state">
+          It is in the public library. Requesting changes tells its uploader what to fix; it does
+          not withdraw the book.
+        </p>
       ) : !rightsCleared ? (
         <p className="admin-quiet admin-decision__state">
-          Its rights do not permit public distribution, so it stays private whatever you decide
-          here — and its uploader keeps every other thing the library offers. That gate is not an
-          administrator’s to open.
+          Its rights do not permit public distribution, so it cannot be approved — approving is
+          what publishes it. Its uploader keeps every other thing the library offers. That gate is
+          not an administrator’s to open.
+        </p>
+      ) : !canApprove ? (
+        <p className="admin-quiet admin-decision__state">
+          Its uploader has not offered it to the library. You can approve a submission early; you
+          cannot make one on somebody else’s behalf.
+        </p>
+      ) : reviewState === 'rejected' ? (
+        <p className="admin-quiet admin-decision__state">
+          Changes were requested. Approving now publishes it as it stands.
         </p>
       ) : null}
 

@@ -269,8 +269,7 @@
 }
 
 .admin-filters input,
-.admin-filters select,
-.admin-shelf select {
+.admin-filters select {
   font: inherit;
   font-size: 0.8125rem;
   color: var(--ink);
@@ -390,8 +389,7 @@
 
 /* Anything interactive inside a row has to sit above the stretched
    link, or the link swallows the click. */
-.admin-level,
-.admin-shelf {
+.admin-level {
   position: relative;
   z-index: 1;
 }
@@ -632,17 +630,6 @@
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 0.75rem;
-}
-
-.admin-decision__publish {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--rule-soft);
-}
-
-.admin-decision__publish p {
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
 }
 
 .admin-decision__state {
@@ -975,4 +962,154 @@
   .admin-col--md {
     display: none;
   }
+}
+
+/* ── Book edit panel ─────────────────────────────────────────────── */
+
+.admin-fields {
+  gap: 1rem;
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* The same label treatment the panel's own section headings get, so a
+   field and a section read as one vocabulary rather than two. */
+.admin-field > label,
+.admin-field > legend {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0;
+}
+
+.admin-field input,
+.admin-field select,
+.admin-field textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  padding: 0.5rem 0.75rem;
+}
+
+.admin-field textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.admin-field input:focus-visible,
+.admin-field select:focus-visible,
+.admin-field textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.admin-field--level {
+  gap: 0.5rem;
+}
+
+/* A radio and its label as one target. The native input stays in the
+   DOM — it is what makes the group a group for a keyboard and a screen
+   reader — and is drawn rather than replaced. */
+.admin-levelchoice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.admin-levelchoice[data-on='true'] {
+  border-color: var(--accent);
+  background: var(--paper);
+}
+
+.admin-levelchoice input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.admin-levelchoice span {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.admin-levelchoice em {
+  grid-column: 2;
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.admin-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.admin-panel__actions .admin-btn {
+  width: auto;
+  flex: 1;
+}
+
+/* ── Levelling a whole shelf ─────────────────────────────────────── */
+
+.admin-shelflevel {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.admin-shelflevel__head {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.admin-shelflevel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-shelflevel select {
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  padding: 0.3125rem 0.625rem;
+}
+
+.admin-shelflevel select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.admin-shelflevel__note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
 }

@@ -66,7 +66,16 @@ export async function countAwaitingReview(): Promise<number> {
   return result.totalDocs
 }
 
-export async function getQueueBook(id: number): Promise<Book | null> {
+/**
+ * One book, whole, for a detail panel.
+ *
+ * Shared by the review queue and the Books screen — they show different
+ * things about it, but neither wants a different read. `depth: 1` so
+ * the owner and the collections arrive populated; `catch` rather than
+ * a throw because a stale `?book=` in somebody's URL should close the
+ * panel, not break the page around it.
+ */
+export async function getAdminBook(id: number): Promise<Book | null> {
   const payload = await getPayload({ config })
   return payload
     .findByID({ collection: 'books', id, depth: 1, overrideAccess: true })

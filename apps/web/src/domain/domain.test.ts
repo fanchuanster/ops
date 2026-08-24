@@ -26,6 +26,8 @@ import { readerAvatarHue, readerInitials, readerName } from './avatar'
 import {
   BOOK_LEVELS,
   DEFAULT_BROWSE_LEVEL,
+  isLevelApplyMode,
+  shelfLevelFor,
   LEVEL_IDS,
   isVisibleAtLevel,
   levelFromId,
@@ -259,6 +261,48 @@ describe('reading levels', () => {
   it('reads a valid level from the query string', () => {
     expect(parseBrowseLevel('essential')).toBe('essential')
     expect(parseBrowseLevel('extensive')).toBe('extensive')
+  })
+
+  describe('levelling a whole shelf', () => {
+    it('as a cap, only ever moves a book shallower', () => {
+      expect(shelfLevelFor('cap', 'normal', 'extensive')).toBe('normal')
+      // Already shallower — a curated essential title is left alone,
+      // which is the whole reason cap exists beside exact.
+      expect(shelfLevelFor('cap', 'normal', 'essential')).toBe(null)
+      expect(shelfLevelFor('cap', 'normal', 'normal')).toBe(null)
+    })
+
+    it('never deepens a book, at any cap', () => {
+      for (const shelf of BOOK_LEVELS) {
+        for (const book of BOOK_LEVELS) {
+          const next = shelfLevelFor('cap', shelf, book)
+          if (next !== null) expect(levelId(next)).toBeLessThan(levelId(book))
+        }
+      }
+    })
+
+    it('as an exact level, overwrites whatever was there', () => {
+      expect(shelfLevelFor('exact', 'normal', 'essential')).toBe('normal')
+      expect(shelfLevelFor('exact', 'normal', 'extensive')).toBe('normal')
+      expect(shelfLevelFor('exact', 'extensive', 'essential')).toBe('extensive')
+    })
+
+    it('answers null when nothing would change, so the write can be skipped', () => {
+      for (const level of BOOK_LEVELS) {
+        expect(shelfLevelFor('exact', level, level)).toBe(null)
+        expect(shelfLevelFor('cap', level, level)).toBe(null)
+      }
+    })
+
+    it('refuses a mode it does not know rather than picking one', () => {
+      // The destructive mode must never be what an unrecognised value
+      // falls through to.
+      expect(isLevelApplyMode('cap')).toBe(true)
+      expect(isLevelApplyMode('exact')).toBe(true)
+      expect(isLevelApplyMode('')).toBe(false)
+      expect(isLevelApplyMode('CAP')).toBe(false)
+      expect(isLevelApplyMode(undefined)).toBe(false)
+    })
   })
 })
 
