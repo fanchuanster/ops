@@ -58,6 +58,18 @@ cd apps/web
   everything still needed (see `payload.config.ts`), which is also how the
   Worker bundle stopped growing towards the 10 MB limit. Bootstrap the first
   administrator with `npm run create-admin`.
+- API docs: http://localhost:8787/api/docs — Swagger UI over the REST API,
+  generated from the collection configs (`src/plugins/apiDocs.ts`); the document
+  itself is at `/api/openapi.json`. Both are administrators-only and answer 404
+  to anyone else, because the document names every collection and its whole
+  field shape. Authorize with a personal access token from `/account/tokens`,
+  or just stay signed in — the session cookie works too.
+- GraphQL playground: http://localhost:8787/api/graphql-playground — off unless
+  `PAYLOAD_GRAPHQL_PLAYGROUND=1` is in `.dev.vars`, which never reaches a
+  deploy. Administrators only on top of that, and `wrangler dev` reads
+  `.dev.vars` at startup — adding the line to a running server does nothing
+  until it is restarted. `/api/graphql` itself is POST-only, and the schema can
+  also be dumped without any of this: `./cf npx payload-graphql generate:schema`.
 - Health: http://localhost:8787/health — checks D1, not just the process
 
 Migrations are explicit and versioned in `apps/web/src/migrations`; the adapter

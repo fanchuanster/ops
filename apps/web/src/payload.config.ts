@@ -15,6 +15,7 @@ import { Books } from './collections/Books'
 import { Media } from './collections/Media'
 import { ReadingProgress } from './collections/ReadingProgress'
 import { Users } from './collections/Users'
+import { apiDocs } from './plugins/apiDocs'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -47,10 +48,33 @@ const { env } = await getCloudflareContext({ async: true })
  */
 const serverURL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8787'
 
+/**
+ * Whether the GraphQL playground at `/api/graphql-playground` is on.
+ *
+ * Payload gates both the playground and schema introspection on
+ * `NODE_ENV`, which does not distinguish what we mean by production: an
+ * OpenNext bundle is always built as production, so the local
+ * `wrangler dev` server is "production" too and the playground would
+ * 404 on the very machine it exists for.
+ *
+ * So the switch is an environment variable instead, and deliberately
+ * one that lives in `.dev.vars` — a file that is git-ignored and never
+ * deployed. Introspection is what makes the playground worth opening,
+ * and introspection cannot be gated by role the way the REST document
+ * is (it is an ordinary query to `/api/graphql`). Leaving this unset
+ * in production is therefore the whole protection, and the route's own
+ * administrator check is the second lock, not the first.
+ */
+const graphqlPlayground = process.env.PAYLOAD_GRAPHQL_PLAYGROUND === '1'
+
 export default buildConfig({
   serverURL,
   cors: [serverURL],
   csrf: [serverURL],
+  graphQL: {
+    disablePlaygroundInProduction: !graphqlPlayground,
+    disableIntrospectionInProduction: !graphqlPlayground,
+  },
   /**
    * There is no generated admin panel. `/admin` is NobleSee's own
    * editorial UI and the only one.
@@ -118,5 +142,8 @@ export default buildConfig({
       },
       bucket: env.ARTIFACTS,
     }),
+    // Swagger UI at /api/docs and the document at /api/openapi.json,
+    // both administrators-only. See `plugins/apiDocs.ts`.
+    apiDocs(),
   ],
 })

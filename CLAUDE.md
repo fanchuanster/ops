@@ -231,6 +231,16 @@ still reachable through `app/(payload)/api`, which stays. A screen for
 them is a real piece of work and a fair thing to want; it is not a
 reason to keep an entire second admin.
 
+Since 2026-08-25 that API is at least *legible*: `/api/docs` serves
+Swagger UI over an OpenAPI 3 document generated from the collection
+configs themselves (`apps/web/src/plugins/apiDocs.ts`), so the docs
+cannot drift from the API the way a hand-written spec would. It is
+administrators-only and answers Payload's own "route not found" to
+everyone else — the document names every collection and its whole field
+shape, which is a map worth not publishing. This is not a replacement
+for the missing screens. Reading `credit-ledger` through Swagger is
+still reading a table, not looking at an account.
+
 That deployable is a **Cloudflare Worker**, built by OpenNext, on **D1**
 for the database and **R2** for book artifacts. This section specified
 PostgreSQL 18 in a container until 2026-08-13; the reasoning for the

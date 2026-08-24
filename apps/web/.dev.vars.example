@@ -46,3 +46,16 @@ RESEND_API_KEY=
 # own authenticates nothing.
 ADOBE_CLIENT_ID=
 ADOBE_CLIENT_SECRET=
+
+# The GraphQL playground at /api/graphql-playground. Local only.
+#
+# Not a secret — the one thing here that is not — but it belongs in this
+# file rather than the committed `vars` block precisely because this file
+# never reaches a deploy. Setting it turns on Payload's playground *and*
+# schema introspection, and introspection is an ordinary query to
+# /api/graphql that no role check can gate. The route itself is
+# administrators-only either way.
+#
+# Unset it and the playground answers 404, which is the right state for
+# anything deployed. The Swagger UI at /api/docs needs none of this.
+PAYLOAD_GRAPHQL_PLAYGROUND=1
