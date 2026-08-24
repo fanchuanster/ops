@@ -13,8 +13,7 @@ import { usePathname } from 'next/navigation'
 const SECTIONS = [
   { href: '/account', label: 'Overview', hint: 'Credits and delivery' },
   { href: '/account/history', label: 'History', hint: 'Read, sent and paid' },
-  { href: '/account/books', label: 'My books', hint: 'What you uploaded' },
-  { href: '/account/upload', label: 'Upload a book', hint: 'Convert your own' },
+  { href: '/account/books', label: 'My books', hint: 'Upload and manage your own' },
 ] as const
 
 /**
@@ -46,7 +45,12 @@ export function AccountNav({ isAdmin = false }: { isAdmin?: boolean }) {
         {sections.map((section) => {
           // Exact match only. A prefix match would light up Overview on
           // every page, since every path here starts with /account.
-          const current = pathname === section.href
+          // Upload is the one exception: it has no entry of its own any
+          // more — it is reached by the button on My books — so it is
+          // that section a reader is inside while uploading.
+          const current =
+            pathname === section.href ||
+            (section.href === '/account/books' && pathname === '/account/upload')
           return (
             <li key={section.href}>
               <a href={section.href} aria-current={current ? 'page' : undefined}>

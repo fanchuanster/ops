@@ -38,7 +38,7 @@ export default async function MyBooksPage() {
       <div className="section-head">
         <h2>My Books</h2>
         <a className="cta cta--compact" href="/account/upload">
-          + New book
+          Upload a book
         </a>
       </div>
 
