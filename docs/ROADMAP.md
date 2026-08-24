@@ -74,6 +74,21 @@ oversight.
   WordPress removal (NR-16).
 - **Reader accounts** — sign-up, log-in and account pages against Payload auth,
   front-of-site rather than through the admin.
+- **The cover, on the book's own screen** — the edit panel's face *is* the
+  cover, showing what a reader sees (upload, else page one, else the first
+  character), with a small upload button on it. It was an upload field in the
+  CMS until 2026-08-24, which made the cover the one property of a book that
+  could not be changed on the screen for changing books. Removing an upload
+  falls back to page one rather than to nothing. Media's accepted types are now
+  an allowlist rather than `image/*`: SVG is an image and a script container,
+  and media is served from this origin.
+- **Personal access tokens** — `/account/tokens`, where a reader mints a token
+  that lets a script act as them. Payload's `useAPIKey` underneath, so
+  `payload.auth()` stays the only thing that resolves a credential and the
+  admin API needed no change to accept one; the screen supplies the value so it
+  carries a recognisable `nbl_pat_` prefix. One per account, so minting is also
+  rotating. It was a checkbox in the CMS until 2026-08-24, which made ticking it
+  the one legitimate reason a *reader* ever had to open `/cms`.
 - **Send-to-Kindle** (NR-17) — over Resend's HTTP API, because Workers cannot
   speak SMTP. Authorized by the same path as any delivery and recorded in the
   same ledger.

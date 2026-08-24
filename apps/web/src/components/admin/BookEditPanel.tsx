@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 
 import { saveBookDetails, type LibraryState } from '../../app/(admin)/actions/library'
 import { BOOK_LEVELS, LEVEL_DESCRIPTIONS, LEVEL_LABELS, type BookLevel } from '../../domain/levels'
+import { BookCoverControl } from './BookCoverControl'
 
 /**
  * The panel beside the Books list, where a book is actually edited.
@@ -21,6 +22,12 @@ import { BOOK_LEVELS, LEVEL_DESCRIPTIONS, LEVEL_LABELS, type BookLevel } from '.
  * send somebody the book they are looking at. What *is* state is the
  * unsaved draft, because that is what Discard restores and what makes
  * Save able to know whether it has anything to do.
+ *
+ * The cover is here too, as the panel's own face rather than as a
+ * field in the form. It was editable only in the CMS until 2026-08-24,
+ * which made it the one property of a book that could not be changed on
+ * the screen for changing books. It saves on choosing a file rather
+ * than on Save — see `BookCoverControl`.
  *
  * Deliberately absent: rights status, visibility, ownership, review.
  * Visibility in particular is no longer a field anybody sets — a book
@@ -42,6 +49,10 @@ export interface BookEditValues {
   published: boolean
   /** Deliveries to e-readers. Not downloads; NobleSee has none. */
   sent: number
+  /** What a reader sees: the upload, else page one, else neither. */
+  coverUrl: string | null
+  /** Whether that picture is an editor's upload, so removable. */
+  hasUploadedCover: boolean
 }
 
 export function BookEditPanel({
@@ -67,9 +78,11 @@ export function BookEditPanel({
   const set = <K extends keyof BookEditValues>(key: K, value: BookEditValues[K]) =>
     setDraft((current) => ({ ...current, [key]: value }))
 
-  const dirty = (Object.keys(book) as (keyof BookEditValues)[]).some(
-    (key) => draft[key] !== book[key],
-  )
+  // The cover is not part of the draft: it saves on its own, the moment
+  // a file is chosen, so comparing it here would leave Save enabled
+  // after an upload with nothing for it to write.
+  const EDITED = ['title', 'originalTitle', 'author', 'description', 'level', 'collectionId'] as const
+  const dirty = EDITED.some((key) => draft[key] !== book[key])
 
   const face = Array.from((book.originalTitle || book.title).trim())[0] ?? '·'
 
@@ -77,9 +90,13 @@ export function BookEditPanel({
     <aside className="admin-panel">
       <header className="admin-panel__head">
         <div className="admin-bookcell">
-          <span className="admin-face cjk" aria-hidden="true">
-            {face}
-          </span>
+          <BookCoverControl
+            bookId={book.id}
+            slug={book.slug}
+            coverUrl={book.coverUrl}
+            hasUploadedCover={book.hasUploadedCover}
+            face={face}
+          />
           <span>
             <h2>{book.title}</h2>
             <p className="admin-panel__meta">

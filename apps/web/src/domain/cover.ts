@@ -161,3 +161,68 @@ export function isCoverSourceFormat(format: unknown): format is ArtifactFormat {
     COVER_SOURCE_FORMATS.includes(format as (typeof COVER_SOURCE_FORMATS)[number])
   )
 }
+
+/* --- An editor's own cover ------------------------------------------ */
+
+/**
+ * Image types a cover may be.
+ *
+ * An allowlist rather than `image/*`, and the reason is not tidiness:
+ * `image/svg+xml` is an image by every definition and is also a script
+ * container. A cover is served from this site's own origin, so an
+ * uploaded SVG is stored cross-site scripting with a `<script>` in it —
+ * the browser executes it against noblesee.com. No raster format can do
+ * that.
+ *
+ * The four here are what a scanner, a phone or a design tool actually
+ * produces. AVIF is deliberately absent: it buys nothing over WebP for
+ * an image this size, and every format accepted is a decoder exposed.
+ */
+export const COVER_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
+
+/**
+ * 8 MB, which is generous for a picture shown 150px wide and nowhere
+ * near the ceiling that decides it.
+ *
+ * That ceiling is Worker memory. A cover arrives through a server
+ * action, which parses the whole request into memory before any of our
+ * code runs — the same property that pushed book uploads onto a
+ * streaming route handler (`api/upload/route.ts`) and raised their
+ * limit to 100 MB. A cover is small enough that the streaming shape
+ * would be complexity bought for nothing, so the limit stays low
+ * enough that buffering one is never the problem.
+ */
+export const COVER_MAX_BYTES = 8 * 1024 * 1024
+
+export type CoverUploadProblem = 'empty' | 'wrong_type' | 'too_large'
+
+export type CoverUploadCheck =
+  | { ok: true }
+  | { ok: false; problem: CoverUploadProblem }
+
+/** Whether a file an editor chose may become a book's cover. */
+export function checkCoverUpload(file: { size: number; type: string }): CoverUploadCheck {
+  if (file.size === 0) return { ok: false, problem: 'empty' }
+  if (!COVER_MIME_TYPES.includes(file.type as (typeof COVER_MIME_TYPES)[number])) {
+    return { ok: false, problem: 'wrong_type' }
+  }
+  if (file.size > COVER_MAX_BYTES) return { ok: false, problem: 'too_large' }
+  return { ok: true }
+}
+
+/**
+ * The alt text a cover gets, derived rather than asked for.
+ *
+ * Media requires `alt`, and a book cover's alt is a formula — every
+ * honest answer is "the cover of «title»". Putting a box on the form
+ * for it collects "cover", typed by an editor who has already made the
+ * one decision that mattered.
+ *
+ * Where the cover is genuinely decorative — the tile, where the title
+ * is printed right beside it — `BookTile` renders `alt=""` and this is
+ * never read. It is here for the places that show the cover alone.
+ */
+export function coverAltFor(title: string): string {
+  const name = title.trim()
+  return name === '' ? 'Book cover' : `Cover of ${name}`
+}

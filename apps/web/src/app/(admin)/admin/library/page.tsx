@@ -10,6 +10,7 @@ import {
   flattenTree,
   parentIdOf,
 } from '../../../../domain/collectionTree'
+import { coverImageUrl } from '../../../../domain/cover'
 import { levelFromId } from '../../../../domain/levels'
 import {
   countDeliveries,
@@ -163,6 +164,14 @@ export default async function AdminLibraryPage({
     return typeof id === 'number' ? id : null
   }
 
+  // `depth: 1` populates the relationship, so a cover arrives as the
+  // Media document. An id here would mean the row was written but the
+  // image is gone, which is a cover to replace rather than one to show.
+  const uploadedCover =
+    selected && typeof selected.cover === 'object' && selected.cover !== null
+      ? (selected.cover as { url?: string | null })
+      : null
+
   const editing: BookEditValues | null = selected
     ? {
         id: selected.id,
@@ -175,6 +184,15 @@ export default async function AdminLibraryPage({
         slug: selected.slug,
         published: selected.visibility === 'public',
         sent: deliveries.get(selected.id) ?? 0,
+        // The same order a reader's tile resolves — upload, then page
+        // one, then neither — decided here rather than in the panel, so
+        // there is one answer to "what does this book look like".
+        coverUrl: coverImageUrl({
+          uploadedUrl: uploadedCover?.url ?? null,
+          bookId: selected.id,
+          generated: selected.generatedCover ?? {},
+        }),
+        hasUploadedCover: uploadedCover !== null,
       }
     : null
 

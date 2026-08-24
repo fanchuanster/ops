@@ -1203,3 +1203,92 @@
   flex: 1;
 }
 
+
+/* --- The book's face, in the edit panel ----------------------------- */
+
+/* Bigger than the list's `.admin-face`: in a row it is a bullet telling
+   two books apart, here it is the thing being edited. */
+.admin-cover {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.admin-cover__pick {
+  position: relative;
+  display: block;
+}
+
+.admin-cover__img,
+.admin-cover .admin-face {
+  display: block;
+  width: 3.25rem;
+  height: 4.5rem;
+  border-radius: 0.375rem;
+}
+
+/* `cover`, not `contain`: a book cover is portrait and so is the frame,
+   so cropping a few pixels beats letterboxing every single one. */
+.admin-cover__img {
+  object-fit: cover;
+  background: var(--paper-band);
+}
+
+.admin-cover .admin-face {
+  font-size: 1.5rem;
+}
+
+.admin-cover__btn {
+  position: absolute;
+  right: -0.3rem;
+  bottom: -0.3rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.admin-cover__btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The input covers the button rather than being hidden, so the control
+   stays a real file input — keyboard-reachable, and opening the dialog
+   with no JavaScript involved. The ring is drawn on the parent because
+   the input itself is invisible. */
+.admin-cover__btn input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.admin-cover__btn:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.admin-cover .admin-linkbtn {
+  margin-top: 0.4rem;
+  font-size: 0.6875rem;
+}
+
+/* A refusal or a confirmation about the cover belongs under the cover,
+   not stretched across the panel head. */
+.admin-cover .form-error,
+.admin-cover .admin-ok {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 12rem;
+  margin: 0.3rem 0 0;
+  font-size: 0.6875rem;
+}

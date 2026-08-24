@@ -10,7 +10,16 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { acceptCoverKey, coverImageUrl, coverKey, coverSourceFormat, needsCover } from './cover'
+import {
+  COVER_MAX_BYTES,
+  acceptCoverKey,
+  checkCoverUpload,
+  coverAltFor,
+  coverImageUrl,
+  coverKey,
+  coverSourceFormat,
+  needsCover,
+} from './cover'
 
 describe('choosing what to render page one from', () => {
   it('prefers the PDF, which for a scan is the book itself', () => {
@@ -99,5 +108,54 @@ describe('which cover a page shows', () => {
     // A "ready" state with no key is a bug somewhere, and the honest
     // answer is the same as no cover rather than a URL that 404s.
     expect(coverImageUrl({ bookId: 42, generated: { state: 'ready', key: '' } })).toBeNull()
+  })
+})
+
+describe('checkCoverUpload', () => {
+  const jpeg = { size: 40_000, type: 'image/jpeg' }
+
+  it('accepts an ordinary image', () => {
+    expect(checkCoverUpload(jpeg).ok).toBe(true)
+  })
+
+  // The reason the allowlist exists: media is served from our own
+  // origin, so an SVG cover would be stored XSS.
+  it('refuses SVG, which `image/*` would have accepted', () => {
+    expect(checkCoverUpload({ size: 900, type: 'image/svg+xml' })).toEqual({
+      ok: false,
+      problem: 'wrong_type',
+    })
+  })
+
+  it('refuses a PDF dropped on the control by mistake', () => {
+    expect(checkCoverUpload({ size: 900, type: 'application/pdf' })).toEqual({
+      ok: false,
+      problem: 'wrong_type',
+    })
+  })
+
+  it('refuses an empty file before anything else', () => {
+    expect(checkCoverUpload({ size: 0, type: 'image/jpeg' })).toEqual({
+      ok: false,
+      problem: 'empty',
+    })
+  })
+
+  it('takes an image right up to the limit, and not one byte past it', () => {
+    expect(checkCoverUpload({ size: COVER_MAX_BYTES, type: 'image/png' }).ok).toBe(true)
+    expect(checkCoverUpload({ size: COVER_MAX_BYTES + 1, type: 'image/png' })).toEqual({
+      ok: false,
+      problem: 'too_large',
+    })
+  })
+})
+
+describe('coverAltFor', () => {
+  it('names the book', () => {
+    expect(coverAltFor('道德經')).toBe('Cover of 道德經')
+  })
+
+  it('says something rather than nothing for an untitled book', () => {
+    expect(coverAltFor('   ')).toBe('Book cover')
   })
 })
