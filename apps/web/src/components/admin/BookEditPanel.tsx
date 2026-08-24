@@ -177,7 +177,11 @@ export function BookEditPanel({
               set('collectionId', event.target.value === '' ? null : Number(event.target.value))
             }
           >
-            <option value="">No collection</option>
+            {/* "Other", not "No collection": a book here is filed
+                somewhere an editor can find it, rather than sitting in
+                a hole in the library. The tree calls the same group the
+                same thing. */}
+            <option value="">Other</option>
             {collections.map((collection) => (
               <option key={collection.id} value={collection.id}>
                 {collection.title}

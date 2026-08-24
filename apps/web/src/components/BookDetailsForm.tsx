@@ -234,7 +234,7 @@ export function BookDetailsForm({
                 value=""
                 defaultChecked={book.collection === null}
               />
-              <span>No collection</span>
+              <span>Other</span>
             </label>
 
             {collections.map((collection) => (

@@ -92,7 +92,8 @@ export interface LibraryRow {
  *     database returns.
  *   the parent picker — the design's "+ sub" *creates* a shelf under a
  *     parent, which is not the same as moving one that already exists.
- *     Without it a mis-filed shelf can only be fixed in `/cms`.
+ *     Without it a mis-filed shelf can only be fixed by hand through
+ *     the REST API.
  */
 export function LibraryTree({
   rows,
@@ -130,7 +131,7 @@ export function LibraryTree({
       {loose.length > 0 ? (
         <section className="admin-lib__group" style={{ '--depth': 0 } as React.CSSProperties}>
           <div className="admin-lib__shelf admin-lib__shelf--loose">
-            <span className="admin-lib__name">Not on a shelf</span>
+            <span className="admin-lib__name">Other</span>
             <span className="admin-quiet">
               {loose.length} {loose.length === 1 ? 'book' : 'books'} nobody has filed
             </span>
