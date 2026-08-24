@@ -29,6 +29,13 @@ export const Users: CollectionConfig = {
    * anything. A reader who makes a key gets exactly a reader's
    * privileges — the admin API's gate is the `admin` role, not the
    * existence of a key.
+   *
+   * It is minted at `/account/tokens`, where it is called a personal
+   * access token, and not through the checkbox the CMS draws. The
+   * screen supplies the value itself so the token carries a
+   * recognisable prefix (`domain/tokens.ts`); Payload derives
+   * `apiKeyIndex` from whatever it is given, so a supplied token
+   * authenticates exactly as a generated one does.
    */
   auth: {
     useAPIKey: true,

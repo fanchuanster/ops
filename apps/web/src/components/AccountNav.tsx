@@ -14,6 +14,7 @@ const SECTIONS = [
   { href: '/account', label: 'Overview', hint: 'Credits and delivery' },
   { href: '/account/history', label: 'History', hint: 'Read, sent and paid' },
   { href: '/account/books', label: 'My books', hint: 'Upload and manage your own' },
+  { href: '/account/tokens', label: 'Access tokens', hint: 'Let a script act as you' },
 ] as const
 
 /**

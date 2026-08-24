@@ -3520,3 +3520,52 @@ h3 {
 .my-books__item .fmt {
   margin-bottom: 0.35rem;
 }
+
+/* --- Access tokens ------------------------------------------------- */
+
+.access-token {
+  margin: 1rem 0 2rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
+}
+
+/* `break-all` rather than `anywhere`: a 48-character token has no
+   spaces to break at, so on a phone it either wraps mid-string or
+   pushes the panel wider than the screen. */
+.access-token__value code {
+  font-size: 0.875rem;
+  word-break: break-all;
+}
+
+.access-token__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* The confirm pair is a form inside the row; it must not become a
+   column of its own. */
+.access-token__controls form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.code-block {
+  margin: 0.75rem 0;
+  padding: 0.9rem 1rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  /* A curl line is one long line by nature. Scroll it rather than
+     wrapping it, so what is shown is what would be pasted. */
+  overflow-x: auto;
+}
+
+.code-block code {
+  font-size: 0.8125rem;
+  white-space: pre;
+}
