@@ -61,6 +61,14 @@ export default async function BookDetailsPage({
   const usage = isAdmin ? null : await usageThisMonth(payload, user.id)
   const state = book.conversion?.state ?? 'none'
 
+  // An approved book that has stopped converting is finished, and every
+  // step list on this page is then a row of ticks describing a journey
+  // that is over. The lists are hidden rather than the page redesigned,
+  // because a corrected master puts the book back in the pipeline and
+  // the progress list becomes the point of the page again.
+  const finished =
+    book.review?.state === 'approved' && (state === 'ready' || state === 'none')
+
   // What was uploaded, and what its owner chose to do with it. Both
   // decide which stages this book will actually pass through, so they
   // are read once here and shared by the form and the progress list.
@@ -84,7 +92,9 @@ export default async function BookDetailsPage({
         <p>Prepare your manuscript for NobleSee</p>
       </div>
 
-      <Stepper step={uploadStep({ state, reviewState: book.review?.state })} />
+      {finished ? null : (
+        <Stepper step={uploadStep({ state, reviewState: book.review?.state })} />
+      )}
 
       {/* The file this book came from, kept in view at every stage. The
           page changes shape as the book converts; which file it is does
@@ -181,13 +191,15 @@ export default async function BookDetailsPage({
 
       {share && book.visibility === 'public' ? <p className="hint">{share}</p> : null}
 
-      <ConversionProgress
-        state={state}
-        message={book.conversion?.message}
-        queuedSince={book.conversion?.startedAt}
-        sourceKind={sourceKind}
-        plan={plan}
-      />
+      {finished ? null : (
+        <ConversionProgress
+          state={state}
+          message={book.conversion?.message}
+          queuedSince={book.conversion?.startedAt}
+          sourceKind={sourceKind}
+          plan={plan}
+        />
+      )}
 
       {/* Only once the book has been through the pipeline: there is
           nothing to correct, and nothing to judge, until something has

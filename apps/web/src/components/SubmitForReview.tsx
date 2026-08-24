@@ -164,7 +164,9 @@ export function SubmitForReview({
     return (
       <section className="submit-review">
         <h3>Approved for the public library</h3>
-        <Timeline reached={5} />
+        {/* No timeline here. Every step of it is a tick on an approved
+            book, and a progress list with nothing left to progress
+            through says less than the heading above it already does. */}
         {reviewNote ? (
           <div className="editor-note">
             <strong>Editor’s note</strong>
