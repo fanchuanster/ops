@@ -143,7 +143,30 @@ export async function extractMetadata(file: ByteSource): Promise<Extraction> {
     logError('extractMetadata: read file', error)
   }
 
-  const metadata = mergeMetadata(found, byFilename)
+  // The filename first, and only the title comes from it — `fromFilename`
+  // returns nothing else, so author, language and length still come from
+  // inside the file.
+  //
+  // It was the other way round until 2026-08-24, on the reasonable-
+  // sounding argument that a file knows its own title better than its
+  // name does. For this library's material that is simply false. A
+  // scanned Chinese book arrives with whatever the scanning site wrote
+  // into its Info dictionary, which is routinely an advertisement:
+  // `南怀瑾选集_第七卷（如何修证佛法…).pdf` uploaded as "北斗成功社区 来者有缘
+  // 共铸成功", where the filename was the actual book and the embedded
+  // title was a download site's slogan. The `JUNK` list in
+  // `domain/metadata.ts` cannot catch these — they are well-formed
+  // Chinese sentences, indistinguishable from a real title by shape.
+  //
+  // The filename is the one field a human chose. It survives the
+  // download, and when it is wrong it is wrong in a way the uploader
+  // recognises instantly on the summary page — which is more than can
+  // be said for a plausible-looking slogan they may not read closely.
+  //
+  // An embedded title is still used when the filename yields none: a
+  // name that is all punctuation, or `scan001.pdf`, is caught by the
+  // same `JUNK` list and falls through to whatever the file said.
+  const metadata = mergeMetadata(byFilename, found)
   return {
     ...metadata,
     estimatedPages: estimatePages({
