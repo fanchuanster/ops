@@ -168,21 +168,6 @@
   justify-content: center;
 }
 
-/* The way out to the CMS sits apart from the four sections, because it
-   leaves this application. */
-.admin-nav__cms {
-  margin-top: auto;
-  border-top: 1px solid var(--rule-soft);
-  border-radius: 0;
-  padding-top: 1rem;
-  font-size: 0.8125rem;
-}
-
-.admin-nav__cms:hover {
-  background: transparent;
-  text-decoration: underline;
-}
-
 /* ── Panes ───────────────────────────────────────────────────────── */
 
 .admin-main {
@@ -1291,4 +1276,58 @@
   width: 12rem;
   margin: 0.3rem 0 0;
   font-size: 0.6875rem;
+}
+
+/* --- The reader panel ----------------------------------------------- */
+
+/* Consequences an editor should read before typing, not after saving:
+   sits under the field it warns about, at the field's own width. */
+.admin-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+/* Your own account: the box is disabled rather than absent, so the role
+   is still legible as a state rather than looking like it has no
+   setting at all. */
+.admin-check input:disabled {
+  cursor: not-allowed;
+}
+
+.admin-check input:disabled + span {
+  color: var(--ink-faint);
+}
+
+/* What the panel shows but cannot change. Read as a row of figures
+   rather than as fields, so they do not look like inputs someone has
+   failed to find the edit control for. */
+.admin-facts {
+  display: flex;
+  gap: 1.75rem;
+  margin: 0.5rem 0 0;
+  padding: 0.85rem 0 0;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.admin-facts dt {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+
+.admin-facts dd {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
 }
