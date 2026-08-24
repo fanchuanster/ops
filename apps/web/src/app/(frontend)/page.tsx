@@ -50,8 +50,9 @@ export default async function HomePage() {
 
   // Grouped by collection so the shape of the curation is visible on the
   // homepage, rather than a flat grid that says nothing about why these
-  // books are together. A book in two collections appears on both
-  // shelves, which is correct — it is in both.
+  // books are together. A book sits on one shelf, so nothing here can
+  // print it twice — but a *parent* still shows it, because the filter
+  // below is the whole subtree.
   //
   // Top-level collections only, each carrying everything beneath it.
   // The home page shows two shelves; spending one of them on a
@@ -63,11 +64,10 @@ export default async function HomePage() {
       return {
         collection: node.collection,
         books: books
-          .filter((book) =>
-            (book.collections ?? []).some((c) =>
-              ids.has(String(typeof c === 'object' && c ? c.id : c)),
-            ),
-          )
+          .filter((book) => {
+            const shelf = book.collection
+            return ids.has(String(typeof shelf === 'object' && shelf ? shelf.id : shelf))
+          })
           .slice(0, PER_SHELF),
       }
     })

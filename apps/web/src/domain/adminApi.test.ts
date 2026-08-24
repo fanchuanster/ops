@@ -69,14 +69,17 @@ describe('the admin API, on a book', () => {
     expect(fields(parseBookUpdate({ slug: '' }))).toEqual(['slug'])
   })
 
-  it('replaces the shelves, and an empty list is a real instruction', () => {
-    expect(ok(parseBookUpdate({ collections: [3, 1] })).collections).toEqual([3, 1])
-    // "Take it off every shelf" — not a missing value.
-    expect(ok(parseBookUpdate({ collections: [] })).collections).toEqual([])
-    expect(ok(parseBookUpdate({ collections: [2, 2, 5] })).collections).toEqual([2, 5])
-    expect(fields(parseBookUpdate({ collections: [0] }))).toEqual(['collections'])
-    expect(fields(parseBookUpdate({ collections: ['3'] }))).toEqual(['collections'])
-    expect(fields(parseBookUpdate({ collections: 3 }))).toEqual(['collections'])
+  it('takes one shelf, and null is a real instruction', () => {
+    expect(ok(parseBookUpdate({ collection: 3 })).collection).toBe(3)
+    // "Take it off the shelf" — not a missing value.
+    expect(ok(parseBookUpdate({ collection: null })).collection).toBe(null)
+    expect(fields(parseBookUpdate({ collection: 0 }))).toEqual(['collection'])
+    expect(fields(parseBookUpdate({ collection: '3' }))).toEqual(['collection'])
+    // A list is what this took until 2026-08-24. It is refused rather
+    // than read as its first element, so a client written against the
+    // old shape is told, not silently half-obeyed.
+    expect(fields(parseBookUpdate({ collection: [3] }))).toEqual(['collection'])
+    expect(fields(parseBookUpdate({ collections: [3] }))).toEqual(['collections'])
   })
 
   it('holds rights, visibility and language to their own vocabularies', () => {

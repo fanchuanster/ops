@@ -593,10 +593,36 @@ export const Books: CollectionConfig = {
       ],
     },
     {
-      name: 'collections',
+      /**
+       * The one shelf this book sits on.
+       *
+       * `hasMany` until 2026-08-24, and the plural was doing real harm.
+       * A book on two shelves appeared twice in the library — once
+       * under each — and a reader cannot tell a book that is genuinely
+       * in two places from the same book printed twice. Worse, every
+       * count of a shelf had to be a Set of ids rather than a length,
+       * in the catalog, the admin tree and the reader-facing tally,
+       * because a parent and its child could both hold the same book.
+       *
+       * Nesting is what the plural was really for. A book belongs on
+       * "Confucian", and a reader opening "Chinese Classics" finds it
+       * because that shelf carries everything beneath it
+       * (`domain/collectionTree.ts`) — not because the book was filed
+       * on both. One shelf, and the tree does the rest.
+       *
+       * The foreign key clears rather than refuses, like `parent` on
+       * the collection itself: deleting a shelf must never take its
+       * books with it. A book with no shelf is a real state — the
+       * Library screen gives it a group of its own.
+       */
+      name: 'collection',
       type: 'relationship',
       relationTo: 'book-collections',
-      hasMany: true,
+      index: true,
+      admin: {
+        description:
+          'The shelf this book sits on. One only — a reader finds it under every parent of that shelf, so filing it twice prints it twice.',
+      },
     },
   ],
 }

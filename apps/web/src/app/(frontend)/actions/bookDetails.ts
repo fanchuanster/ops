@@ -80,10 +80,9 @@ export async function saveBookDetails(
     return { error: 'Say where this book came from.' }
   }
 
-  const collectionIds = formData
-    .getAll('collections')
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value) && value > 0)
+  // One shelf, so the first legible value wins rather than a list.
+  const rawCollection = Number(formData.get('collection'))
+  const collectionId = Number.isInteger(rawCollection) && rawCollection > 0 ? rawCollection : null
 
   const language = String(formData.get('language') || '')
 
@@ -139,7 +138,7 @@ export async function saveBookDetails(
         translator: String(formData.get('translator') || '').trim() || null,
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
-        collections: collectionIds,
+        collection: collectionId,
         status: 'in_production',
         // Queued either way. A reader who is not asking for publication
         // still wants their EPUB.

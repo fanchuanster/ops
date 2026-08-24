@@ -327,7 +327,7 @@ export async function applyShelfLevel(
     // `in` is over an indexed join rather than a query per shelf.
     const books = await payload.find({
       collection: 'books',
-      where: { collections: { in: shelves } },
+      where: { collection: { in: shelves } },
       limit: BOOK_LIMIT,
       depth: 0,
       overrideAccess: true,

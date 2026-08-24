@@ -181,7 +181,7 @@ function serialize(book: {
   level: number
   visibility?: string | null
   rightsStatus?: string | null
-  collections?: unknown
+  collection?: unknown
   updatedAt?: string
 }) {
   return {
@@ -198,9 +198,11 @@ function serialize(book: {
     level: levelFromId(book.level),
     visibility: book.visibility ?? null,
     rightsStatus: book.rightsStatus ?? null,
-    collections: ((book.collections ?? []) as (number | { id: number } | null)[])
-      .map((entry) => (typeof entry === 'object' && entry ? entry.id : entry))
-      .filter((entry): entry is number => typeof entry === 'number'),
+    collection: (() => {
+      const entry = book.collection as number | { id: number } | null | undefined
+      const id = typeof entry === 'object' && entry ? entry.id : entry
+      return typeof id === 'number' ? id : null
+    })(),
     updatedAt: book.updatedAt,
   }
 }

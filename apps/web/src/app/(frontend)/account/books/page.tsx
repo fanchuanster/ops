@@ -58,9 +58,10 @@ export default async function MyBooksPage() {
             const kind = readSourceKind(book.conversion ?? {})
             const badge = kind === 'text' ? 'txt' : kind
             const ready = state === 'none' || state === 'ready'
-            const collections = (book.collections ?? [])
-              .map((c) => (typeof c === 'object' && c ? c.title : null))
-              .filter(Boolean)
+            const shelf =
+              typeof book.collection === 'object' && book.collection
+                ? book.collection.title
+                : null
 
             return (
               <li key={book.id} className="my-books__item">
@@ -76,7 +77,7 @@ export default async function MyBooksPage() {
                     {[
                       book.visibility === 'public' ? 'In the public library' : 'Private to you',
                       book.pageCount ? `${book.pageCount} pages` : null,
-                      collections.length > 0 ? collections.join(' · ') : null,
+                      shelf,
                     ]
                       .filter(Boolean)
                       .join(' — ')}

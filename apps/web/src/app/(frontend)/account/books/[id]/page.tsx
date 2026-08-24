@@ -159,9 +159,12 @@ export default async function BookDetailsPage({
           // estimate is what the monthly allowance was charged against.
           pageCount: book.pageCount ?? book.estimatedPages ?? null,
           pagesAreEstimated: !book.pageCount && Boolean(book.estimatedPages),
-          collections: (book.collections ?? [])
-            .map((c) => (typeof c === 'object' && c ? Number(c.id) : Number(c)))
-            .filter(Number.isFinite),
+          collection:
+            typeof book.collection === 'object' && book.collection
+              ? Number(book.collection.id)
+              : typeof book.collection === 'number'
+                ? book.collection
+                : null,
           sourceKind,
           plan,
         }}

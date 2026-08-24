@@ -111,7 +111,7 @@ export async function saveBookDetails(
         author: optional('author'),
         description: optional('description'),
         level: levelId(level),
-        collections: collectionId === null ? [] : [collectionId],
+        collection: collectionId,
       },
       overrideAccess: true,
     })

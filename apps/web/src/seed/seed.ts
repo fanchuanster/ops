@@ -30,7 +30,8 @@ interface SeedBook {
   translator: string
   language: 'zh-Hant' | 'zh-Hans' | 'en' | 'zh-en'
   description: string
-  collections: string[]
+  /** The one shelf it sits on. A parent shows it too, by containing that shelf. */
+  collection: string
   level: BookLevel
   /** Pages in the DOCX master. The credit price is derived from it. */
   pageCount: number
@@ -97,7 +98,7 @@ const BOOKS: SeedBook[] = [
     language: 'zh-en',
     description:
       'One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge’s 1891 translation, which is in the public domain, alongside the original Chinese text.',
-    collections: ['chinese-classics', 'philosophy-wisdom'],
+    collection: 'chinese-classics',
     level: 'normal',
     // Measured from the rendered standard PDF, which is what the price
     // rule means by "pages". Both seed books are short enough to cost
@@ -114,7 +115,7 @@ const BOOKS: SeedBook[] = [
     language: 'zh-en',
     description:
       'The recorded sayings of Confucius and his disciples, compiled by later followers — among the most influential works in Chinese thought on learning, character, and how to live well. This edition presents James Legge’s 1893 translation, which is in the public domain, alongside the original Chinese.',
-    collections: ['chinese-classics', 'personal-development'],
+    collection: 'chinese-classics',
     level: 'essential',
     pageCount: 6,
     keyPrefix: 'books/18/book',
@@ -189,9 +190,7 @@ async function seed() {
       // there is nothing to review. See domain/moderation.ts.
       review: { state: 'unsubmitted' as const },
       status: 'published' as const,
-      collections: spec.collections
-        .map((slug) => collectionIds.get(slug))
-        .filter((id): id is number => id !== undefined),
+      collection: collectionIds.get(spec.collection) ?? null,
     }
 
     if (existing.docs[0]) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { type CSSProperties, useActionState } from 'react'
 
 import { saveBookDetails, type DetailsState } from '../app/(frontend)/actions/bookDetails'
 import { type PublicationPlan, type SourceKind, plansFor } from '../domain/publication'
@@ -70,7 +70,7 @@ export interface EditableBook {
   /** Exact once converted, estimated before; null when neither is known. */
   pageCount: number | null
   pagesAreEstimated: boolean
-  collections: number[]
+  collection: number | null
   sourceKind: SourceKind
   plan: PublicationPlan
 }
@@ -201,25 +201,59 @@ export function BookDetailsForm({
         ) : null}
       </label>
 
+      {/*
+        One shelf, and the shelves drawn the way the library draws them.
+        A book on two shelves printed twice, and nesting is what makes
+        one enough: a reader opening a parent finds everything beneath
+        it (`domain/collectionTree.ts`).
+
+        Radios rather than a select, and the reason is the hierarchy
+        rather than the arity. An `<option>` cannot be styled, so a
+        select could only fake the tree with leading dashes — which is
+        a drawing of a hierarchy, not one. Here a root shelf is set in
+        the display face and a sub-shelf in small tracked capitals,
+        exactly as on `/books`, so the uploader is picking from a
+        picture of the library they already know. Every option is also
+        visible at once, which a select hides behind a click.
+
+        Books are not shown. The question is where this one goes, and
+        what is already on the shelf does not change the answer.
+      */}
       {collections.length > 0 ? (
         <fieldset className="upload-form__collections">
-          <legend>Collections</legend>
+          <legend>Collection</legend>
           <small>Only used if the book is ever published.</small>
           <div>
+            {/* First, and a real option: most uploads are nobody's
+                shelf yet, and an uploader who has no view should not
+                have to un-pick one. */}
+            <label className="upload-form__shelf upload-form__shelf--none">
+              <input
+                type="radio"
+                name="collection"
+                value=""
+                defaultChecked={book.collection === null}
+              />
+              <span>No collection</span>
+            </label>
+
             {collections.map((collection) => (
               <label
                 key={collection.id}
-                className="upload-form__check"
-                // Collections nest, and a sub-shelf that reads as a peer
-                // of the shelf above it is a different choice from the
-                // one being offered.
-                style={{ marginLeft: `${(collection.depth - 1) * 1.25}rem` }}
+                className={
+                  collection.depth === 1
+                    ? 'upload-form__shelf'
+                    : 'upload-form__shelf upload-form__shelf--nested'
+                }
+                // Indented by depth, like every other rendering of this
+                // tree — the admin's and the reader's both.
+                style={{ '--depth': collection.depth - 1 } as CSSProperties}
               >
                 <input
-                  type="checkbox"
-                  name="collections"
+                  type="radio"
+                  name="collection"
                   value={collection.id}
-                  defaultChecked={book.collections.includes(collection.id)}
+                  defaultChecked={book.collection === collection.id}
                 />
                 <span>{collection.title}</span>
               </label>

@@ -88,13 +88,13 @@ export default async function BooksPage({
   const direct = new Map<string, BookTileData[]>()
   const placed = new Set<string>()
   for (const book of books) {
-    for (const ref of book.collections ?? []) {
-      const id = String(typeof ref === 'object' && ref ? ref.id : ref)
-      const shelf = direct.get(id)
-      if (shelf) shelf.push(book)
-      else direct.set(id, [book])
-      placed.add(String(book.id))
-    }
+    const ref = book.collection
+    if (!ref) continue
+    const id = String(typeof ref === 'object' ? ref.id : ref)
+    const shelf = direct.get(id)
+    if (shelf) shelf.push(book)
+    else direct.set(id, [book])
+    placed.add(String(book.id))
   }
 
   const toShelf = (node: TreeNode<(typeof collections)[number]>): ShelfNode => ({

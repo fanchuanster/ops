@@ -1091,26 +1091,81 @@ h3 {
   padding: 0 0.35rem;
 }
 
+/*
+ * The shelves, down the page rather than wrapped across it.
+ *
+ * They wrapped when this was a set of checkboxes and the order between
+ * them carried nothing. It is a tree now, and a tree that wraps is a
+ * list — a child could land to the right of an unrelated shelf and read
+ * as belonging to it.
+ */
 .upload-form__collections > div {
+  --step: 1.1rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
+  flex-direction: column;
+  gap: 0.15rem;
   margin-top: 0.6rem;
 }
 
 /*
- * A checkbox beside its label, not above it.
+ * A radio beside its label, not above it.
  *
  * Qualified with `label` to out-specify the field rule above, which is
  * `.upload-form label:not(.plan-card)` and stacks its children in a
- * column. Unqualified this rule has lost that fight since the class
- * existed, and every collection checkbox has been sitting on its own
- * line above its name.
+ * column. Unqualified this rule loses that fight and every shelf sits
+ * on its own line above its name.
  */
-.upload-form label.upload-form__check {
+.upload-form label.upload-form__shelf {
   flex-direction: row;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem 0.3rem calc(0.5rem + var(--step, 1.1rem) * var(--depth, 0));
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.upload-form label.upload-form__shelf:hover {
+  background: var(--paper);
+}
+
+.upload-form__shelf input {
+  accent-color: var(--accent);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/*
+ * The same two treatments the library gives its headings: a root shelf
+ * is a name in the display face, a sub-shelf is a small tracked label.
+ * That contrast is what makes three levels read as a hierarchy rather
+ * than as three arbitrary sizes — and an uploader picking from it is
+ * looking at the page they already know from `/books`.
+ *
+ * A size down from the library's, because there it is a heading and
+ * here it is an option in a form.
+ */
+.upload-form__shelf span {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.upload-form__shelf--nested span {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Not a shelf, so not set like one — it is the way out of the question. */
+.upload-form__shelf--none span {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-faint);
 }
 
 /* --- managing your own upload ------------------------------------- */

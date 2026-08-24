@@ -74,7 +74,7 @@ export const BOOK_WRITABLE = [
   'language',
   'description',
   'level',
-  'collections',
+  'collection',
   'rightsStatus',
   'visibility',
 ] as const
@@ -94,7 +94,7 @@ export function parseBookUpdate(body: unknown): Parsed {
     language: oneOf('language', BOOK_LANGUAGES),
     description: nullable(text),
     level: parseLevel,
-    collections: parseIdList,
+    collection: nullableId,
     rightsStatus: oneOf('rightsStatus', RIGHTS_STATUSES as readonly RightsStatus[]),
     visibility: oneOf('visibility', BOOK_VISIBILITIES),
   })
@@ -210,20 +210,6 @@ const parseLevel: Reader = (value) => {
  * instruction "take it off every shelf" — which is why it is accepted
  * rather than treated as a missing value.
  */
-const parseIdList: Reader = (value) => {
-  if (!Array.isArray(value)) return { ok: false, message: 'Expected an array of collection ids.' }
-  const ids: number[] = []
-  for (const entry of value) {
-    if (!Number.isInteger(entry) || (entry as number) < 1) {
-      return { ok: false, message: 'Every collection id must be a positive whole number.' }
-    }
-    ids.push(entry as number)
-  }
-  // Deduplicated: filing a book on the same shelf twice is not a second
-  // shelf, and the join table would carry the row regardless.
-  return { ok: true, value: [...new Set(ids)] }
-}
-
 const nullableId: Reader = (value) => {
   if (value === null) return { ok: true, value: null }
   if (!Number.isInteger(value) || (value as number) < 1) {

@@ -76,19 +76,19 @@ export default async function AdminLibraryPage({
     [book.title, book.originalTitle, book.author]
       .some((field) => (field ?? '').toLowerCase().includes(needle))
 
-  // Which books sit directly on which shelf. A book filed on two
-  // shelves appears under both, exactly as a reader finds it.
+  // Which books sit directly on which shelf. One shelf each, so this
+  // is a filing rather than a fan-out — a parent still shows the book,
+  // by containing the shelf it is on.
   const direct = new Map<number, typeof books>()
   const shelved = new Set<number>()
   for (const book of books) {
-    for (const ref of book.collections ?? []) {
-      const id = typeof ref === 'object' && ref ? ref.id : ref
-      if (typeof id !== 'number') continue
-      const shelf = direct.get(id)
-      if (shelf) shelf.push(book)
-      else direct.set(id, [book])
-      shelved.add(book.id)
-    }
+    const ref = book.collection
+    const id = typeof ref === 'object' && ref ? ref.id : ref
+    if (typeof id !== 'number') continue
+    const shelf = direct.get(id)
+    if (shelf) shelf.push(book)
+    else direct.set(id, [book])
+    shelved.add(book.id)
   }
 
   const href = (extra: Record<string, string | null>) => {
@@ -158,10 +158,10 @@ export default async function AdminLibraryPage({
     title: collection.title,
   }))
 
-  const shelfOf = (entries: unknown): number | null =>
-    ((entries ?? []) as (number | { id: number } | null)[])
-      .map((entry) => (typeof entry === 'object' && entry ? entry.id : entry))
-      .find((id): id is number => typeof id === 'number') ?? null
+  const shelfOf = (entry: unknown): number | null => {
+    const id = typeof entry === 'object' && entry ? (entry as { id: number }).id : entry
+    return typeof id === 'number' ? id : null
+  }
 
   const editing: BookEditValues | null = selected
     ? {
@@ -171,7 +171,7 @@ export default async function AdminLibraryPage({
         author: selected.author ?? '',
         description: selected.description ?? '',
         level: levelFromId(selected.level),
-        collectionId: shelfOf(selected.collections),
+        collectionId: shelfOf(selected.collection),
         slug: selected.slug,
         published: selected.visibility === 'public',
         sent: deliveries.get(selected.id) ?? 0,

@@ -109,7 +109,7 @@ export async function getLibrary({ query, collectionId }: LibraryFilter) {
       ],
     })
   }
-  if (collectionId !== null) filters.push({ collections: { equals: collectionId } })
+  if (collectionId !== null) filters.push({ collection: { equals: collectionId } })
 
   const result = await payload.find({
     collection: 'books',
@@ -195,13 +195,12 @@ export async function booksPerCollection(): Promise<Map<number, Set<number>>> {
 
   const tally = new Map<number, Set<number>>()
   for (const book of result.docs) {
-    for (const entry of book.collections ?? []) {
-      const id = typeof entry === 'object' && entry ? entry.id : entry
-      if (typeof id !== 'number') continue
-      const shelf = tally.get(id)
-      if (shelf) shelf.add(book.id)
-      else tally.set(id, new Set([book.id]))
-    }
+    const entry = book.collection
+    const id = typeof entry === 'object' && entry ? entry.id : entry
+    if (typeof id !== 'number') continue
+    const shelf = tally.get(id)
+    if (shelf) shelf.add(book.id)
+    else tally.set(id, new Set([book.id]))
   }
   return tally
 }

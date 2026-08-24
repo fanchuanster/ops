@@ -69,7 +69,7 @@ export async function getCatalog({
     { status: { equals: 'published' } },
     { level: { less_than_equal: levelId(level) } },
   ]
-  if (collectionIds) filters.push({ collections: { in: collectionIds } })
+  if (collectionIds) filters.push({ collection: { in: collectionIds } })
 
   const books = await payload.find({
     collection: 'books',

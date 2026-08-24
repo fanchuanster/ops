@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react'
 import { submitForReview, type DetailsState } from '../app/(frontend)/actions/bookDetails'
 import {
   BOOK_LEVELS,
+  DEFAULT_BOOK_LEVEL,
   LEVEL_DESCRIPTIONS,
   LEVEL_LABELS,
   levelFromId,
@@ -105,18 +106,39 @@ export function SubmitForReview({
   const [state, action, pending] = useActionState<DetailsState, FormData>(submitForReview, {})
 
   // Pre-selected from what the book already says, so a reader who
-  // answered once and came back is not asked again. `unknown` is the
-  // value an upload starts with and is shown as the honest "not sure"
-  // rather than as nothing chosen.
+  // answered once and came back is not asked again.
+  //
+  // A book that says nothing — `unknown`, which is what every upload
+  // starts as — falls to public domain. Nothing was pre-selected until
+  // 2026-08-24, on the reasoning that an answer nobody gave is worse
+  // than no answer; what that produced in practice was a form where the
+  // submit button was dead on arrival and the commonest true answer for
+  // this library's material took an extra click every time.
+  //
+  // It is still an answer the uploader has to leave standing, and it is
+  // still only a declaration: `isPubliclyDistributable` decides what
+  // may be published, an administrator reads the declaration before
+  // approving, and neither is affected by which radio arrived checked.
   const [chosen, setChosen] = useState<string>(
-    OPTIONS.some((option) => option.value === rightsStatus) ? rightsStatus : '',
+    OPTIONS.some((option) => option.value === rightsStatus)
+      ? rightsStatus
+      : UPLOADER_RIGHTS[0].value,
   )
 
-  // Empty means no preference, which is both the default and a real
-  // answer. A previous proposal is read back so someone resubmitting
-  // after a rejection is not asked to remember what they said.
-  const [level, setLevel] = useState<BookLevel | ''>(
-    proposedLevel ? levelFromId(proposedLevel) : '',
+  // Always one of the three. "No preference — you decide" was a fourth
+  // radio and the default until 2026-08-24; it is gone, and the level
+  // falls to the library's own default instead.
+  //
+  // Removing it costs nothing real. The field was always a suggestion
+  // an editor is free to ignore — `approveSubmission` does not apply
+  // it, and `domain/moderation.ts` keeps `level` an administrator field
+  // precisely so that asking is not deciding. So the choice between
+  // "no preference" and "normal" was a distinction only this form drew.
+  //
+  // A previous proposal is read back so someone resubmitting after a
+  // rejection is not asked to remember what they said.
+  const [level, setLevel] = useState<BookLevel>(
+    proposedLevel ? levelFromId(proposedLevel) : DEFAULT_BOOK_LEVEL,
   )
 
   if (reviewState === 'submitted') {
@@ -219,15 +241,13 @@ export function SubmitForReview({
 
         {/* The same fieldset shape as the question above, deliberately:
             these are two parts of one submission and looking alike is
-            how that reads. Optional throughout — no default is
-            pre-selected, because a suggestion nobody made is worse than
-            no suggestion. */}
+            how that reads. */}
         <fieldset className="rights">
           <p>Where does it belong in the library?</p>
           <p className="rights__hint">
             {byAdmin
-              ? 'Optional. You are the editor, so set it here or from the library screen.'
-              : 'Optional, and only a suggestion — an editor decides where it sits.'}
+              ? 'You are the editor, so set it here or from the library screen.'
+              : 'Only a suggestion — an editor decides where it sits.'}
           </p>
 
           <div className="rights__options">
@@ -245,19 +265,6 @@ export function SubmitForReview({
                 </span>
               </label>
             ))}
-
-            <label>
-              <input
-                type="radio"
-                name="proposedLevel"
-                // Posted as an empty value, which the server reads as no
-                // preference rather than as a level.
-                value=""
-                checked={level === ''}
-                onChange={() => setLevel('')}
-              />
-              <span>No preference — you decide</span>
-            </label>
           </div>
         </fieldset>
 

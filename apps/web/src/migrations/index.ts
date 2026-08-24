@@ -17,6 +17,7 @@ import * as migration_20260821_170000_collection_order from './20260821_170000_c
 import * as migration_20260823_120000_generated_cover from './20260823_120000_generated_cover';
 import * as migration_20260824_060000_unique_title from './20260824_060000_unique_title';
 import * as migration_20260824_090000_user_api_keys from './20260824_090000_user_api_keys';
+import * as migration_20260824_100000_single_collection from './20260824_100000_single_collection';
 
 export const migrations = [
   {
@@ -113,5 +114,10 @@ export const migrations = [
     up: migration_20260824_090000_user_api_keys.up,
     down: migration_20260824_090000_user_api_keys.down,
     name: '20260824_090000_user_api_keys'
+  },
+  {
+    up: migration_20260824_100000_single_collection.up,
+    down: migration_20260824_100000_single_collection.down,
+    name: '20260824_100000_single_collection'
   },
 ];
