@@ -38,8 +38,7 @@ export default async function AdminUsersPage({
         <div>
           <h1>Readers</h1>
           <p>
-            {rows.length} {rows.length === 1 ? 'account' : 'accounts'}
-            {query ? ' matching' : ''}
+            {rows.length} registered{query ? ', matching' : ''}
           </p>
         </div>
         <form className="admin-filters" method="get" action="/admin/users">
@@ -68,7 +67,7 @@ export default async function AdminUsersPage({
               <tr>
                 <th>Reader</th>
                 <th className="admin-col--md admin-num">Uploads</th>
-                <th className="admin-col--md admin-num">Public</th>
+                <th className="admin-col--md admin-num">Published</th>
                 <th className="admin-col--lg admin-num">Credits</th>
                 <th className="admin-col--md">Joined</th>
                 <th>Role</th>

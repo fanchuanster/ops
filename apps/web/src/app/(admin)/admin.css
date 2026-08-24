@@ -696,191 +696,325 @@
   text-decoration: underline;
 }
 
-/* ── Level pills ─────────────────────────────────────────────────── */
+/* ── The library tree ────────────────────────────────────────────── */
 
-.admin-level {
+/*
+ * One screen for the shelves and the books on them. The tree is
+ * flattened on the server and every row indents by `--depth`, so a
+ * shelf row and a book row are the same row wherever they sit and the
+ * reorder arrows keep working — nesting them in the DOM would make a
+ * sibling move a re-parent.
+ */
+.admin-lib {
+  --step: 1.25rem;
   display: flex;
-  gap: 0.25rem;
+  flex-direction: column;
 }
 
-.admin-level__pill {
-  font: inherit;
+.admin-lib__group {
+  display: contents;
+}
+
+.admin-lib__shelf {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 2rem 0.75rem
+    calc(2rem + var(--step) * var(--depth, 0));
+  border-bottom: 1px solid var(--rule);
+}
+
+.admin-lib__shelf--nested {
+  background: var(--paper);
+  border-bottom-color: var(--rule-soft);
+}
+
+.admin-lib__shelf--loose {
+  border-top: 1px solid var(--rule);
+}
+
+.admin-lib__heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* A root shelf is a name; a nested one is a label. That is what keeps
+   three levels readable as a hierarchy rather than as three sizes. */
+.admin-lib__name {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.admin-lib__name--nested {
+  font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1;
-  padding: 0.25rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid var(--rule);
-  background: var(--paper-raised);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Revealed on hover, but never hidden from a keyboard: `opacity` alone
+   would leave them focusable and invisible, and `display: none` would
+   take them off the tab order entirely. */
+.admin-lib__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.admin-lib__shelf:hover .admin-lib__tools,
+.admin-lib__tools:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .admin-lib__tools {
+    opacity: 1;
+  }
+}
+
+.admin-lib__move {
+  display: flex;
+  gap: 0.125rem;
+}
+
+.admin-lib__move button {
+  display: flex;
+  padding: 0.125rem;
+  border: 0;
+  background: none;
   color: var(--ink-faint);
   cursor: pointer;
 }
 
-.admin-level__pill:hover:not(:disabled) {
-  border-color: var(--ink-faint);
+.admin-lib__move button:hover:not(:disabled) {
   color: var(--ink);
 }
 
-.admin-level__pill[data-on='true'] {
-  border-color: transparent;
+.admin-lib__move button:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
-.admin-level__pill--essential[data-on='true'] {
+.admin-lib__book {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 2rem 0.5rem
+    calc(3rem + var(--step) * var(--depth, 0));
+  border-bottom: 1px solid var(--rule-soft);
+  position: relative;
+}
+
+.admin-lib__book:hover {
+  background: var(--paper);
+}
+
+.admin-lib__book[data-selected='true'] {
+  background: var(--paper-band);
+}
+
+.admin-lib__booktext {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-lib__booktext em {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+/* The stretched link is what makes the whole row open the panel while
+   still being one link a keyboard can reach. */
+.admin-lib__book .admin-rowlink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.admin-lib__sent {
+  width: 2.5rem;
+  text-align: right;
+  font-size: 0.75rem;
+}
+
+.admin-libcols {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 2rem;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* A book's level, as a label rather than a control. Three writers for
+   one field in a dense list was two too many — the panel sets one book
+   and the shelf form sets a subtree. */
+.admin-levelchip {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+}
+
+.admin-levelchip--essential {
   background: #ede9d5;
   color: #5c4010;
 }
 
-.admin-level__pill--normal[data-on='true'] {
+.admin-levelchip--normal {
   background: #e8eff8;
   color: #1e3a5f;
 }
 
-.admin-level__pill--extensive[data-on='true'] {
+.admin-levelchip--extensive {
   background: #ede8f5;
   color: #4c2e80;
 }
 
-.admin-shelf select {
-  max-width: 12rem;
-  border-radius: var(--radius-control);
-  font-size: 0.75rem;
-}
-
-.admin-shelf__error {
-  display: block;
-  color: #b3261e;
-  font-size: 0.6875rem;
-}
-
-/* ── Collection cards ────────────────────────────────────────────── */
-
-.admin-cards {
+.admin-lib__edit,
+.admin-lib__inline,
+.admin-lib__level,
+.admin-lib__add {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-width: 48rem;
-}
-
-.admin-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  background: var(--paper-raised);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-card);
-  padding: 1.25rem 1.5rem;
-  text-align: left;
-}
-
-.admin-card__move {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
-.admin-card__move button {
-  background: none;
-  border: 0;
-  padding: 0;
-  line-height: 0;
-  color: var(--rule);
-  cursor: pointer;
-}
-
-.admin-card__move button:hover:not(:disabled) {
-  color: var(--ink-soft);
-}
-
-.admin-card__move button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.admin-card__body {
+  gap: 0.5rem;
   flex: 1;
   min-width: 0;
 }
 
-.admin-card__title {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
+.admin-lib__inline,
+.admin-lib__level {
+  margin: 0 2rem 0 calc(3rem + var(--step) * var(--depth, 0));
+  padding: 0.875rem 1rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  max-width: 26rem;
 }
 
-.admin-card__title .admin-quiet {
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  font-weight: 400;
+.admin-lib__add {
+  margin: 1rem 2rem;
+  padding: 1rem;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-control);
+  max-width: 26rem;
 }
 
-.admin-card__desc {
-  margin: 0.25rem 0 0;
-  color: var(--ink-soft);
-}
-
-.admin-card__edit,
-.admin-card--new {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.admin-card__edit input,
-.admin-card__edit select,
-.admin-card--new input,
-.admin-card--new select {
+.admin-lib__edit input,
+.admin-lib__edit select,
+.admin-lib__inline input,
+.admin-lib__add input,
+.admin-lib__add select {
+  width: 100%;
+  max-width: 24rem;
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--ink);
   background: var(--paper-raised);
   border: 1px solid var(--rule);
   border-radius: var(--radius-control);
-  padding: 0.375rem 0.75rem;
-  width: 100%;
+  padding: 0.375rem 0.625rem;
 }
 
-/* A sub-shelf, indented by how deep it sits. Indentation rather than a
-   nested list: a card is the same card wherever it stands, and the
-   reorder arrows keep working on a flat list of siblings.
-
-   The rule down the left is what makes the indent read as "under the
-   one above" rather than as an accident of alignment. */
-.admin-card--nested {
-  margin-left: calc(var(--depth, 0) * 2rem);
-  border-left: 2px solid var(--accent-soft);
+.admin-lib__edit input:focus-visible,
+.admin-lib__edit select:focus-visible,
+.admin-lib__inline input:focus-visible,
+.admin-lib__add input:focus-visible,
+.admin-lib__add select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
-.admin-card__actions {
+.admin-lib__actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.admin-card__edittoggle {
-  flex-shrink: 0;
+.admin-lib__error {
+  margin: 0.5rem 2rem;
 }
 
-.admin-card--add {
-  justify-content: flex-start;
-  border-style: dashed;
+.admin-lib__levelhead {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+.admin-lib__levels {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.admin-lib__levels .admin-levelchoice {
+  flex: 1;
+  justify-content: center;
+}
+
+.admin-lib__modes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.admin-lib__level .admin-btn {
+  width: auto;
+  align-self: flex-start;
+}
+
+.admin-lib__addbtn {
+  margin: 1rem 2rem;
+  padding: 0.75rem 1rem;
+  max-width: 26rem;
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+  background: none;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-control);
   cursor: pointer;
-  padding: 1rem 1.5rem;
 }
 
-.admin-card--add:hover {
-  border-color: var(--accent-muted);
+.admin-lib__addbtn:hover {
   color: var(--ink);
+  border-color: var(--accent);
 }
 
-.admin-card--new {
-  border-style: dashed;
+.admin-panel__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.375rem 0 0;
+  font-size: 0.75rem;
+}
+
+.admin-levelchoice--compact {
+  grid-template-columns: auto auto;
+  padding: 0.375rem 0.5rem;
+  gap: 0.375rem;
 }
 
 /* ── Narrow ──────────────────────────────────────────────────────── */
@@ -1069,47 +1203,3 @@
   flex: 1;
 }
 
-/* ── Levelling a whole shelf ─────────────────────────────────────── */
-
-.admin-shelflevel {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--rule-soft);
-}
-
-.admin-shelflevel__head {
-  margin: 0 0 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-.admin-shelflevel__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.admin-shelflevel select {
-  font: inherit;
-  font-size: 0.8125rem;
-  color: var(--ink);
-  background: var(--paper-raised);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-control);
-  padding: 0.3125rem 0.625rem;
-}
-
-.admin-shelflevel select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.admin-shelflevel__note {
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
-  line-height: 1.5;
-}

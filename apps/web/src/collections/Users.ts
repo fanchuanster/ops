@@ -14,7 +14,25 @@ import { checkPassword } from '../domain/password'
  */
 export const Users: CollectionConfig = {
   slug: 'users',
-  auth: true,
+  /**
+   * Sessions for people, and API keys for their scripts.
+   *
+   * `useAPIKey` adds an opt-in, per-user key that authenticates as that
+   * user on every Payload endpoint and on the admin API in
+   * `app/(frontend)/api/admin/`. Per-user rather than one shared
+   * secret, for a reason that is not just tidiness: publishing a book
+   * records *who* approved it (`enforcePublicationReview` reads
+   * `req.user`), and a shared token cannot answer that question. It is
+   * also revocable one holder at a time.
+   *
+   * Off until a user turns it on, so enabling this grants nobody
+   * anything. A reader who makes a key gets exactly a reader's
+   * privileges — the admin API's gate is the `admin` role, not the
+   * existence of a key.
+   */
+  auth: {
+    useAPIKey: true,
+  },
   admin: {
     useAsTitle: 'email',
     group: 'Administration',

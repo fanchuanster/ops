@@ -1633,6 +1633,31 @@ h3 {
   color: inherit;
 }
 
+/*
+ * How many books are under a nested shelf.
+ *
+ * Set on the band ground rather than as plain text so it reads as a
+ * tally attached to the heading rather than as another word in it —
+ * the headings here are tracked capitals, and a bare numeral in that
+ * run would look like part of the name.
+ *
+ * `tabular-nums` so a column of folded shelves does not jitter as the
+ * digits change width.
+ */
+.shelf__count {
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--ink-faint);
+  background: var(--paper-band);
+  border-radius: 999px;
+  padding: 0.1875rem 0.4375rem;
+}
+
 .shelf__toggle:hover {
   color: var(--ink-soft);
 }
@@ -2828,27 +2853,35 @@ h3 {
   transform: scale(1.1);
 }
 
-/* Both clamp to one line: a shelf is scanned, and a title that wraps to
-   three lines pushes its neighbours out of alignment. */
-.tile__title,
-.tile__author {
-  display: block;
+/*
+ * Two lines for the title, and the height of two whether it uses them.
+ *
+ * One line until 2026-08-24, when the author line came out from under
+ * it. A one-line clamp is right when a title is competing with a second
+ * line of its own; on its own it just truncated names this library is
+ * full of — `南怀瑾选集 第七卷` loses the volume, which is the half that
+ * tells two tiles apart.
+ *
+ * Three would be worse than two: past that a shelf is reading rather
+ * than scanning, and the rail's tiles stop being the same shape.
+ *
+ * `min-height` rather than a plain clamp so a one-line title reserves
+ * the second line anyway — otherwise the bottom edge of a scrolling
+ * rail steps up and down as titles vary, which reads as misalignment
+ * rather than as short names.
+ */
+.tile__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   font-family: var(--font-sans);
   font-size: 0.75rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tile__title {
   font-weight: 600;
   color: var(--ink);
   line-height: 1.4;
-}
-
-.tile__author {
-  margin-top: 0.125rem;
-  color: var(--ink-faint);
+  min-height: 2.8em;
 }
 
 /*
@@ -2873,8 +2906,7 @@ h3 {
   font-size: 1.25rem;
 }
 
-.library .tile__title,
-.library .tile__author {
+.library .tile__title {
   font-size: 0.625rem;
 }
 

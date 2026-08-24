@@ -151,14 +151,42 @@ export async function POST(request: Request): Promise<Response> {
     r2Source(sourceKey, { name: filename, type: declaredType, size }),
   )
 
+  const title = (suggested.title || filename.replace(/\.[^.]+$/, '')).trim()
   const slug = `${slugify(suggested.title ?? '') || 'book'}-${jobId.slice(0, 8)}`
 
+  const payload = await getPayload({ config })
+
+  // A book's title is unique (`collections/Books.ts`), so this would be
+  // refused by the database in a moment anyway. It is checked here for
+  // the sentence: the write would come back as a validation error about
+  // a field, and what the uploader needs to be told is that the book is
+  // already here — which is usually good news rather than a failure.
+  //
+  // `overrideAccess` because the answer must not depend on who is
+  // asking. A private upload by another reader still occupies the
+  // title, and reporting "no such book" and then failing on the write
+  // would be worse than saying so.
+  const existing = await payload.find({
+    collection: 'books',
+    where: { title: { equals: title } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  if (existing.docs.length > 0) {
+    // Nothing points at the bytes we just stored, so they go.
+    await bucket.delete(sourceKey).catch(() => {})
+    return fail(
+      409,
+      `“${title}” is already in the library. If this is a different edition, rename the file to say which one it is and upload it again.`,
+    )
+  }
+
   try {
-    const payload = await getPayload({ config })
     const created = await payload.create({
       collection: 'books',
       data: {
-        title: suggested.title || filename.replace(/\.[^.]+$/, ''),
+        title,
         slug,
         author: suggested.author,
         ...(suggested.language ? { language: suggested.language as 'zh-Hans' } : {}),

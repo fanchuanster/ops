@@ -9,16 +9,15 @@ import { BOOK_LEVELS, LEVEL_DESCRIPTIONS, LEVEL_LABELS, type BookLevel } from '.
  * The panel beside the Books list, where a book is actually edited.
  *
  * The design's right-hand panel, adopted as drawn: title, original
- * title, description, shelf and level, with an explicit Save and a
- * Discard that appears only once something has changed.
+ * title, author, description, shelf and level, with an explicit Save
+ * and a Discard that appears only once something has changed.
  *
- * Author is here and is not in the design, which shows it read-only in
- * the panel header. A list that displays an author and cannot fix a
- * wrong one sends the editor to the CMS for a typo, which is exactly
- * the trip this panel exists to save.
+ * Since the Books and Collections screens merged this is also the only
+ * place a single book's level is set — the row shows it as a label
+ * now, and the shelf form beside it sets a whole subtree at once.
  *
  * Which book is open is a `?book=` in the URL and not state in here —
- * the list is server-rendered, a row is a real link, and an editor can
+ * the tree is server-rendered, a row is a real link, and an editor can
  * send somebody the book they are looking at. What *is* state is the
  * unsaved draft, because that is what Discard restores and what makes
  * Save able to know whether it has anything to do.
@@ -39,6 +38,10 @@ export interface BookEditValues {
   level: BookLevel
   collectionId: number | null
   slug: string
+  /** In the public library — which since 2026-08-24 means "approved". */
+  published: boolean
+  /** Deliveries to e-readers. Not downloads; NobleSee has none. */
+  sent: number
 }
 
 export function BookEditPanel({
@@ -79,7 +82,16 @@ export function BookEditPanel({
           </span>
           <span>
             <h2>{book.title}</h2>
-            {book.author ? <p className="admin-panel__author">{book.author}</p> : null}
+            <p className="admin-panel__meta">
+              <span
+                className={`admin-chip-status admin-chip-status--${book.published ? 'approved' : 'unsubmitted'}`}
+              >
+                {book.published ? 'Published' : 'Draft'}
+              </span>
+              <span className="admin-quiet">
+                {book.sent} sent
+              </span>
+            </p>
           </span>
         </div>
         <a className="admin-panel__close" href={closeHref} aria-label="Close">

@@ -8,7 +8,6 @@ export interface BookTileData {
   slug: string
   title: string
   originalTitle?: string | null
-  author?: string | null
   cover?: { url?: string | null; alt?: string | null } | string | number | null
   /** Page one, rendered by the converter when nobody uploaded a cover. */
   generatedCover?: { state?: string | null; key?: string | null } | null
@@ -16,7 +15,13 @@ export interface BookTileData {
 }
 
 /**
- * A book as a portrait tile: a 2:3 face, then title and author beneath.
+ * A book as a portrait tile: a 2:3 face, then the title beneath it.
+ *
+ * The author was under the title until 2026-08-24 and is gone. A shelf
+ * is scanned rather than read, and at 0.625rem in the library's tiles
+ * the second line was competing with the one that actually identifies
+ * the book. What it cost was a truncated title; what it bought was a
+ * name nobody could finish reading. The title now gets both lines.
  *
  * The face has three answers, in order: an uploaded cover, page one of
  * the book, and — when there is neither — the first character of the
@@ -74,7 +79,6 @@ export function BookTile({ book }: { book: BookTileData }) {
           )}
         </span>
         <span className="tile__title">{book.title}</span>
-        {book.author ? <span className="tile__author">{book.author}</span> : null}
       </a>
     </li>
   )

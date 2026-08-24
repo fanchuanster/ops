@@ -159,9 +159,9 @@ export function isPubliclyDistributable(status: RightsStatus): boolean {
  */
 export const RIGHTS_LABELS: Record<RightsStatus, string> = {
   public_domain: 'Public domain',
-  licensed: 'Wrote it, or licensed',
+  licensed: 'I wrote it, or hold a licence',
   permission_granted: 'Rights holder’s permission',
-  user_owned: 'Owns a copy',
+  user_owned: 'I own a copy',
   restricted: 'Restricted',
   unknown: 'Not sure',
 }

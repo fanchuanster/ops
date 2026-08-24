@@ -286,7 +286,7 @@ function SubmissionPanel({
               They think it belongs in{' '}
               <strong>{LEVEL_LABELS[levelFromId(book.review.proposedLevel)]}</strong>. Nothing
               applies it — set the level yourself on{' '}
-              <a href="/admin/books">Books</a>, whether or not you agree.
+              <a href="/admin/library">Library</a>, whether or not you agree.
             </p>
           </section>
         ) : null}

@@ -46,6 +46,11 @@ export interface ShelfNode {
  * their books, so nothing appears twice; that is also what the design
  * does.
  *
+ * A nested shelf's heading carries the number of books under it, its
+ * own sub-shelves included. Root shelves do not: "Authors" is a
+ * container, and a count beside every top-level heading reads as an
+ * inventory rather than as a library.
+ *
  * A shelf heading here is a fold, not a link — as designed. The
  * drill-down URL it used to be is still reachable: the homepage's
  * teaser shelves link to `/books?collection=`, which narrows this tree
@@ -93,11 +98,14 @@ function Shelf({
   const open = !collapsed.has(shelf.id)
   const panelId = `shelf-${shelf.id}`
 
+  // Everything under this shelf, its sub-shelves included, counted once.
+  const total = countBooks(shelf)
+
   // A shelf with nothing under it at this reading level is not drawn at
   // all. The level filter runs in the catalog query, so "no books" here
   // already means "nothing this reader is browsing for" — an empty
   // heading would be a shelf that promises books and has none.
-  if (!hasBooks(shelf)) return null
+  if (total === 0) return null
 
   // Root shelves carry the collection name in the display face; deeper
   // ones are set as small tracked capitals, which is what keeps a
@@ -127,6 +135,18 @@ function Shelf({
         >
           <Chevron open={open} />
           {head}
+          {/* Not on a root shelf. "Authors" is a container — its count
+              is the sum of the author shelves standing on it, which
+              tells a reader nothing they cannot see by opening it, and
+              a number beside every top-level heading turns the library
+              into an inventory. The count earns its place further down,
+              where a folded shelf is genuinely hidden. */}
+          {depth > 0 ? (
+            <span className="shelf__count">
+              {total}
+              <span className="visually-hidden"> {total === 1 ? 'book' : 'books'}</span>
+            </span>
+          ) : null}
         </button>
         <span className="shelf__rule" />
       </div>
@@ -154,9 +174,24 @@ function Shelf({
   )
 }
 
-/** Does this shelf, or anything beneath it, hold a book? */
-function hasBooks(shelf: ShelfNode): boolean {
-  return shelf.books.length > 0 || shelf.children.some(hasBooks)
+/**
+ * How many books are under this shelf, counting every shelf on it.
+ *
+ * By id and not by adding lengths: a book may be filed on a parent and
+ * on one of its children at once, and it is one book. That is the same
+ * reason `booksInSubtree` on the admin's collection cards is a Set.
+ *
+ * Zero is also how a shelf learns it should not be drawn — at a given
+ * reading level a whole subtree can come back empty.
+ */
+function countBooks(shelf: ShelfNode): number {
+  const seen = new Set<string>()
+  const walk = (node: ShelfNode) => {
+    for (const book of node.books) seen.add(String(book.id))
+    for (const child of node.children) walk(child)
+  }
+  walk(shelf)
+  return seen.size
 }
 
 /**

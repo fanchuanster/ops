@@ -159,7 +159,38 @@ export const Books: CollectionConfig = {
     beforeChange: [enforcePublicationReview, priceFromPageCount],
   },
   fields: [
-    { name: 'title', type: 'text', required: true, index: true },
+    {
+      /**
+       * One book, one title.
+       *
+       * Unique since 2026-08-24, after the same scan was uploaded twice
+       * and sat in the library as two books. Nothing else would have
+       * caught it: each upload mints its own job id and the slug carries
+       * eight characters of it precisely so two uploads *cannot*
+       * collide, and the one content-hash check we have
+       * (`conversion.sourceHash`, `lib/masterPipeline.ts`) only runs in
+       * the Adobe export path — neither copy went through it.
+       *
+       * The cost is real and worth stating: two genuinely different
+       * books can share a title. A second translation of 道德經, or two
+       * volumes a publisher named identically, are now refused rather
+       * than filed. The answer when that happens is to say which one it
+       * is in the title itself — the catalog shows the title and nothing
+       * beside it, so two rows reading `道德經` were never going to be
+       * tellable apart by a reader either.
+       *
+       * Trimmed before it is compared, so trailing whitespace cannot
+       * walk a duplicate past the constraint.
+       */
+      name: 'title',
+      type: 'text',
+      required: true,
+      unique: true,
+      index: true,
+      hooks: {
+        beforeValidate: [({ value }) => (typeof value === 'string' ? value.trim() : value)],
+      },
+    },
     {
       name: 'slug',
       type: 'text',

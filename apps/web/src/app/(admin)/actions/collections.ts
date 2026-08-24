@@ -369,8 +369,7 @@ export async function applyShelfLevel(
 }
 
 function revalidateCollections() {
-  revalidatePath('/admin/collections')
-  revalidatePath('/admin/books')
+  revalidatePath('/admin/library')
   // The home page is a row of these shelves, in this order.
   revalidatePath('/')
   revalidatePath('/collections')

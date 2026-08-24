@@ -20,7 +20,7 @@ const NESTING_ERRORS: Record<NestingRefusal, string> = {
  * deep that the tree stops being browsable.
  *
  * Here rather than only in the admin screen because there are two ways
- * in: `/admin/collections`, and Payload's own `/cms`. A cycle created
+ * in: `/admin/library`, and Payload's own `/cms`. A cycle created
  * through either would strand every collection in the ring — the tree
  * builder detaches them so the catalog survives, but they would vanish
  * from the shelves until somebody noticed.
@@ -94,7 +94,7 @@ export const BookCollections: CollectionConfig = {
       type: 'number',
       admin: {
         description:
-          'Where this shelf sits among its siblings, lowest first. Left empty it falls to the end and sorts by title — which is what every collection did before anyone chose. Set from /admin/collections rather than typed here.',
+          'Where this shelf sits among its siblings, lowest first. Left empty it falls to the end and sorts by title — which is what every collection did before anyone chose. Set from /admin/library rather than typed here.',
       },
     },
   ],

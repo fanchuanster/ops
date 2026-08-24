@@ -4,7 +4,12 @@ import { usePathname } from 'next/navigation'
 import React from 'react'
 
 /**
- * The admin's four destinations.
+ * The admin's three destinations.
+ *
+ * Books and Collections merged into Library on 2026-08-24 — they were
+ * never two subjects, and editing a book's shelf on one screen and the
+ * shelf itself on another put the two halves of one job a navigation
+ * apart.
  *
  * A client component only because the current section is underlined,
  * which needs the path — the same reason and the same shape as
@@ -27,8 +32,8 @@ const SECTIONS = [
     ),
   },
   {
-    href: '/admin/books',
-    label: 'Books',
+    href: '/admin/library',
+    label: 'Library',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <path
@@ -41,18 +46,6 @@ const SECTIONS = [
           stroke="currentColor"
           strokeWidth="1.3"
         />
-      </svg>
-    ),
-  },
-  {
-    href: '/admin/collections',
-    label: 'Collections',
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-        <rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-        <rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-        <rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
       </svg>
     ),
   },

@@ -164,7 +164,7 @@ const APPROVAL_REFUSALS: Record<string, string> = {
 
 function revalidateReview(bookId: number) {
   revalidatePath('/admin')
-  revalidatePath('/admin/books')
+  revalidatePath('/admin/library')
   // The uploader's own screens are where the decision is read.
   revalidatePath(`/account/books/${bookId}`)
   revalidatePath('/account/books')
