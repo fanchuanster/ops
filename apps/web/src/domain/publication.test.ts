@@ -153,17 +153,29 @@ describe('reading a book’s source kind back', () => {
 describe('the size limit the framework enforces', () => {
   // The regression this guards is invisible in every other test: Next
   // rejects an oversized server action body *before* entering the
-  // action, so no amount of testing `uploadBook` can catch a
-  // bodySizeLimit that is too low — or absent, which is how the portal
-  // shipped refusing every book over the 1 MB default.
-  it('is set, and leaves room for the largest file we accept', () => {
+  // action, so nothing that calls an action can catch a bodySizeLimit
+  // that is too low — or absent, which is how the portal once shipped
+  // refusing every book over the 1 MB default.
+  it('is set at all, so it is never the 1 MB default by accident', () => {
     const config = readFileSync(new URL('../../next.config.mjs', import.meta.url), 'utf8')
     const declared = /bodySizeLimit:\s*'(\d+)mb'/.exec(config)
 
     expect(declared, 'next.config.mjs must set experimental.serverActions.bodySizeLimit').not.toBe(
       null,
     )
-    expect(Number(declared![1]) * 1024 * 1024).toBeGreaterThan(MAX_UPLOAD_BYTES)
+    expect(Number(declared![1])).toBeGreaterThan(1)
+  })
+
+  // It used to have to clear MAX_UPLOAD_BYTES, because the book itself
+  // travelled through a server action. It must NOT any more: the upload
+  // is a raw body on `api/upload/route.ts`, and a bodySizeLimit large
+  // enough to hold a book is the signature of that having quietly
+  // regressed back into an action.
+  it('does not carry a whole book, because uploads no longer use an action', () => {
+    const config = readFileSync(new URL('../../next.config.mjs', import.meta.url), 'utf8')
+    const declared = /bodySizeLimit:\s*'(\d+)mb'/.exec(config)
+
+    expect(Number(declared![1]) * 1024 * 1024).toBeLessThan(MAX_UPLOAD_BYTES)
   })
 })
 

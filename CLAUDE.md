@@ -388,6 +388,19 @@ Limits that constrain the material: **100 MB per file**, which a
 something an uploader can act on; and one document transaction per 50
 pages, so a 400-page book costs 8.
 
+Since 2026-08-24 the portal's own limit is **also 100 MB**, and the
+agreement is not a coincidence — it is the point. It was 64 MB, set by
+Worker memory rather than by anything about books: uploads arrived
+through a Next server action, which parses the whole request into
+memory before any of our code runs. The upload is now a raw request
+body streamed straight into R2 (`api/upload/route.ts`), so memory no
+longer decides it and the two ceilings that remain — Adobe's, and
+Cloudflare's 100 MB request cap on Free and Pro — are the same number.
+
+A file the portal accepts is therefore a file Adobe will read. Raising
+it further means a Business plan *and* an answer for scans Adobe
+refuses, which is a product decision rather than a constant.
+
 Because of all that, **the pipeline is split at the master**, not at
 OCR. The web application produces the DOCX master for a PDF and the
 converter renders everything downstream of it. This is the one place the

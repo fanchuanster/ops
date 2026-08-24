@@ -13,18 +13,22 @@ initOpenNextCloudflareForDev()
 const nextConfig = {
   experimental: {
     serverActions: {
-      // Must stay just above MAX_UPLOAD_BYTES in `src/domain/publication.ts`
-      // — `publication.test.ts` fails if it drops below it.
+      // Books do NOT come through here. The conversion portal posts the
+      // file to `api/upload/route.ts` as a raw request body, precisely
+      // so it is never parsed into memory — see MAX_UPLOAD_BYTES in
+      // `src/domain/publication.ts` for why that decides the limit.
       //
-      // Not a tuning knob. Next enforces this *before* entering the
-      // action and answers a bare 413, so the default of 1 MB meant the
-      // conversion portal rejected every real book and none of the
-      // action's own messages could be reached. A book is never 1 MB.
+      // This governed the upload until 2026-08-24 and had to sit above
+      // the whole book (66mb) as a result. What is left are ordinary
+      // form actions — book details, rights, review — none of which
+      // carries a file. 4mb is generous for those and is small enough
+      // that a stray large action body is a bug rather than a bill.
       //
-      // 66mb rather than 64mb so the multipart framing around a
-      // maximum-size file does not push it over: the friendly "larger
-      // than 64 MB" from the action should always win over the 413.
-      bodySizeLimit: '66mb',
+      // Still set explicitly rather than left to default: the default
+      // is 1 MB, and rediscovering that at the moment some future form
+      // grows an attachment is exactly the afternoon this comment is
+      // meant to save.
+      bodySizeLimit: '4mb',
     },
   },
 

@@ -1042,6 +1042,32 @@ h3 {
   gap: 0.75rem;
 }
 
+/*
+ * How far a book has got on its way up.
+ *
+ * Worth the space only because the limit is 100 MB: on a slow
+ * connection that is minutes, and a submit button that simply sits
+ * there reads as a hang. The percentage is also on the button itself,
+ * so the state survives for anyone who cannot see the bar.
+ */
+.upload-progress {
+  height: 4px;
+  margin-top: 0.9rem;
+  border-radius: 999px;
+  background: var(--rule-soft);
+  overflow: hidden;
+}
+
+.upload-progress__bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  /* Eases the jump between progress events, which arrive in chunks
+     rather than smoothly. */
+  transition: width 0.2s ease-out;
+}
+
 .upload-form input[type='text'],
 .upload-form select {
   font: inherit;

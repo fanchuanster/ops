@@ -1,8 +1,7 @@
 'use client'
 
-import React, { useActionState, useRef, useState, type DragEvent } from 'react'
+import React, { useRef, useState, type DragEvent, type FormEvent } from 'react'
 
-import { uploadBook, type UploadState } from '../app/(frontend)/actions/upload'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '../domain/publication'
 
 /**
@@ -24,6 +23,15 @@ import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '../domain/publication'
  * reachable and correctly announced without reimplementing any of it —
  * dragging is the enhancement, and clicking or tabbing to it is the
  * path that always works.
+ *
+ * Submitting is an explicit request rather than a server action, and
+ * the file is the request body rather than a field in a multipart form
+ * (`api/upload/route.ts`). That is what lets a 100 MB book stream into
+ * storage instead of being parsed into a Worker's memory — and, since
+ * the request is ours, it is also what makes the progress bar below
+ * possible. `XMLHttpRequest` rather than `fetch`: only XHR reports
+ * upload progress, and a reader watching a 100 MB file go up with no
+ * indication of movement assumes it has hung.
  */
 
 const ACCEPT =
@@ -35,24 +43,86 @@ const ACCEPT =
 const FORMATS = ['pdf', 'docx', 'epub', 'txt'] as const
 
 export function UploadForm({ quota }: { quota?: React.ReactNode }) {
-  const [state, action, pending] = useActionState<UploadState, FormData>(uploadBook, {})
-
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [chosen, setChosen] = useState<string | null>(null)
 
-  // Checked here as well as in the action, because the server's answer
-  // to an oversized file costs the whole upload to hear. The action
+  const [error, setError] = useState<string | null>(null)
+  /** Null when idle; 0-100 while the file is going up. */
+  const [progress, setProgress] = useState<number | null>(null)
+  const pending = progress !== null
+
+  // Checked here as well as in the route, because the server's answer
+  // to an oversized file costs the whole upload to hear. The route
   // still enforces it — this is courtesy, not the boundary.
   const [tooBig, setTooBig] = useState<string | null>(null)
 
   function accept(file: File | undefined) {
     setChosen(file?.name ?? null)
+    setError(null)
     setTooBig(
       file && file.size > MAX_UPLOAD_BYTES
         ? `That file is ${Math.round(file.size / 1024 / 1024)} MB — larger than the ${MAX_UPLOAD_LABEL} limit.`
         : null,
     )
+  }
+
+  /**
+   * Send the file as the request body and go to the draft it became.
+   *
+   * The whole response is read before navigating, because the route
+   * answers with the new book's id — there is no redirect to follow, by
+   * design: `fetch` and XHR both follow a 3xx themselves, and the
+   * reader would never move.
+   */
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const file = inputRef.current?.files?.[0]
+    if (!file || tooBig) return
+
+    setError(null)
+    setProgress(0)
+
+    const request = new XMLHttpRequest()
+    request.open('POST', `/api/upload?name=${encodeURIComponent(file.name)}`)
+    // The type the browser guessed, which the route re-checks against
+    // the filename — several browsers send octet-stream for an EPUB.
+    request.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+
+    request.upload.addEventListener('progress', (progressEvent) => {
+      if (!progressEvent.lengthComputable) return
+      setProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100))
+    })
+
+    request.addEventListener('load', () => {
+      let body: { bookId?: string | number; error?: string } = {}
+      try {
+        body = JSON.parse(request.responseText)
+      } catch {
+        // A proxy or the platform answered instead of the route — most
+        // likely the request never reached us at all.
+      }
+
+      if (request.status >= 200 && request.status < 300 && body.bookId !== undefined) {
+        // Not `router.push`: the draft page must load fresh, and this
+        // navigation ends the upload rather than continuing the session.
+        window.location.assign(`/account/books/${body.bookId}`)
+        return
+      }
+
+      setProgress(null)
+      setError(body.error ?? 'Could not upload that file. Please try again.')
+    })
+
+    request.addEventListener('error', () => {
+      setProgress(null)
+      setError('The upload was interrupted. Please try again.')
+    })
+
+    request.addEventListener('abort', () => setProgress(null))
+
+    request.send(file)
   }
 
   function onDrop(event: DragEvent<HTMLLabelElement>) {
@@ -63,15 +133,15 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
     if (dropped.length === 0 || !inputRef.current) return
 
     // Assigning the FileList onto the real input rather than keeping the
-    // File in state: the form is submitted by a server action, so the
-    // file has to be *in* the form to be sent. State would show a
-    // filename and upload nothing.
+    // File in state: the input is what `submit` reads the file back
+    // from, and it is also what keeps the native `required` check
+    // honest. State would show a filename and upload nothing.
     inputRef.current.files = dropped
     accept(dropped[0])
   }
 
   return (
-    <form action={action} className="upload-form">
+    <form onSubmit={submit} className="upload-form">
       <div className="upload-form__head">
         <h3>Select manuscript</h3>
         <p>PDF, DOCX, EPUB, or plain text — up to {MAX_UPLOAD_LABEL}</p>
@@ -141,11 +211,24 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
 
       <div className="upload-form__actions">
         <button type="submit" className="cta" disabled={pending || tooBig !== null}>
-          {pending ? 'Reading your file…' : 'Upload'}
+          {pending ? `Uploading… ${progress}%` : 'Upload'}
         </button>
       </div>
 
-      {tooBig ?? state.error ? <p className="form-error">{tooBig ?? state.error}</p> : null}
+      {pending ? (
+        <div
+          className="upload-progress"
+          role="progressbar"
+          aria-valuenow={progress ?? 0}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Upload progress"
+        >
+          <span className="upload-progress__bar" style={{ width: `${progress}%` }} />
+        </div>
+      ) : null}
+
+      {tooBig ?? error ? <p className="form-error">{tooBig ?? error}</p> : null}
     </form>
   )
 }

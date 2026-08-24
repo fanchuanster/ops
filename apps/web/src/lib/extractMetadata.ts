@@ -13,6 +13,14 @@
  *
  * Never throws. Extraction is a convenience that fills a form; a file
  * we cannot read still uploads fine, the reader just types the title.
+ *
+ * It reads through a `ByteSource` rather than a `File` because since
+ * 2026-08-24 there is no `File` to read: the upload is streamed
+ * straight into R2 so it is never resident in the Worker, and what runs
+ * here afterwards asks storage for the handful of ranges it actually
+ * needs (`r2Source`). The bounded-reads discipline above was already
+ * the rule; this makes it the *interface*, so nothing here can
+ * accidentally pull a whole book back out again.
  */
 
 import {
@@ -28,6 +36,7 @@ import {
 } from '../domain/metadata'
 import { estimatePages } from '../domain/uploadQuota'
 import { logError } from './logError'
+import { objectRange } from './storage'
 
 /**
  * How much of a PDF to scan for metadata.
@@ -46,6 +55,52 @@ const MAX_ZIP_ENTRY = 1024 * 1024
 /** Text long enough to measure without reading a whole book into memory. */
 const TEXT_SAMPLE = 4 * 1024 * 1024
 
+/**
+ * Somewhere bytes can be read from in ranges, whatever is holding them.
+ *
+ * The subset of `File` this module ever used. `read` is half-open —
+ * `[start, end)` — and may return fewer bytes than asked for at the end
+ * of the source; every caller here already tolerates that.
+ */
+export interface ByteSource {
+  name: string
+  type: string
+  size: number
+  read(start: number, end: number): Promise<Uint8Array>
+}
+
+/** A `File` as a `ByteSource` — the local-development and test path. */
+export function fileSource(file: File): ByteSource {
+  return {
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    async read(start, end) {
+      return new Uint8Array(await file.slice(start, end).arrayBuffer())
+    },
+  }
+}
+
+/**
+ * An object already in R2 as a `ByteSource`.
+ *
+ * Name and type come from the request rather than from storage: R2
+ * knows the key it was written under, not what the uploader called the
+ * file, and the filename is one of the things extraction falls back on.
+ */
+export function r2Source(
+  storageKey: string,
+  meta: { name: string; type: string; size: number },
+): ByteSource {
+  return {
+    ...meta,
+    async read(start, end) {
+      const bytes = await objectRange(storageKey, start, Math.max(0, end - start))
+      return bytes ?? new Uint8Array(0)
+    },
+  }
+}
+
 export interface Extraction extends ExtractedMetadata {
   /**
    * What the quota is charged against, before anything is rendered.
@@ -57,7 +112,7 @@ export interface Extraction extends ExtractedMetadata {
   estimatedPages: number | null
 }
 
-export async function extractMetadata(file: File): Promise<Extraction> {
+export async function extractMetadata(file: ByteSource): Promise<Extraction> {
   const byFilename = fromFilename(file.name)
   let found: ExtractedMetadata = {}
 
@@ -73,7 +128,7 @@ export async function extractMetadata(file: File): Promise<Extraction> {
       const raw = await readPdfEnds(file)
       found = mergeMetadata(fromPdfText(raw), { pageCount: pdfPageCount(raw) })
     } else if (type.startsWith('text/')) {
-      const text = await file.slice(0, TEXT_SAMPLE).text()
+      const text = new TextDecoder().decode(await file.read(0, TEXT_SAMPLE))
       // Extrapolate when the file was longer than the sample, so a huge
       // text upload is not charged as a small one.
       const ratio = file.size > TEXT_SAMPLE ? file.size / TEXT_SAMPLE : 1
@@ -108,18 +163,16 @@ export async function extractMetadata(file: File): Promise<Extraction> {
  * reversed, so any UTF-8 text in the file could never be repaired.
  * See `bytesToBinaryString`.
  */
-async function readPdfEnds(file: File): Promise<string> {
+async function readPdfEnds(file: ByteSource): Promise<string> {
   if (file.size <= PDF_SCAN_BYTES * 2) {
-    return bytesToBinaryString(new Uint8Array(await file.arrayBuffer()))
+    return bytesToBinaryString(await file.read(0, file.size))
   }
 
   const [head, tail] = await Promise.all([
-    file.slice(0, PDF_SCAN_BYTES).arrayBuffer(),
-    file.slice(file.size - PDF_SCAN_BYTES).arrayBuffer(),
+    file.read(0, PDF_SCAN_BYTES),
+    file.read(file.size - PDF_SCAN_BYTES, file.size),
   ])
-  return (
-    bytesToBinaryString(new Uint8Array(head)) + bytesToBinaryString(new Uint8Array(tail))
-  )
+  return bytesToBinaryString(head) + bytesToBinaryString(tail)
 }
 
 /**
@@ -135,11 +188,11 @@ async function readPdfEnds(file: File): Promise<string> {
  * Returns null for anything unusual rather than trying harder. The
  * caller has a filename to fall back on.
  */
-async function readZipEntry(file: File, name: string): Promise<string | null> {
+async function readZipEntry(file: ByteSource, name: string): Promise<string | null> {
   // Local headers sit at the front of the archive; core.xml is one of
   // the first entries Word writes. Reading a slice keeps a 60 MB DOCX
   // from being pulled into memory for a few hundred bytes.
-  const window = new Uint8Array(await file.slice(0, Math.min(file.size, 256 * 1024)).arrayBuffer())
+  const window = await file.read(0, Math.min(file.size, 256 * 1024))
   const wanted = new TextEncoder().encode(name)
 
   const at = indexOfSequence(window, wanted)

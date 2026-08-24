@@ -142,6 +142,49 @@ export async function artifactBytes(storageKey: string): Promise<Uint8Array | nu
 }
 
 /**
+ * A slice of an object, without fetching the object.
+ *
+ * What metadata extraction reads an upload through. The file is in R2
+ * by then — streamed there without ever being resident — so the only
+ * way to look at its first and last few hundred kilobytes is to ask for
+ * exactly those. `bucket.get` with a range does that at the storage
+ * layer, so a 100 MB scan costs the same as a one-page memo.
+ *
+ * `length` past the end of the object is not an error: R2 returns what
+ * is there, which is what every caller here wants.
+ *
+ * Returns null when the object is missing, and an empty array for a
+ * zero-length request, so a caller never has to distinguish "no bytes"
+ * from "no object" by length alone.
+ */
+export async function objectRange(
+  storageKey: string,
+  offset: number,
+  length: number,
+): Promise<Uint8Array | null> {
+  if (length <= 0) return new Uint8Array(0)
+
+  const bucket = await artifactBucket()
+  if (bucket) {
+    const object = await bucket.get(storageKey, { range: { offset, length } })
+    if (!object) return null
+    return new Uint8Array(await object.arrayBuffer())
+  }
+
+  const filePath = localArtifactPath(storageKey)
+  if (!filePath) return null
+  const { open } = await import('node:fs/promises')
+  const handle = await open(filePath, 'r')
+  try {
+    const buffer = new Uint8Array(length)
+    const { bytesRead } = await handle.read(buffer, 0, length, offset)
+    return buffer.subarray(0, bytesRead)
+  } finally {
+    await handle.close()
+  }
+}
+
+/**
  * Local-disk fallback, for development without Cloudflare.
  *
  * The path is rebuilt from its segments and checked to stay under the

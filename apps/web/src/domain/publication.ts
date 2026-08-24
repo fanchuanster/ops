@@ -38,25 +38,43 @@ export type SourceKind = 'pdf' | 'docx' | 'epub' | 'text'
 /**
  * The largest file the portal accepts, in bytes.
  *
- * Lives here rather than in the upload action because three places need
- * the same number and they must not drift: the action rejects above it,
- * the form says so before a byte is sent, and `next.config.mjs` sets the
- * server action body limit just above it.
+ * Lives here rather than in the upload route because two places need
+ * the same number and they must not drift: the route rejects above it,
+ * and the form says so before a byte is sent.
  *
- * That last one is the reason this constant exists at all. Next's
- * `serverActions.bodySizeLimit` defaults to **1 MB**, and the limit is
- * enforced by the framework before the action is entered — so with it
- * unset, every book above 1 MB was refused with a bare 413 and none of
- * the messages below could ever be shown. A book is never under 1 MB.
+ * **100 MB, and three separate ceilings now agree on it**, which is why
+ * it is the right place to stop rather than a round number:
  *
- * 64 MB is a Worker bound, not a scanning one: the request body is
- * buffered to parse the form, and a Worker has 128 MB of memory for
- * everything. Adobe's own ceiling is higher still (100 MB,
- * `domain/adobe.ts`), so this is the limit that actually binds.
+ *   - Cloudflare caps a Worker request body at 100 MB on Free and Pro.
+ *     Above that the request never reaches our code, so no message we
+ *     could write would ever be shown.
+ *   - Adobe's Export PDF refuses a source over 100 MB
+ *     (`MAX_SOURCE_BYTES`, `domain/adobe.ts`). A larger scan could be
+ *     stored but never read into a master, so it could only ever be
+ *     published as it stands — no EPUB, which is the opposite of what
+ *     the portal is for.
+ *   - Worker memory is 128 MB for everything, which used to be the
+ *     binding constraint and no longer is. See below.
+ *
+ * It was **64 MB** until 2026-08-24, and that number was a memory bound:
+ * uploads arrived through a Next server action, which parses the whole
+ * request as `FormData` and therefore holds the file in memory before
+ * any of our code runs. Half the Worker's budget was as far as that
+ * could be pushed.
+ *
+ * Uploads no longer go through a server action. `api/upload/route.ts`
+ * takes the file as the raw request body and pipes it straight into R2,
+ * so the bytes are never all resident at once and memory stops being
+ * the thing that decides this number. That is what raising it required
+ * — the constant on its own would only have moved the failure from a
+ * clear refusal to an out-of-memory.
+ *
+ * Going higher means a Cloudflare Business plan (200 MB) *and* an
+ * answer for PDFs Adobe will not read. Neither is a code change.
  */
-export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 
-/** The limit as a human sees it: "64 MB". */
+/** The limit as a human sees it: "100 MB". */
 export const MAX_UPLOAD_LABEL = `${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`
 
 const BY_MIME: Record<string, SourceKind> = {
