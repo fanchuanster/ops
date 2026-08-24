@@ -19,9 +19,10 @@ const NESTING_ERRORS: Record<NestingRefusal, string> = {
  * A collection may not be filed under itself, its own descendant, or so
  * deep that the tree stops being browsable.
  *
- * Here rather than only in the admin screen because there are two ways
- * in: `/admin/library`, and Payload's own `/cms`. A cycle created
- * through either would strand every collection in the ring — the tree
+ * Here rather than only in the admin screen because there is more than
+ * one way in: `/admin/library`, and the REST API under
+ * `(payload)/api`. A cycle created through either would strand every
+ * collection in the ring — the tree
  * builder detaches them so the catalog survives, but they would vanish
  * from the shelves until somebody noticed.
  *

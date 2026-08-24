@@ -30,7 +30,8 @@
  * publication, and the nesting rules for a shelf's parent. Both are
  * collection hooks (`enforcePublicationReview`, and the cycle/depth
  * check on `book-collections`), which means they hold for every writer
- * — the admin UI, `/cms`, this API, and anything added later. Checking
+ * — the admin UI, the REST API, this API, and anything added later.
+ * Checking
  * them here as well would be a second copy that could drift.
  *
  * Framework-independent, like everything in `src/domain`.

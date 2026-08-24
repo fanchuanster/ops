@@ -82,6 +82,15 @@ oversight.
   falls back to page one rather than to nothing. Media's accepted types are now
   an allowlist rather than `image/*`: SVG is an image and a script container,
   and media is served from this origin.
+- **No generated admin panel** — `app/(payload)/cms` is deleted, which is how
+  Payload itself says to disable it (`admin.disable` is deprecated). What it
+  was still needed for was granting the admin role and correcting an email;
+  both are now the `/admin/users` panel, which selects with `?reader=` like
+  every other admin screen and refuses self-demotion — somebody has to be able
+  to grant the role back. Credits are shown there and editable nowhere: the
+  field refuses writes at field level and only `lib/credits.ts` moves a
+  balance. What went with it: a browser view of the ledgers for anyone other
+  than yourself, and the Media list. `(payload)/api` stays.
 - **Personal access tokens** — `/account/tokens`, where a reader mints a token
   that lets a script act as them. Payload's `useAPIKey` underneath, so
   `payload.auth()` stays the only thing that resolves a credential and the
@@ -98,8 +107,9 @@ oversight.
   panel, the library with reading level and shelf set in place, the
   collections and their order, and the readers. Front-of-site and built to the
   design, in its own route group with its own shell. Payload's generated admin
-  moved to `/cms` to make room and is still where everything without a screen
-  here is edited. Approving and publishing stay two acts, because
+  moved to `/cms` to make room and was deleted outright on 2026-08-24, once the
+  readers screen took on the last two things only it could do — see below.
+  Approving and publishing stay two acts, because
   `CLAUDE.md` section 6.1 says they are two gates: approval is editorial, the
   publish consults the rights, and the collection hook refuses either way.
   Readers are read-only — the design's suspend control has no account state

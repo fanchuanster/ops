@@ -56,7 +56,8 @@ export const readBooks: Access = ({ req }) => {
  * ## An administrator publishes directly
  *
  * `req.user` is what decides it, so this holds for every door into the
- * table — our own screens, `/cms`, and a script written next year. A
+ * table — our own screens, the REST API, and a script written next
+ * year. A
  * write that carries no user is not an administrator's, which is the
  * safe direction: it falls back to requiring the approved review.
  *

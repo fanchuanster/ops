@@ -90,22 +90,6 @@ export function AdminNav({ awaiting }: { awaiting: number }) {
         </a>
       ))}
 
-      {/* Everything this UI has no screen for. Named plainly rather
-          than hidden: an editor who needs Media or the credit ledger
-          should not have to be told the URL by somebody. */}
-      <a className="admin-nav__cms" href="/cms">
-        <span className="admin-nav__icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-              d="M6 3h7M6 8h7M6 13h7M2.5 3h.01M2.5 8h.01M2.5 13h.01"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-        </span>
-        Everything else
-      </a>
     </nav>
   )
 }

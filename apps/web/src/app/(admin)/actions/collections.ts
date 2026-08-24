@@ -25,8 +25,9 @@ import { logError } from '../../../lib/logError'
  * screen edits the words, and the order they are read in.
  *
  * Nesting is checked here *and* in a hook on the collection, because
- * `/cms` is a second door into the same table. The rule lives in
- * `domain/collectionTree.ts`; both callers only ask it.
+ * this screen is not the only door into the table — the REST API under
+ * `(payload)/api` is another, and so is a script written next year. The
+ * rule lives in `domain/collectionTree.ts`; both callers only ask it.
  */
 
 export type CollectionsState = { error?: string; ok?: string }

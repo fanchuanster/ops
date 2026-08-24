@@ -96,7 +96,8 @@ export default async function HomePage() {
 
         {books.length === 0 ? (
           <p className="empty">
-            No books published yet. Add one in the <a href="/cms">CMS</a>.
+            No books published yet. Add one from the{' '}
+            <a href="/admin/library">library</a>.
           </p>
         ) : (
           <div className="shelves">

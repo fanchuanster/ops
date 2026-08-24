@@ -12,8 +12,8 @@
  * makes it mean something.
  *
  * Three rules, all here rather than in a route or a hook, because each
- * of them is enforced in two places at once — our own admin screen and
- * Payload's `/cms`:
+ * of them is enforced in more than one place at once — our own admin
+ * screen, and the REST API under `(payload)/api`:
  *
  *   1. A collection may not be its own ancestor.
  *   2. The tree is at most `MAX_DEPTH` deep, counting a moved subtree's

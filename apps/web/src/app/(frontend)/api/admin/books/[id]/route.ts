@@ -18,7 +18,7 @@ import { revalidateCuration } from '../../shared'
  *
  * Not a second way to publish. `visibility` is writable, but
  * `enforcePublicationReview` runs on the write exactly as it does for
- * the admin UI and for `/cms`, so a book whose rights do not permit
+ * the admin UI and for the REST API, so a book whose rights do not permit
  * distribution is refused here too. That hook is the guarantee; this
  * route does not re-check it, because a second copy of the rule is a
  * second thing to keep in step.

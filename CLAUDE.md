@@ -214,6 +214,23 @@ for:
 Payload runs *inside* the Next.js application rather than beside it, so
 the admin, the API and the public site are one deployable.
 
+**Payload's generated admin panel is not part of that**, since
+2026-08-24. `/admin` is NobleSee's own editorial UI and the only one;
+`app/(payload)/cms` is deleted, which is how Payload says to disable a
+panel now that `admin.disable` is deprecated. It survived as the tool
+for whatever the editorial UI had no screen for, and what that came
+down to in the end was two acts — granting the admin role and
+correcting an email — which are now the readers panel. Deleting it
+takes `@payloadcms/next/views` out of a Worker bundle that had reached
+7.7 MB gzipped against a 10 MB limit.
+
+What it took with it is worth stating: a browser view of the
+`Downloads`, `Entitlements`, `credit-ledger` and `reading-progress`
+collections for anyone other than yourself, and the Media list. Each is
+still reachable through `app/(payload)/api`, which stays. A screen for
+them is a real piece of work and a fair thing to want; it is not a
+reason to keep an entire second admin.
+
 That deployable is a **Cloudflare Worker**, built by OpenNext, on **D1**
 for the database and **R2** for book artifacts. This section specified
 PostgreSQL 18 in a container until 2026-08-13; the reasoning for the
@@ -774,9 +791,9 @@ what may be filed under what are `apps/web/src/domain/collectionTree.ts`.
 Three of those rules earn their place:
 
 - A collection may not be its own ancestor. Enforced in a collection
-  hook rather than only in the admin screen, because `/cms` is a second
-  door into the same table — and a ring of collections would strand
-  every shelf in it.
+  hook rather than only in the admin screen, because the admin screen is
+  not the only door into the table — the REST API is another — and a
+  ring of collections would strand every shelf in it.
 - The tree is three levels deep at most, counting a *moved subtree's*
   own height rather than just the node being moved. The limit is
   editorial: past a grandchild a reader is navigating a filesystem
@@ -901,7 +918,8 @@ not the `approved` it is about to write, because otherwise the
 Nothing about the second gate itself changed and nothing about it can.
 `isPubliclyDistributable` is consulted by the action, by
 `canPublishToLibrary`, and a third time by `enforcePublicationReview` on
-the write, which is the rule for every writer including `/cms`. The
+the write, which is the rule for every writer, the REST API included.
+The
 invariant is still that a public owned book has an approved review;
 approval and publication being one act is what now makes it true by
 construction.

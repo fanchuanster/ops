@@ -52,32 +52,33 @@ export default buildConfig({
   cors: [serverURL],
   csrf: [serverURL],
   /**
-   * Payload's generated admin lives at `/cms`, not at `/admin`.
+   * There is no generated admin panel. `/admin` is NobleSee's own
+   * editorial UI and the only one.
    *
-   * `/admin` is NobleSee's own editorial UI — the review queue, the
-   * library, the collections and the readers — built to the design and
-   * speaking the product's vocabulary. Payload's admin stays, because
-   * it is the right tool for everything that UI has no screen for:
-   * Media, the delivery ledger, entitlements, the credit ledger, and
-   * any field a form has not been written for yet.
+   * Payload's admin lived at `/cms` until 2026-08-24, as the tool for
+   * everything the editorial UI had no screen for. What it was actually
+   * still needed for came down to two acts — granting the admin role
+   * and correcting an email — and both are now on `/admin/users`. The
+   * rest of what it offered was either unreachable anyway (credits
+   * refuse writes at field level) or a ledger nobody was reading.
    *
-   * The route folder must match this value, so `app/(payload)/admin`
-   * moved to `app/(payload)/cms` with it, and `importMapFile` is stated
-   * rather than defaulted — `generate:importmap` derives its default
-   * path from the old convention and would otherwise write the file
-   * back to a directory nothing serves.
+   * Deleting the route folder is how Payload itself says to do this;
+   * `admin.disable` is deprecated. The win is the bundle: the admin UI
+   * was most of a Worker that had grown to 7.7 MB gzipped against a
+   * 10 MB limit, and nothing imports `@payloadcms/next/views` now.
+   *
+   * `admin.user` stays because it names the auth collection, which is
+   * not an admin-panel concern. `importMap` is gone with the file it
+   * pointed at, and so is the `generate:importmap` script.
+   *
+   * What went with it, honestly: a browser view of the Downloads,
+   * Entitlements, CreditLedger and ReadingProgress collections for
+   * anyone other than yourself, and the Media list. Each is reachable
+   * through the REST API under `(payload)/api`, which is deliberately
+   * still here.
    */
-  routes: {
-    admin: '/cms',
-  },
   admin: {
     user: Users.slug,
-    meta: {
-      titleSuffix: '— NobleSee',
-    },
-    importMap: {
-      importMapFile: path.resolve(dirname, 'app/(payload)/cms/importMap.js'),
-    },
   },
   collections: [
     Users,

@@ -53,9 +53,11 @@ cd apps/web
 - Site: http://localhost:8787
 - Admin: http://localhost:8787/admin — the editorial UI: review queue, library,
   collections, readers. Administrators only.
-- CMS: http://localhost:8787/cms — Payload's generated admin, for everything the
-  editorial UI has no screen for (media, ledgers, entitlements). Create the
-  first user here on first visit.
+- REST/GraphQL: http://localhost:8787/api — Payload's API. There is no
+  generated admin panel; it was deleted on 2026-08-24 once `/admin` covered
+  everything still needed (see `payload.config.ts`), which is also how the
+  Worker bundle stopped growing towards the 10 MB limit. Bootstrap the first
+  administrator with `npm run create-admin`.
 - Health: http://localhost:8787/health — checks D1, not just the process
 
 Migrations are explicit and versioned in `apps/web/src/migrations`; the adapter
