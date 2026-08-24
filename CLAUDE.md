@@ -759,9 +759,38 @@ among its own siblings and can never lift it out of the one it stands
 on. Where it is filed is a separate decision, made with the parent
 picker on the same card.
 
-The browse page shows one level at a time — root shelves in the library,
-a collection's own children inside it — because a nested library
-rendered flat is a wall of every shelf at once.
+The browse page shows **the whole tree at once, folded**. Every shelf
+and every shelf standing on it is on the page, and each heading is a
+control that collapses its own subtree
+(`components/CollectionShelves.tsx`).
+
+It showed one level at a time until 2026-08-24 — root shelves in the
+library, a collection's own children once you were inside it — because
+a nested library rendered flat is a wall of every shelf at once. The
+wall is real; drilling down was the wrong answer to it. It hid the
+library behind a click and made a reader guess which shelf was worth
+opening, which is the opposite of browsing. Folding answers the same
+objection directly: a reader who wants a shelf out of the way puts it
+out of the way, and nothing else moves.
+
+Two things survive that change and are worth stating, because they are
+what keeps the page from becoming an application:
+
+- **A shelf is still a URL.** `?collection=` narrows the page to one
+  subtree and puts a breadcrumb above it. It is no longer reachable
+  from the library's own headings — those are folds now — but the
+  homepage's teaser shelves link to it, and it is what a reader shares.
+- **Only the fold is client-side.** The reading level stays a plain
+  link with a query string, because a level is a *view* someone would
+  send to someone else, where a fold is a per-reader convenience. The
+  page still renders on the server; the JavaScript only folds it.
+
+Each shelf renders the books filed **directly** on it. A parent carries
+its descendants by containing them on the page rather than by absorbing
+their books, so nothing is printed twice — which is a different rule
+from `?collection=`, where a parent genuinely does answer with its whole
+subtree because its children are not on screen to answer for
+themselves.
 
 ---
 

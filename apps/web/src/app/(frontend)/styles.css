@@ -1456,26 +1456,66 @@ h3 {
 /* --- the library, grouped by collection --------------------------- */
 
 /*
- * The shelves stack; each one's rail scrolls sideways on its own. The
- * negative margin is what lets a rail run to the viewport edge from
- * inside a `.page` container, and `.shelf__books` pays the padding back
- * so the first tile still lines up with the heading above it.
+ * The library is one tree of shelves, folded rather than drilled into
+ * (2026-08-24, from the Figma design). Three things follow:
+ *
+ *   1. Depth is a custom property, not a class per level. `--depth` is
+ *      set on each section and every indent is computed from it, so the
+ *      three levels CLAUDE.md 5.3 allows — and a fourth, if that limit
+ *      ever moves — need no new rule here.
+ *   2. Each rail still scrolls sideways on its own. The negative margin
+ *      lets it run to the viewport edge from inside `.page`, and the
+ *      padding pays it back so the first tile lines up under its own
+ *      heading rather than under the page edge.
+ *   3. A root heading is set in the display face; a nested one as small
+ *      tracked capitals. Two treatments rather than one per level,
+ *      because what a reader needs to see is "shelf" against "shelf
+ *      inside a shelf" — the indent carries the rest, and a third size
+ *      would only be a third size.
  */
 .shelves {
+  /* How far one level of nesting steps in. */
+  --step: 1.25rem;
+
   display: flex;
   flex-direction: column;
   gap: 2.5rem;
-}
-
-.shelves .shelf__books {
-  margin-left: -1.5rem;
-  margin-right: -1.5rem;
 }
 
 @media (min-width: 40rem) {
   .shelves {
     gap: 3.5rem;
   }
+
+  /* The library's shelves sit a little tighter than the homepage's two
+     teaser rails, because there are many more of them on the page. */
+  .library .shelves {
+    gap: 3rem;
+  }
+}
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Shelves inside a shelf sit closer together than root shelves do, so a
+   subtree reads as one block instead of as more top-level shelves. */
+.shelf__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.shelf--root > .shelf__body {
+  gap: 1.5rem;
+}
+
+/* `hidden` is a presentation hint and `display: flex` above outranks
+   it. Restated, or a folded shelf would stay on screen while telling
+   assistive technology it had gone. */
+.shelf__body[hidden] {
+  display: none;
 }
 
 /* The collection name, with a rule running out to the right of it. */
@@ -1484,10 +1524,23 @@ h3 {
   align-items: center;
   gap: 0.85rem;
   margin-bottom: 1.25rem;
+  /* `--step` is defaulted rather than assumed: the homepage's teaser
+     shelves use this head outside `.shelves`, where nothing defines it,
+     and an undefined var poisons the whole calc. */
+  padding-left: calc(var(--step, 1.25rem) * var(--depth, 0));
 }
 
-.shelf__head a,
-.shelf__head span {
+.shelf--nested > .shelf__head {
+  margin-bottom: 0.75rem;
+}
+
+/*
+ * A heading that is a link rather than a fold — the homepage's teaser
+ * shelves, which navigate into the library instead of collapsing. Kept
+ * on the same head so the two pages' shelves line up; only the control
+ * inside it differs.
+ */
+.shelf__head > a {
   font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 600;
@@ -1496,40 +1549,120 @@ h3 {
   color: var(--ink-soft);
   text-decoration: none;
   white-space: nowrap;
+  transition: color 0.2s;
 }
 
-.shelf__head a:hover {
+.shelf__head > a:hover {
   color: var(--ink);
 }
 
+/*
+ * The whole heading is the fold control — chevron and name together, so
+ * the target is as wide as the words rather than as wide as a 12px
+ * glyph. Reset to nothing: this is a button for the semantics and the
+ * keyboard, not for the chrome.
+ */
+.shelf__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shelf__name {
+  margin: 0;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.shelf--root .shelf__name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+@media (min-width: 40rem) {
+  .shelf--root .shelf__name {
+    font-size: 1.125rem;
+  }
+}
+
+/* Inherits the toggle's colour, which is also the chevron's — a nested
+   heading and its fold marker are one muted mark in the design. */
+.shelf--nested .shelf__name {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: inherit;
+}
+
+.shelf__toggle:hover {
+  color: var(--ink-soft);
+}
+
+/* The nested name inherits the hover above; the root name set its own
+   colour, so it needs its own hover to give it back. */
+.shelf--root .shelf__toggle:hover .shelf__name {
+  color: var(--ink-soft);
+}
+
+.chevron {
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.chevron--open {
+  transform: rotate(90deg);
+}
+
+/*
+ * Heaviest under a root shelf of the tree, hairline under a nested one:
+ * the rule is doing the same work as the two heading treatments above.
+ * The bare 1px is the default because the homepage's teaser shelves use
+ * it too, and they are not part of any tree.
+ */
 .shelf__rule {
   flex: 1;
   border-top: 1px solid var(--rule);
 }
 
-/*
- * Two columns of horizontal cards on a laptop, one on a phone.
- *
- * Exactly two, which is what the design specifies. It was `auto-fill`
- * with a 20rem floor until 2026-08-21, on the argument that one rule
- * covered every width; at the page's 65rem of content that yields
- * three tracks, so a shelf holding one or two books left a third of
- * the row empty and its cards narrower than the shelf above. A shelf
- * with a single book on it looked like a mistake.
- */
-.shelf__books {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
+.shelf--root > .shelf__head > .shelf__rule {
+  border-top-width: 2px;
 }
 
-@media (min-width: 40rem) {
-  .shelf__books {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.shelf--nested > .shelf__head > .shelf__rule {
+  border-top-color: var(--rule-soft);
+}
+
+/* The rail breaks out to the viewport edge; its heading does not. */
+.shelves .shelf__books,
+.shelf__books--lead {
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+}
+
+/* A shelf's books step in one level further than its own heading, so
+   the tiles sit clear of the name above them rather than under it.
+   Root shelves are the exception — nothing is above them to clear. */
+.shelf--nested > .shelf__body > .shelf__books {
+  padding-left: calc(1.5rem + var(--step) * (var(--depth, 0) + 1));
+}
+
+/* The selected collection's own books, above its child shelves. It has
+   no heading of its own — the page heading is its heading. */
+.shelf__books--lead {
+  margin-bottom: 2.5rem;
 }
 
 /* --- chips -------------------------------------------------------- */
@@ -1851,36 +1984,47 @@ h3 {
   line-height: 1.4;
 }
 
+/*
+ * The reading-level control: pills, sized from the design.
+ *
+ * Links rather than buttons, deliberately. The level is a *view* — a
+ * reader who has narrowed to Essential and sends someone the URL should
+ * send them the same shelf — so it lives in the query string and the
+ * page re-renders on the server. The fold beside it is the opposite
+ * kind of state and lives in the browser
+ * (`components/CollectionShelves.tsx`).
+ */
 .filters {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
   font-family: var(--font-sans);
   font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .filters a {
   text-decoration: none;
   border: 1px solid var(--rule);
   border-radius: 999px;
-  padding: 0.25rem 0.85rem;
+  padding: 0.375rem 1rem;
+  background: var(--paper-raised);
   color: var(--ink-soft);
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+}
+
+.filters a:hover {
+  border-color: var(--ink-faint);
+  color: var(--ink);
 }
 
 .filters a[aria-current="true"] {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--ink);
-}
-
-/* Sits directly under the level filter, which the reading-level nav
-   leaves 2rem of space below — pull it back up against its own nav. */
-.filter-note {
-  margin: -1.6rem 0 2rem;
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--ink-faint);
 }
 
 /* --- book detail ------------------------------------------------- */
@@ -2679,6 +2823,43 @@ h3 {
 .tile__author {
   margin-top: 0.125rem;
   color: var(--ink-faint);
+}
+
+/*
+ * The library's tiles run at 3/5 of the homepage's, from the design.
+ *
+ * Not a stylistic preference: the tree shows every shelf at once where
+ * the drill-down showed one level of them, so a card sized for two
+ * teaser shelves on the homepage would fit four books to a row here and
+ * push most of the library under the fold. The homepage keeps the
+ * larger tile, where there are only two rails and room to spare.
+ */
+.library .tile {
+  width: clamp(66px, 9.5vw, 90px);
+}
+
+.library .tile__face {
+  margin-bottom: 0.375rem;
+  border-radius: 0.5rem;
+}
+
+.library .tile__glyph {
+  font-size: 1.25rem;
+}
+
+.library .tile__title,
+.library .tile__author {
+  font-size: 0.625rem;
+}
+
+.library .shelf__books {
+  gap: 0.5rem;
+}
+
+@media (min-width: 40rem) {
+  .library .shelf__books {
+    gap: 0.75rem;
+  }
 }
 
 /* --- the conversion portal ---------------------------------------- */
