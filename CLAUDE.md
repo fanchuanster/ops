@@ -972,19 +972,17 @@ themselves.
 
 ## 5.4 Two orders, on every shelf
 
-A collection's children — the books filed on it, and the shelves
-standing on it — are ordered two ways:
+The **books** filed on a collection are ordered two ways:
 
     alphabetical  by title                        the default
-    sequence      by the order id each item carries
+    sequence      by the order id each book carries
 
 **The shelf decides, not the reader.** Every collection carries
 `childOrder`, and it defaults to alphabetical: a library nobody has
 curated reads A–Z, which is the order a reader can predict and scan. A
 curator switches one shelf to `sequence` when its contents have an
 order of their own — a ten-volume set, a reading path, a "start here" —
-and only that shelf changes. Root shelves have no parent to inherit
-from and take the library's default.
+and only that shelf changes.
 
 It was one global answer until 2026-08-25, chosen by the reader with
 `?sort=` and defaulting to `sequence`. One answer is wrong for a
@@ -993,15 +991,24 @@ strong one: the alphabet was something a reader had to ask for, and the
 volume set only read correctly by luck of the numbers it had been
 handed.
 
-The reader's toggle survives as an **override** — "As arranged" (no
-parameter, each shelf its own way), "A–Z", "Curated". The library is
-curated: the order an editor put a shelf in is a judgement about where a
-reader should start, and the alphabet is not. Alphabetical is what you
-want when you are *looking for* a book rather than being shown one,
-which is why it is offered and why it is not first. Like the reading
-level beside it, the sort is a plain link with a query string — an
-ordering of the library is a view somebody would send to somebody else,
-so it stays in the URL and the page still renders on the server.
+**The shelves themselves are a separate question, and the answer is the
+admin's.** Where a shelf stands among its siblings — at every depth,
+the root included — is `sortOrder`, set by the reorder arrows in
+`/admin/collections`, and nothing re-sorts it afterwards. The public
+library renders the tree in exactly the order the editorial tree shows
+it. It did not until 2026-08-25: root shelves were alphabetized on the
+public page because they had no parent to carry a `childOrder`, so the
+arrows arranged a root order only an editor ever saw. `childOrder`
+governs a shelf's books; the arrows govern the shelves.
+
+The reader's toggle is **gone**, on 2026-08-25 — "As arranged / A–Z /
+Curated", and the `?sort=` override behind it that forced one rule
+across every shelf on the page. The argument for keeping it was that
+alphabetical is what you want when you are *looking for* a book rather
+than being shown one. That is true, and it is what search is for. How
+the library reads is an editorial judgement about where a reader should
+start, and handing a visitor a pill that overrules every shelf at once
+is handing back the curation the library exists to provide.
 
 The sequence is **a number the item carries**, not a position in a list.
 It is handed out one past the highest on the shelf when the item is
@@ -1023,13 +1030,14 @@ because a book left it, so 1, 2, 5 is a normal state and the gap is not
 a bug to tidy: an order id an editor typed is a fact they stated, and
 closing a gap under them would move books nobody touched.
 
-Ordering happens **per shelf, in the page**, not in the catalog query.
-One SQL `ORDER BY` cannot be alphabetical for one shelf and by order id
-for the next, so the query returns a stable order and
-`books/page.tsx` sorts each shelf's own children with
-`shelfSortFor`. The admin tree does the same, from the same function,
-so an editor arranging a shelf is looking at what the shelf actually
-does.
+Ordering a shelf's books happens **per shelf, in the page**, not in the
+catalog query. One SQL `ORDER BY` cannot be alphabetical for one shelf
+and by order id for the next, so the query returns a stable order and
+`books/page.tsx` sorts each shelf's own books with `shelfSortFor`. The
+admin tree does the same, from the same function, so an editor
+arranging a shelf is looking at what the shelf actually does. The
+shelves are not sorted in either page — they arrive from
+`getCollections()` in `sortOrder` order and stay in it.
 
 **Choosing a number is an administrator's.** Filing is not: an uploader
 picks their book's collection on their own book page, and the arrival

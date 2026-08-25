@@ -21,29 +21,11 @@ import {
   nextOrderId,
   orderIdFrom,
   shelfSortFor,
-  parseShelfSort,
   resequence,
   sortShelfItems,
 } from './shelfOrder'
 
 const item = (id: number, title: string, order?: number | null) => ({ id, title, order })
-
-describe('parseShelfSort', () => {
-  it('reads the two sorts', () => {
-    expect(parseShelfSort('sequence')).toBe('sequence')
-    expect(parseShelfSort('alphabetical')).toBe('alphabetical')
-  })
-
-  it('says null when the reader did not ask, so the shelf decides', () => {
-    expect(parseShelfSort(undefined)).toBeNull()
-    expect(parseShelfSort('')).toBeNull()
-    expect(parseShelfSort('by-vibes')).toBeNull()
-  })
-
-  it('takes the first of a repeated query parameter', () => {
-    expect(parseShelfSort(['alphabetical', 'sequence'])).toBe('alphabetical')
-  })
-})
 
 describe('sorting a shelf', () => {
   it('sequences ascending', () => {
@@ -85,23 +67,23 @@ describe('sorting a shelf', () => {
 })
 
 describe('who decides how a shelf reads', () => {
-  it('lets each shelf decide when the reader has not asked', () => {
-    expect(shelfSortFor({ readerSort: null, childOrder: 'sequence' })).toBe('sequence')
-    expect(shelfSortFor({ readerSort: null, childOrder: 'alphabetical' })).toBe('alphabetical')
+  it('lets the shelf decide', () => {
+    expect(shelfSortFor({ childOrder: 'sequence' })).toBe('sequence')
+    expect(shelfSortFor({ childOrder: 'alphabetical' })).toBe('alphabetical')
   })
 
   it('is A–Z for a shelf that has said nothing', () => {
-    expect(shelfSortFor({ readerSort: null, childOrder: undefined })).toBe('alphabetical')
-    expect(shelfSortFor({ readerSort: null, childOrder: 'nonsense' })).toBe('alphabetical')
+    expect(shelfSortFor({ childOrder: undefined })).toBe('alphabetical')
+    expect(shelfSortFor({ childOrder: 'nonsense' })).toBe('alphabetical')
     expect(DEFAULT_CHILD_ORDER).toBe('alphabetical')
   })
 
-  it('lets a reader who asked override every shelf', () => {
-    // The toggle is an override, not a preference the shelf can veto.
-    expect(shelfSortFor({ readerSort: 'alphabetical', childOrder: 'sequence' })).toBe(
+  it('takes no reader override, because there is no longer one to take', () => {
+    // The `?sort=` toggle is gone: how the library reads is the
+    // editor's judgement, not a pill a visitor can flip.
+    expect(shelfSortFor({ readerSort: 'sequence', childOrder: 'alphabetical' } as never)).toBe(
       'alphabetical',
     )
-    expect(shelfSortFor({ readerSort: 'sequence', childOrder: 'alphabetical' })).toBe('sequence')
   })
 })
 

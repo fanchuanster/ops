@@ -16,18 +16,15 @@ import { getPayload, type TypedUser, type Where } from 'payload'
 
 import { subtreeIds } from '../domain/collectionTree'
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
-import type { ShelfSort } from '../domain/shelfOrder'
 import { slugFromParam } from './slugParam'
 
 export async function getCatalog({
   collectionSlug,
   level = DEFAULT_BROWSE_LEVEL,
-  sort = null,
   limit = 48,
 }: {
   collectionSlug?: string
   level?: BookLevel
-  sort?: ShelfSort | null
   limit?: number
 } = {}) {
   const payload = await getPayload({ config })
@@ -75,9 +72,9 @@ export async function getCatalog({
   if (collectionIds) filters.push({ collection: { in: collectionIds } })
 
   // Sorted in the database and not only in the page, because `limit`
-  // truncates: browsing in the curated order has to take the first
-  // forty-eight *by that order*, not the first forty-eight
-  // alphabetically and then rearrange them.
+  // truncates: the first forty-eight have to be the first forty-eight
+  // *by the order the shelves are in*, not alphabetically and then
+  // rearranged.
   //
   // `collectionOrder` is a position within one shelf, so this is not a
   // meaningful global ordering — the page groups the result by shelf
@@ -87,24 +84,23 @@ export async function getCatalog({
   const books = await payload.find({
     collection: 'books',
     where: { and: filters },
-    sort: sort === 'alphabetical' ? 'title' : ['collectionOrder', 'title'],
+    sort: ['collectionOrder', 'title'],
     limit,
     depth: 1,
     overrideAccess: false,
   })
 
-  return { books: books.docs, collection: collectionSlug ?? null, level, sort }
+  return { books: books.docs, collection: collectionSlug ?? null, level }
 }
 
 /**
  * Every collection, in the order asked for.
  *
- * Curated: `sortOrder` first, `title` second. The second key is not
- * decoration — `sortOrder` is nullable, so a collection nobody has
- * moved still lands in the alphabetical order it has always had rather
- * than in whatever order the rows happen to come back in.
- *
- * A–Z: title alone, which is the point of asking for it.
+ * `sortOrder` first, `title` second — the order the reorder arrows on
+ * `/admin/collections` put them in. The second key is not decoration:
+ * `sortOrder` is nullable, so a collection nobody has moved still lands
+ * in the alphabetical order it has always had rather than in whatever
+ * order the rows happen to come back in.
  *
  * Order is per-parent, and this is a flat list of every collection at
  * every depth — `buildTree` preserves the order it is given, so sorting

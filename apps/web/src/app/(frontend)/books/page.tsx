@@ -16,14 +16,7 @@ import {
   LEVEL_LABELS,
   parseBrowseLevel,
 } from '../../../domain/levels'
-import {
-  shelfSortFor,
-  SHELF_SORTS,
-  SHELF_SORT_DESCRIPTIONS,
-  SHELF_SORT_LABELS,
-  parseShelfSort,
-  sortShelfItems,
-} from '../../../domain/shelfOrder'
+import { shelfSortFor, sortShelfItems } from '../../../domain/shelfOrder'
 import { getCatalog, getCollections } from '../../../lib/catalog'
 
 export const dynamic = 'force-dynamic'
@@ -54,6 +47,16 @@ export const metadata = { title: 'Library' }
  * state, so every filtered view stays bookmarkable and the only
  * JavaScript on the page is the fold.
  *
+ * **How the library is ordered is not the reader's to change.** There
+ * was an "As arranged / A–Z / Curated" control here until 2026-08-25,
+ * and a `?sort=` override behind it that forced one rule across every
+ * shelf on the page. Both are gone. Ordering is an editorial judgement
+ * — where a reader should start, which volume comes first — and it is
+ * made in the admin: the arrows on `/admin/collections` arrange the
+ * shelves, and each shelf's own `childOrder` arranges what is on it.
+ * A reader offered a button to overrule that is being offered a way to
+ * undo the curation the library exists to provide.
+ *
  * The reading-level filter is not in the design, and is kept anyway —
  * levels are a product feature (CLAUDE.md section 5.1), and a reader
  * browsing at `essential` has no other way to widen the shelf.
@@ -64,35 +67,30 @@ type CatalogBook = Awaited<ReturnType<typeof getCatalog>>['books'][number]
 export default async function BooksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ collection?: string; level?: string; sort?: string }>
+  searchParams: Promise<{ collection?: string; level?: string }>
 }) {
   const params = await searchParams
   const collection = params.collection
   const level = parseBrowseLevel(params.level)
-  const sort = parseShelfSort(params.sort)
 
-  const href = (next: { collection?: string; level?: string; sort?: string }) => {
+  const href = (next: { collection?: string; level?: string }) => {
     const query = new URLSearchParams()
     const nextCollection = 'collection' in next ? next.collection : collection
     const nextLevel = next.level ?? level
-    // `sort: undefined` passed explicitly means "clear the override",
-    // which is not the same as the key being absent — that means
-    // "leave it as it is". `in` tells the two apart.
-    const nextSort = 'sort' in next ? next.sort : sort
     if (nextCollection) query.set('collection', nextCollection)
     // The default reads as no filter at all, so it stays out of the URL.
     if (nextLevel !== DEFAULT_BROWSE_LEVEL) query.set('level', nextLevel)
-    // No `sort=` means "let each shelf decide", which is the ordinary
-    // visit and stays out of the URL.
-    if (nextSort) query.set('sort', nextSort)
     const qs = query.toString()
     return qs ? `/books?${qs}` : '/books'
   }
 
   const [{ books }, collections] = await Promise.all([
-    getCatalog({ collectionSlug: collection, level, sort }),
-    // Every shelf, in a stable order. Which order a reader sees is
-    // decided per shelf below, from its own `childOrder`.
+    getCatalog({ collectionSlug: collection, level }),
+    // Every shelf, already in the order the admin arranged them —
+    // `sortOrder` first, title second. `buildTree` keeps whatever order
+    // it is given, so that arrangement is what the page renders, at
+    // every depth and at the root, exactly as the editorial tree shows
+    // it (`admin/library/page.tsx`).
     getCollections(),
   ])
 
@@ -126,31 +124,19 @@ export default async function BooksPage({
   const onShelf = (shelf: (typeof collections)[number] | null, id: string) =>
     sortShelfItems(
       (direct.get(id) ?? []).map((book) => ({ ...book, order: book.collectionOrder })),
-      shelfSortFor({ readerSort: sort, childOrder: shelf?.childOrder }),
+      shelfSortFor({ childOrder: shelf?.childOrder }),
     )
 
-  // A shelf's sub-shelves are its children too, so they take the same
-  // rule its books do. `buildTree` keeps whatever order it is given, so
-  // sorting the group here is what decides the order on the page.
-  const orderChildren = (
-    parent: (typeof collections)[number] | null,
-    nodes: TreeNode<(typeof collections)[number]>[],
-  ) =>
-    sortShelfItems(
-      nodes.map((node) => ({
-        node,
-        id: node.collection.id,
-        title: node.collection.title,
-        order: node.collection.sortOrder,
-      })),
-      shelfSortFor({ readerSort: sort, childOrder: parent?.childOrder }),
-    ).map((entry) => entry.node)
-
+  // A shelf's sub-shelves are not re-sorted here: they arrive in the
+  // order `/admin/collections` put them in and keep it. `childOrder`
+  // governs the *books* on a shelf; where the shelves themselves stand
+  // is what the reorder arrows say, and a shelf that moved under those
+  // arrows has to move on this page too or the arrows are decoration.
   const toShelf = (node: TreeNode<(typeof collections)[number]>): ShelfNode => ({
     id: String(node.collection.id),
     title: node.collection.title,
     books: onShelf(node.collection, String(node.collection.id)),
-    children: orderChildren(node.collection, node.children).map(toShelf),
+    children: node.children.map(toShelf),
   })
 
   const tree = buildTree(collections)
@@ -163,12 +149,7 @@ export default async function BooksPage({
   const selectedNode = selected
     ? (flattenTree(tree).find((node) => node.collection.id === selected.id) ?? null)
     : null
-  // Root shelves have no parent to carry a `childOrder`, so they take
-  // the library's own default rather than inheriting from nowhere.
-  const shelves = orderChildren(
-    selectedNode ? selectedNode.collection : null,
-    selectedNode ? selectedNode.children : tree,
-  ).map(toShelf)
+  const shelves = (selectedNode ? selectedNode.children : tree).map(toShelf)
   const lead = selected ? onShelf(selected, String(selected.id)) : []
 
   // Every published book belongs to a collection eventually, but not
@@ -216,50 +197,18 @@ export default async function BooksPage({
 
       {selected?.description ? <p className="page-lede">{selected.description}</p> : null}
 
-      <div className="filter-row">
-        <nav className="filters" aria-label="Reading level">
-          {BOOK_LEVELS.map((value) => (
-            <a
-              key={value}
-              href={href({ level: value })}
-              title={LEVEL_DESCRIPTIONS[value]}
-              aria-current={level === value ? 'true' : undefined}
-            >
-              {LEVEL_LABELS[value]}
-            </a>
-          ))}
-        </nav>
-
-        {/* A link with a query string, like the level beside it and for
-            the same reason: how a shelf is ordered is part of the view,
-            so it stays in the URL and every ordering of the library
-            remains bookmarkable.
-
-            Three options rather than two, because the first one is a
-            real answer and not the absence of one: each shelf reads the
-            way its curator set it, which for most of them is A–Z and
-            for a volume set is volume order. The other two force one
-            rule across the whole page. */}
-        <nav className="filters filters--sort" aria-label="Order">
+      <nav className="filters" aria-label="Reading level">
+        {BOOK_LEVELS.map((value) => (
           <a
-            href={href({ sort: undefined })}
-            title="Each shelf in the order its curator chose"
-            aria-current={sort === null ? 'true' : undefined}
+            key={value}
+            href={href({ level: value })}
+            title={LEVEL_DESCRIPTIONS[value]}
+            aria-current={level === value ? 'true' : undefined}
           >
-            As arranged
+            {LEVEL_LABELS[value]}
           </a>
-          {SHELF_SORTS.map((value) => (
-            <a
-              key={value}
-              href={href({ sort: value })}
-              title={SHELF_SORT_DESCRIPTIONS[value]}
-              aria-current={sort === value ? 'true' : undefined}
-            >
-              {SHELF_SORT_LABELS[value]}
-            </a>
-          ))}
-        </nav>
-      </div>
+        ))}
+      </nav>
 
       {books.length === 0 ? (
         <p className="empty">

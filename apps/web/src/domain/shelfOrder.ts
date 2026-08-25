@@ -20,9 +20,19 @@
  * to ask for. Curation is the exception; being able to find a title is
  * the norm.
  *
- * The reader's A–Z / Curated toggle is still there and is now an
- * *override*: with no `?sort=` in the URL each shelf uses its own
- * setting, and picking one applies it to the whole page.
+ * **And only the shelf decides.** A reader-facing "As arranged / A–Z /
+ * Curated" control existed on `/books` until 2026-08-25, overriding
+ * every shelf on the page at once. It is gone, along with `?sort=` and
+ * `parseShelfSort`. Ordering is an editorial judgement about where a
+ * reader should start, which is not a judgement to hand back to the
+ * reader as a button — and a library that reads one way when an editor
+ * arranged it and another way after a visitor clicks a pill is not
+ * arranged at all.
+ *
+ * This governs the **books on a shelf**. Where the shelves themselves
+ * stand is `sortOrder` and the reorder arrows in `/admin/collections`,
+ * at every depth including the root, and nothing re-sorts them
+ * afterwards — see `app/(frontend)/books/page.tsx`.
  *
  * ## The order id
  *
@@ -70,33 +80,13 @@ export function isShelfSort(value: unknown): value is ShelfSort {
 }
 
 /**
- * The sort a reader asked for, or null when they did not ask.
- *
- * Null is the interesting value: it means "let each shelf decide", and
- * it is what an ordinary visit to `/books` carries. Collapsing an
- * absent parameter into a default here would take that decision away
- * from the shelf and hand it to whoever wrote this function.
- */
-export function parseShelfSort(raw: string | string[] | undefined | null): ShelfSort | null {
-  const value = Array.isArray(raw) ? raw[0] : raw
-  return isShelfSort(value) ? value : null
-}
-
-/**
- * How to order one shelf's children: the reader's override if they made
- * one, else the shelf's own setting, else A–Z.
+ * How to order one shelf's books: its own setting, else A–Z.
  *
  * The one place that decision is made, so a shelf reads the same way on
- * the public library and in the editorial tree.
+ * the public library and in the editorial tree — which is the whole
+ * point of an editor being able to set it.
  */
-export function shelfSortFor({
-  readerSort,
-  childOrder,
-}: {
-  readerSort?: ShelfSort | null
-  childOrder?: unknown
-}): ShelfSort {
-  if (readerSort) return readerSort
+export function shelfSortFor({ childOrder }: { childOrder?: unknown }): ShelfSort {
   return isShelfSort(childOrder) ? childOrder : DEFAULT_CHILD_ORDER
 }
 

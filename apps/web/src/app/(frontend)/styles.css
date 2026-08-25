@@ -2100,17 +2100,6 @@ h3 {
  * kind of state and lives in the browser
  * (`components/CollectionShelves.tsx`).
  */
-/* Level on the left, order on the right: two views of the same shelf,
-   so they sit on one line and each keeps its own group of pills. They
-   stack on a narrow screen rather than shrinking the pills. */
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem 1.5rem;
-}
-
 .filters {
   display: flex;
   flex-wrap: wrap;
