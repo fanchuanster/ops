@@ -19,6 +19,7 @@ import {
   uploadedCoverId,
 } from '../../../../domain/cover'
 import { levelFromId } from '../../../../domain/levels'
+import { shelfSortFor, sortShelfItems } from '../../../../domain/shelfOrder'
 import {
   countDeliveries,
   getAdminBook,
@@ -157,8 +158,15 @@ export default async function AdminLibraryPage({
       // What the shelf-levelling form says it is about to touch: the
       // whole subtree, counted once per book.
       booksInSubtree: subtreeBookCount(node, direct),
-      books: own.filter(matches).map(asBookRow),
+      // In the order a reader will meet them: this shelf's own rule,
+      // not the query's. An editor arranging a shelf has to be looking
+      // at what the shelf actually does (`domain/shelfOrder.ts`).
+      books: sortShelfItems(
+        own.filter(matches).map((book) => ({ ...book, order: book.collectionOrder })),
+        shelfSortFor({ childOrder: node.collection.childOrder }),
+      ).map(asBookRow),
       hidden: own.length - own.filter(matches).length,
+      childOrder: shelfSortFor({ childOrder: node.collection.childOrder }),
     }
   })
 

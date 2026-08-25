@@ -19,6 +19,12 @@ import {
   type BookLevel,
 } from '../../domain/levels'
 import { MAX_DEPTH } from '../../domain/collectionTree'
+import {
+  SHELF_SORTS,
+  SHELF_SORT_DESCRIPTIONS,
+  SHELF_SORT_LABELS,
+  type ShelfSort,
+} from '../../domain/shelfOrder'
 
 export interface ParentOption {
   id: number
@@ -80,6 +86,8 @@ export interface LibraryRow {
   books: LibraryBookRow[]
   /** How many of its own books the search is hiding. */
   hidden: number
+  /** How this shelf orders its own children: A–Z, or by order id. */
+  childOrder: ShelfSort
 }
 
 /**
@@ -282,12 +290,32 @@ function ShelfRow({
                 </option>
               ))}
             </select>
+            {/* How this shelf's own children read — its books and the
+                shelves standing on it, both. A–Z unless the shelf has
+                an order of its own, which is the case order ids exist
+                for: a volume set, a reading path. Until an editor
+                switches this, the numbers below are recorded and never
+                consulted (`domain/shelfOrder.ts`). */}
+            <label className="visually-hidden" htmlFor={`childorder-${row.id}`}>
+              How its contents are ordered
+            </label>
+            <select
+              id={`childorder-${row.id}`}
+              name="childOrder"
+              defaultValue={row.childOrder}
+              title="How the books and shelves on this one are ordered"
+            >
+              {SHELF_SORTS.map((value) => (
+                <option key={value} value={value}>
+                  {SHELF_SORT_LABELS[value]} — {SHELF_SORT_DESCRIPTIONS[value]}
+                </option>
+              ))}
+            </select>
             {/* The same number the arrows above move, typed rather than
                 stepped. The arrows are for "one place up"; this is for
                 "third", which on a shelf of twenty is nine clicks
-                otherwise. A number another shelf holds shifts that shelf
-                down (`domain/shelfOrder.ts`) — nothing here can leave
-                two shelves claiming one place. */}
+                otherwise. Two shelves may share a number and then read
+                alphabetically between themselves — nothing shifts. */}
             <label className="visually-hidden" htmlFor={`order-${row.id}`}>
               Order among its siblings
             </label>

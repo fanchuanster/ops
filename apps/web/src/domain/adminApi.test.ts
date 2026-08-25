@@ -7,7 +7,7 @@ import {
   parseCollectionUpdate,
 } from './adminApi'
 import { LEVEL_IDS } from './levels'
-import { FIRST_ORDER_ID, MAX_ORDER_ID, UNPLACED_ORDER_ID } from './shelfOrder'
+import { FIRST_ORDER_ID, MAX_ORDER_ID } from './shelfOrder'
 
 /**
  * What the admin API will and will not accept.
@@ -85,10 +85,7 @@ describe('the admin API, on a book', () => {
 
   it('takes a place on the shelf, and null for the back of it', () => {
     expect(ok(parseBookUpdate({ collectionOrder: 3 })).collectionOrder).toBe(3)
-    // Null is "unplace it", which is a stored number and not a null —
-    // see `domain/shelfOrder.ts` on why the back of the shelf cannot
-    // be null here.
-    expect(ok(parseBookUpdate({ collectionOrder: null })).collectionOrder).toBe(UNPLACED_ORDER_ID)
+    expect(ok(parseBookUpdate({ collectionOrder: null })).collectionOrder).toBe(null)
     // Uniqueness is nobody's business now: two books may share a
     // number and read alphabetically between themselves.
     expect(ok(parseBookUpdate({ collectionOrder: 2.5 })).collectionOrder).toBe(2)
@@ -123,10 +120,24 @@ describe('the admin API, on a book', () => {
 })
 
 describe('the admin API, on a collection', () => {
-  it('writes only the four things a shelf is', () => {
-    expect([...COLLECTION_WRITABLE]).toEqual(['title', 'description', 'parent', 'sortOrder'])
+  it('writes only the five things a shelf is', () => {
+    expect([...COLLECTION_WRITABLE]).toEqual([
+      'title',
+      'description',
+      'parent',
+      'sortOrder',
+      'childOrder',
+    ])
     // The slug is a shelf's identity in a URL and is not curation.
     expect(fields(parseCollectionUpdate({ slug: 'x' }))).toEqual(['slug'])
+  })
+
+  it('holds the child order to the two sorts there are', () => {
+    expect(ok(parseCollectionUpdate({ childOrder: 'sequence' })).childOrder).toBe('sequence')
+    expect(ok(parseCollectionUpdate({ childOrder: 'alphabetical' })).childOrder).toBe(
+      'alphabetical',
+    )
+    expect(fields(parseCollectionUpdate({ childOrder: 'by-vibes' }))).toEqual(['childOrder'])
   })
 
   it('takes null as "make this a root shelf"', () => {
@@ -140,7 +151,7 @@ describe('the admin API, on a collection', () => {
     // Zero is first, not absent — a falsy check here would silently
     // refuse the one value that means "put it at the front".
     expect(ok(parseCollectionUpdate({ sortOrder: 0 })).sortOrder).toBe(FIRST_ORDER_ID)
-    expect(ok(parseCollectionUpdate({ sortOrder: null })).sortOrder).toBe(UNPLACED_ORDER_ID)
+    expect(ok(parseCollectionUpdate({ sortOrder: null })).sortOrder).toBe(null)
     expect(ok(parseCollectionUpdate({ sortOrder: 1.5 })).sortOrder).toBe(1)
   })
 

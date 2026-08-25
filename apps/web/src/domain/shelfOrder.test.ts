@@ -13,14 +13,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  DEFAULT_SHELF_SORT,
+  DEFAULT_CHILD_ORDER,
   compareSequence,
   compareTitles,
   FIRST_ORDER_ID,
   MAX_ORDER_ID,
-  UNPLACED_ORDER_ID,
-  isPlaced,
+  nextOrderId,
   orderIdFrom,
+  shelfSortFor,
   parseShelfSort,
   resequence,
   sortShelfItems,
@@ -34,11 +34,10 @@ describe('parseShelfSort', () => {
     expect(parseShelfSort('alphabetical')).toBe('alphabetical')
   })
 
-  it('falls back to the curated order for anything else', () => {
-    expect(parseShelfSort(undefined)).toBe(DEFAULT_SHELF_SORT)
-    expect(parseShelfSort('')).toBe(DEFAULT_SHELF_SORT)
-    expect(parseShelfSort('by-vibes')).toBe(DEFAULT_SHELF_SORT)
-    expect(DEFAULT_SHELF_SORT).toBe('sequence')
+  it('says null when the reader did not ask, so the shelf decides', () => {
+    expect(parseShelfSort(undefined)).toBeNull()
+    expect(parseShelfSort('')).toBeNull()
+    expect(parseShelfSort('by-vibes')).toBeNull()
   })
 
   it('takes the first of a repeated query parameter', () => {
@@ -85,65 +84,51 @@ describe('sorting a shelf', () => {
   })
 })
 
+describe('who decides how a shelf reads', () => {
+  it('lets each shelf decide when the reader has not asked', () => {
+    expect(shelfSortFor({ readerSort: null, childOrder: 'sequence' })).toBe('sequence')
+    expect(shelfSortFor({ readerSort: null, childOrder: 'alphabetical' })).toBe('alphabetical')
+  })
+
+  it('is A–Z for a shelf that has said nothing', () => {
+    expect(shelfSortFor({ readerSort: null, childOrder: undefined })).toBe('alphabetical')
+    expect(shelfSortFor({ readerSort: null, childOrder: 'nonsense' })).toBe('alphabetical')
+    expect(DEFAULT_CHILD_ORDER).toBe('alphabetical')
+  })
+
+  it('lets a reader who asked override every shelf', () => {
+    // The toggle is an override, not a preference the shelf can veto.
+    expect(shelfSortFor({ readerSort: 'alphabetical', childOrder: 'sequence' })).toBe(
+      'alphabetical',
+    )
+    expect(shelfSortFor({ readerSort: 'sequence', childOrder: 'alphabetical' })).toBe('sequence')
+  })
+})
+
 describe('a place on the shelf', () => {
+  it('hands an arrival the number after the highest', () => {
+    expect(nextOrderId([])).toBe(FIRST_ORDER_ID)
+    expect(nextOrderId([item(1, 'A', 1), item(2, 'B', 4)])).toBe(5)
+    // Past the highest, not into the gap a deleted book left.
+    expect(nextOrderId([item(1, 'A', 1), item(2, 'B', 9)])).toBe(10)
+    expect(nextOrderId([item(1, 'A')])).toBe(FIRST_ORDER_ID)
+  })
+
   it('clamps a typed number to something storable', () => {
     expect(orderIdFrom(3)).toBe(3)
     expect(orderIdFrom(3.7)).toBe(3)
     // 0 and negatives mean "first" rather than being refused.
     expect(orderIdFrom(0)).toBe(FIRST_ORDER_ID)
     expect(orderIdFrom(-3)).toBe(FIRST_ORDER_ID)
-    // A slip, not a position — and it must never reach the sentinel.
+    // A slip, not a position.
     expect(orderIdFrom(50_000)).toBe(MAX_ORDER_ID)
-    expect(orderIdFrom(UNPLACED_ORDER_ID)).toBe(MAX_ORDER_ID)
-  })
-
-  it('keeps what an editor may type clear of the back of the shelf', () => {
-    expect(MAX_ORDER_ID).toBeLessThan(UNPLACED_ORDER_ID)
-  })
-
-  it('calls a placed item placed and an unplaced one not', () => {
-    expect(isPlaced({ id: 1, title: 'a', order: 2 })).toBe(true)
-    expect(isPlaced({ id: 2, title: 'b', order: UNPLACED_ORDER_ID })).toBe(false)
-    expect(isPlaced({ id: 3, title: 'c', order: null })).toBe(false)
-  })
-})
-
-describe('a shelf nobody has curated', () => {
-  const shelf = [
-    { id: 1, title: 'Zhuangzi', order: UNPLACED_ORDER_ID },
-    { id: 2, title: 'Analects', order: UNPLACED_ORDER_ID },
-    { id: 3, title: 'Mencius', order: UNPLACED_ORDER_ID },
-  ]
-
-  it('reads alphabetically', () => {
-    // The whole point of a shared sentinel: everything ties, so the
-    // title comparison decides, and a shelf nobody ordered is A-Z.
-    expect(sortShelfItems(shelf, 'sequence').map((item) => item.title)).toEqual([
-      'Analects',
-      'Mencius',
-      'Zhuangzi',
-    ])
-  })
-
-  it('lifts one placed book out of that run, leaving the rest alone', () => {
-    const withOne = [...shelf, { id: 4, title: 'Zuo Zhuan', order: 1 }]
-    expect(sortShelfItems(withOne, 'sequence').map((item) => item.title)).toEqual([
-      'Zuo Zhuan',
-      'Analects',
-      'Mencius',
-      'Zhuangzi',
-    ])
   })
 
   it('reads two books at the same number alphabetically between them', () => {
-    // Order ids need not be unique since 2026-08-25 — setting one
-    // writes one row and moves nobody else.
-    const tied = [
-      { id: 1, title: 'Mencius', order: 3 },
-      { id: 2, title: 'Analects', order: 3 },
-      { id: 3, title: 'Zhuangzi', order: 1 },
-    ]
-    expect(sortShelfItems(tied, 'sequence').map((item) => item.title)).toEqual([
+    // Order ids need not be unique — setting one writes one row and
+    // moves nobody else.
+    const tied = [item(1, 'Mencius', 3), item(2, 'Analects', 3), item(3, 'Zhuangzi', 1)]
+    expect(sortShelfItems(tied, 'sequence').map((book) => book.title)).toEqual([
       'Zhuangzi',
       'Analects',
       'Mencius',

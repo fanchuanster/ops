@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
 import { canNest, parentIdOf, subtreeIds } from '../../../domain/collectionTree'
-import { UNPLACED_ORDER_ID, orderIdFrom, resequence } from '../../../domain/shelfOrder'
+import { isShelfSort, orderIdFrom, resequence } from '../../../domain/shelfOrder'
 import {
   isBookLevel,
   isLevelApplyMode,
@@ -154,6 +154,11 @@ export async function saveCollection(
   const order = requestedOrder(formData)
   if (order === 'invalid') return { error: 'An order is a whole number.' }
 
+  // How this shelf's own children are ordered. A select with two
+  // options, so anything else is a form that did not come from our
+  // screen and is ignored rather than stored.
+  const childOrder = String(formData.get('childOrder') ?? '')
+
   // Moving to a new parent puts it among strangers, so it goes to the
   // end of them rather than landing in the middle on whatever number it
   // happened to carry from its old siblings. That is the collection's
@@ -172,12 +177,13 @@ export async function saveCollection(
         title,
         description: description || null,
         parent,
-        // One field on one row: numbers may repeat since 2026-08-25, so
-        // nothing has to be shifted out of the way and this no longer
-        // needs a second pass after the move. A cleared box means the
-        // back of the shelf, where unplaced siblings read alphabetically
-        // (`domain/shelfOrder.ts`).
-        sortOrder: order === null ? UNPLACED_ORDER_ID : orderIdFrom(order),
+        // One field on one row: numbers may repeat, so nothing has to
+        // be shifted out of the way and this needs no second pass after
+        // the move. A cleared box leaves the number alone.
+        sortOrder: order === null ? undefined : orderIdFrom(order),
+        // How this shelf's own children are ordered. Absent from the
+        // form means unchanged, not "reset to A–Z".
+        childOrder: isShelfSort(childOrder) ? childOrder : undefined,
       },
       overrideAccess: true,
     })

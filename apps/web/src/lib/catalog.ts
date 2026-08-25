@@ -16,18 +16,18 @@ import { getPayload, type TypedUser, type Where } from 'payload'
 
 import { subtreeIds } from '../domain/collectionTree'
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
-import { DEFAULT_SHELF_SORT, type ShelfSort } from '../domain/shelfOrder'
+import type { ShelfSort } from '../domain/shelfOrder'
 import { slugFromParam } from './slugParam'
 
 export async function getCatalog({
   collectionSlug,
   level = DEFAULT_BROWSE_LEVEL,
-  sort = DEFAULT_SHELF_SORT,
+  sort = null,
   limit = 48,
 }: {
   collectionSlug?: string
   level?: BookLevel
-  sort?: ShelfSort
+  sort?: ShelfSort | null
   limit?: number
 } = {}) {
   const payload = await getPayload({ config })
@@ -111,11 +111,11 @@ export async function getCatalog({
  * the whole list here orders each sibling group correctly and there is
  * no second ordering rule inside the tree builder to keep in step.
  */
-export async function getCollections(sort: ShelfSort = DEFAULT_SHELF_SORT) {
+export async function getCollections() {
   const payload = await getPayload({ config })
   const result = await payload.find({
     collection: 'book-collections',
-    sort: sort === 'alphabetical' ? ['title'] : ['sortOrder', 'title'],
+    sort: ['sortOrder', 'title'],
     limit: 100,
     depth: 1,
     overrideAccess: false,

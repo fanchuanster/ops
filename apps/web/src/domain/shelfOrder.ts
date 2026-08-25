@@ -2,47 +2,41 @@
  * How the things on a shelf are ordered.
  *
  * A collection's children — the books filed directly on it, and the
- * shelves standing on it — are ordered two ways, and a reader picks
- * which:
+ * shelves standing on it — are ordered one of two ways:
  *
- *   sequence      the order somebody put them in, ascending
  *   alphabetical  by title
+ *   sequence      by the order id each item carries
  *
- * The sequence is a **number the item carries**, and since 2026-08-25
- * two things about that number are deliberately loose:
+ * **The shelf decides, not the reader.** Since 2026-08-25 every
+ * collection carries `childOrder`, and it defaults to alphabetical:
+ * a library nobody has curated reads A–Z, which is the order a reader
+ * can predict and scan. A curator switches one shelf to `sequence` when
+ * its contents have an order of their own — a ten-volume set, a reading
+ * path, a "start here" — and only that shelf changes.
  *
- *   - **It need not be unique.** Two books on a shelf may both be 3,
- *     and they then read alphabetically between themselves. Setting a
- *     number therefore writes one row and never touches another book,
- *     which is what an editor typing 3 actually asked for. It used to
- *     *shift* the run of occupants along to keep the numbers unique —
- *     one edit rewriting half a shelf, and books nobody touched moving.
- *   - **A shelf is alphabetical until somebody says otherwise.** An
- *     arrival is not given the next free number any more; it takes
- *     `UNPLACED_ORDER_ID`, which every unplaced item shares, so they
- *     all tie and fall to the title comparison. A shelf nobody has
- *     curated reads A–Z, and a book given a real number rises out of
- *     that run to the place it was given.
+ * That default matters more than it looks. It used to be `sequence`
+ * everywhere, which meant a shelf's order was whatever numbers happened
+ * to have been handed out, and alphabetical was something a reader had
+ * to ask for. Curation is the exception; being able to find a title is
+ * the norm.
  *
- * The numbers need not be contiguous either. Nothing renumbers a shelf
- * because a book left it, so 1, 2, 5 is a normal state — an order id an
- * editor typed is a fact they stated, and closing a gap under them
- * would move books nobody touched.
+ * The reader's A–Z / Curated toggle is still there and is now an
+ * *override*: with no `?sort=` in the URL each shelf uses its own
+ * setting, and picking one applies it to the whole page.
  *
- * ## Why "unplaced" is a number and not null
+ * ## The order id
  *
- * It would read better as null, and it cannot be. The catalog sorts in
- * the database because `limit` truncates — browsing in the curated
- * order has to take the first forty-eight *by that order*. SQLite sorts
- * NULLs **first** in an ascending sort and the adapter emits no
- * `NULLS LAST`, so a null would put every uncurated book ahead of the
- * ones an editor deliberately numbered: exactly backwards. A large
- * shared number sorts last by ordinary arithmetic, in the database and
- * in `compareSequence` alike.
+ * A number the item carries, handed out one past the highest on the
+ * shelf when it is filed, and editable afterwards. It need not be
+ * unique — two books at 3 read alphabetically between themselves — so
+ * setting one writes a single row and moves nothing else. It need not
+ * be contiguous either: nothing renumbers a shelf because a book left
+ * it, so 1, 2, 5 is a normal state and the gap is not a bug to tidy.
  *
- * Null still means something, and something different: a book on no
- * shelf at all. An order id is a position among a collection's own
- * books, so off the shelf there is nothing for it to be a position in.
+ * An item with no number at all sorts last under the title comparison.
+ * That is the safety net rather than the common case, since filing a
+ * book gives it one — a book on *no* shelf has none, because an order
+ * id is a position among a collection's own books.
  *
  * Framework-independent, like everything in `src/domain`.
  */
@@ -52,15 +46,14 @@ export const SHELF_SORTS = ['sequence', 'alphabetical'] as const
 export type ShelfSort = (typeof SHELF_SORTS)[number]
 
 /**
- * Sequence, not alphabetical.
+ * What a shelf does when nobody has said otherwise: A–Z.
  *
- * The library is curated: the order an editor put a shelf in is a
- * judgement about where a reader should start, and the alphabet is not.
- * Alphabetical is the one to reach for when you are *looking for* a
- * book rather than being shown one, which is why it is offered and why
- * it is not the default.
+ * The library is mostly not curated, and a reader scanning for a title
+ * can predict the alphabet. A curator switches the shelves that have an
+ * order of their own — the ten-volume set, the reading path — and every
+ * other shelf stays findable.
  */
-export const DEFAULT_SHELF_SORT: ShelfSort = 'sequence'
+export const DEFAULT_CHILD_ORDER: ShelfSort = 'alphabetical'
 
 export const SHELF_SORT_LABELS: Record<ShelfSort, string> = {
   sequence: 'Curated',
@@ -68,7 +61,7 @@ export const SHELF_SORT_LABELS: Record<ShelfSort, string> = {
 }
 
 export const SHELF_SORT_DESCRIPTIONS: Record<ShelfSort, string> = {
-  sequence: 'The order the library puts them in',
+  sequence: 'By the order id each item carries',
   alphabetical: 'By title',
 }
 
@@ -76,10 +69,35 @@ export function isShelfSort(value: unknown): value is ShelfSort {
   return typeof value === 'string' && (SHELF_SORTS as readonly string[]).includes(value)
 }
 
-/** The sort a query string is asking for; the default for anything else. */
-export function parseShelfSort(raw: string | string[] | undefined | null): ShelfSort {
+/**
+ * The sort a reader asked for, or null when they did not ask.
+ *
+ * Null is the interesting value: it means "let each shelf decide", and
+ * it is what an ordinary visit to `/books` carries. Collapsing an
+ * absent parameter into a default here would take that decision away
+ * from the shelf and hand it to whoever wrote this function.
+ */
+export function parseShelfSort(raw: string | string[] | undefined | null): ShelfSort | null {
   const value = Array.isArray(raw) ? raw[0] : raw
-  return isShelfSort(value) ? value : DEFAULT_SHELF_SORT
+  return isShelfSort(value) ? value : null
+}
+
+/**
+ * How to order one shelf's children: the reader's override if they made
+ * one, else the shelf's own setting, else A–Z.
+ *
+ * The one place that decision is made, so a shelf reads the same way on
+ * the public library and in the editorial tree.
+ */
+export function shelfSortFor({
+  readerSort,
+  childOrder,
+}: {
+  readerSort?: ShelfSort | null
+  childOrder?: unknown
+}): ShelfSort {
+  if (readerSort) return readerSort
+  return isShelfSort(childOrder) ? childOrder : DEFAULT_CHILD_ORDER
 }
 
 /** Anything that sits on a shelf: a book, or a shelf standing on it. */
@@ -152,27 +170,33 @@ export const FIRST_ORDER_ID = 1
 /**
  * The highest number an editor may type.
  *
- * Not a storage limit — it is the gap that keeps a typed number and
- * `UNPLACED_ORDER_ID` from ever colliding. Four digits is already far
- * more than a shelf holds; anything larger is a typo, and clamping is
- * kinder than refusing.
+ * Four digits is already far more than a shelf holds; anything larger
+ * is a typo, and clamping is kinder than refusing.
  */
 export const MAX_ORDER_ID = 9999
 
 /**
- * The number everything unplaced carries: the back of the shelf.
+ * The order id a new arrival gets: one past the highest already there.
  *
- * Shared rather than unique, which is the whole point — every item
- * nobody has curated ties with every other, so they read alphabetically
- * among themselves and after anything an editor placed. Out of reach of
- * `MAX_ORDER_ID`, so it can never be typed by accident.
+ * Past the highest rather than into the first gap. A shelf's numbers
+ * are a sequence somebody is reading down, and dropping a new book into
+ * the hole left by a deleted one puts it in the middle of a list it has
+ * no business being in the middle of.
+ *
+ * Incremental at filing, which is what makes `sequence` mean "the order
+ * they arrived in" on a shelf nobody has hand-numbered. Between
+ * 2026-08-25 and this commit an arrival took a shared "unplaced" value
+ * instead, so `sequence` and alphabetical were the same list — that was
+ * the wrong lever for "shelves should read A–Z by default", and the
+ * right one is `childOrder` on the shelf.
  */
-export const UNPLACED_ORDER_ID = 1_000_000
-
-/** Whether this item is where an editor put it, rather than at the back. */
-export function isPlaced(item: OrderedItem): boolean {
-  const order = orderIdOf(item)
-  return order !== null && order < UNPLACED_ORDER_ID
+export function nextOrderId(siblings: readonly OrderedItem[]): number {
+  let highest = FIRST_ORDER_ID - 1
+  for (const sibling of siblings) {
+    const order = orderIdOf(sibling)
+    if (order !== null && order > highest) highest = order
+  }
+  return Math.min(MAX_ORDER_ID, highest + 1)
 }
 
 /**
@@ -181,10 +205,10 @@ export function isPlaced(item: OrderedItem): boolean {
  * Floored and clamped: a fractional place is meaningless, 0 or -3 means
  * "first", and anything past `MAX_ORDER_ID` is a slip rather than a
  * position. Nothing here consults the other books — duplicates are
- * allowed now, so there is nothing to resolve.
+ * allowed, so there is nothing to resolve.
  */
 export function orderIdFrom(desired: number): number {
-  if (!Number.isFinite(desired)) return UNPLACED_ORDER_ID
+  if (!Number.isFinite(desired)) return FIRST_ORDER_ID
   return Math.min(MAX_ORDER_ID, Math.max(FIRST_ORDER_ID, Math.floor(desired)))
 }
 

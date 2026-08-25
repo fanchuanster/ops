@@ -39,7 +39,7 @@
 
 import { BOOK_LEVELS, isBookLevel, levelId } from './levels'
 import { RIGHTS_STATUSES, type RightsStatus } from './rights'
-import { UNPLACED_ORDER_ID, orderIdFrom } from './shelfOrder'
+import { SHELF_SORTS, orderIdFrom } from './shelfOrder'
 
 /** The languages a book may be filed under, mirroring the select. */
 export const BOOK_LANGUAGES = ['zh-Hans', 'zh-Hant', 'en', 'zh-en'] as const
@@ -81,7 +81,13 @@ export const BOOK_WRITABLE = [
   'visibility',
 ] as const
 
-export const COLLECTION_WRITABLE = ['title', 'description', 'parent', 'sortOrder'] as const
+export const COLLECTION_WRITABLE = [
+  'title',
+  'description',
+  'parent',
+  'sortOrder',
+  'childOrder',
+] as const
 
 export function parseBookUpdate(body: unknown): Parsed {
   return parse(body, BOOK_WRITABLE, {
@@ -114,21 +120,21 @@ export function parseCollectionUpdate(body: unknown): Parsed {
     // missing value, so it clears rather than being ignored.
     parent: nullableId,
     sortOrder: shelfPlace,
+    // Whether this shelf's children read A–Z or by their order ids.
+    childOrder: oneOf('childOrder', SHELF_SORTS),
   })
 }
 
 /**
- * A place among siblings: a whole number in range, or the back.
+ * A place among siblings: a whole number in range, or null to clear it.
  *
- * Null means "unplaced" and is stored as `UNPLACED_ORDER_ID` rather
- * than as null, because null is what a book on *no shelf* carries and
- * because SQLite would sort a null ahead of every placed item — see
- * `domain/shelfOrder.ts`. A number out of range is clamped rather than
- * refused: it is a slip, and a position is not the kind of field worth
- * failing a whole PATCH over.
+ * A number out of range is clamped rather than refused: it is a slip,
+ * and a position is not the kind of field worth failing a whole PATCH
+ * over. Whether the number is ever *consulted* is the shelf's
+ * `childOrder` (`domain/shelfOrder.ts`), not this field.
  */
 const shelfPlace: Reader = (value, field) => {
-  if (value === null) return { ok: true, value: UNPLACED_ORDER_ID }
+  if (value === null) return { ok: true, value: null }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return { ok: false, message: `${field} must be a number or null.` }
   }

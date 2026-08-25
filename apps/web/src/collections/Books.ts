@@ -9,7 +9,7 @@ import {
   canPublishToLibrary,
 } from '../domain/moderation'
 import { priceInCredits } from '../domain/credits'
-import { UNPLACED_ORDER_ID } from '../domain/shelfOrder'
+import { nextOrderId } from '../domain/shelfOrder'
 import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 
 /**
@@ -159,20 +159,19 @@ function shelfIdOf(value: unknown): number | null {
  *     made every move to another shelf keep the number it had on the
  *     shelf it left, which is exactly the bug this rule exists to
  *     prevent.
- *   - Otherwise the book is unplaced: it takes `UNPLACED_ORDER_ID`
- *     along with everything else nobody has curated, and the shelf
- *     reads alphabetically until an editor says otherwise. This used to
- *     be "one past the highest", which quietly made every shelf a
- *     first-come queue that no one had chosen.
+ *   - Otherwise a book that has just landed on this shelf goes to the
+ *     end of it, one past the highest already there. A book already on
+ *     it keeps the number it has.
  *
- * No sibling query any more, which is the nice part: the number an
- * arrival gets no longer depends on the other books, so filing a book
- * is one write and reads nothing.
+ * Every filed book therefore carries a number, whether or not anyone
+ * looks at it: whether a reader ever sees that order is the shelf's
+ * `childOrder` (`domain/shelfOrder.ts`), which is A–Z by default.
  */
 const assignCollectionOrder: CollectionBeforeChangeHook = async ({
   data,
   operation,
   originalDoc,
+  req,
 }) => {
   if (!data) return data
 
@@ -188,7 +187,25 @@ const assignCollectionOrder: CollectionBeforeChangeHook = async ({
   const moved = operation === 'create' || shelf !== was
   if (!moved && typeof originalDoc?.collectionOrder === 'number') return data
 
-  return { ...data, collectionOrder: UNPLACED_ORDER_ID }
+  const siblings = await req.payload.find({
+    collection: 'books',
+    where: { collection: { equals: shelf } },
+    limit: 1000,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+
+  return {
+    ...data,
+    collectionOrder: nextOrderId(
+      siblings.docs
+        // Itself excluded: a book being re-saved on the shelf it is
+        // already on must not be pushed past its own number.
+        .filter((book) => book.id !== originalDoc?.id)
+        .map((book) => ({ id: book.id, title: book.title, order: book.collectionOrder })),
+    ),
+  }
 }
 
 const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {

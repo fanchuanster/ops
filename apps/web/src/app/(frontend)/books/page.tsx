@@ -17,7 +17,7 @@ import {
   parseBrowseLevel,
 } from '../../../domain/levels'
 import {
-  DEFAULT_SHELF_SORT,
+  shelfSortFor,
   SHELF_SORTS,
   SHELF_SORT_DESCRIPTIONS,
   SHELF_SORT_LABELS,
@@ -75,21 +75,25 @@ export default async function BooksPage({
     const query = new URLSearchParams()
     const nextCollection = 'collection' in next ? next.collection : collection
     const nextLevel = next.level ?? level
-    const nextSort = next.sort ?? sort
+    // `sort: undefined` passed explicitly means "clear the override",
+    // which is not the same as the key being absent — that means
+    // "leave it as it is". `in` tells the two apart.
+    const nextSort = 'sort' in next ? next.sort : sort
     if (nextCollection) query.set('collection', nextCollection)
     // The default reads as no filter at all, so it stays out of the URL.
     if (nextLevel !== DEFAULT_BROWSE_LEVEL) query.set('level', nextLevel)
-    if (nextSort !== DEFAULT_SHELF_SORT) query.set('sort', nextSort)
+    // No `sort=` means "let each shelf decide", which is the ordinary
+    // visit and stays out of the URL.
+    if (nextSort) query.set('sort', nextSort)
     const qs = query.toString()
     return qs ? `/books?${qs}` : '/books'
   }
 
   const [{ books }, collections] = await Promise.all([
     getCatalog({ collectionSlug: collection, level, sort }),
-    // The shelves take the same sort as the books on them: "A–Z" that
-    // reordered the books inside a shelf but left the shelves in
-    // curated order would be answering half the question.
-    getCollections(sort),
+    // Every shelf, in a stable order. Which order a reader sees is
+    // decided per shelf below, from its own `childOrder`.
+    getCollections(),
   ])
 
   const selected = collection ? collections.find((c) => c.slug === collection) : null
@@ -115,21 +119,38 @@ export default async function BooksPage({
   }
 
   // Ordered again here, per shelf, over the order the query already
-  // returned. Not belt and braces: the catalog's sort is one ordering
-  // across every shelf at once and SQLite puts an unnumbered book
-  // *first*, where the rule is that it goes last (`domain/shelfOrder.ts`).
+  // returned — and this is where the shelf's own `childOrder` is
+  // honoured, because the catalog's sort is one ordering across every
+  // shelf at once and cannot be two different things at the same time.
   // This is where a shelf becomes the list a reader actually sees.
-  const onShelf = (id: string) =>
+  const onShelf = (shelf: (typeof collections)[number] | null, id: string) =>
     sortShelfItems(
       (direct.get(id) ?? []).map((book) => ({ ...book, order: book.collectionOrder })),
-      sort,
+      shelfSortFor({ readerSort: sort, childOrder: shelf?.childOrder }),
     )
+
+  // A shelf's sub-shelves are its children too, so they take the same
+  // rule its books do. `buildTree` keeps whatever order it is given, so
+  // sorting the group here is what decides the order on the page.
+  const orderChildren = (
+    parent: (typeof collections)[number] | null,
+    nodes: TreeNode<(typeof collections)[number]>[],
+  ) =>
+    sortShelfItems(
+      nodes.map((node) => ({
+        node,
+        id: node.collection.id,
+        title: node.collection.title,
+        order: node.collection.sortOrder,
+      })),
+      shelfSortFor({ readerSort: sort, childOrder: parent?.childOrder }),
+    ).map((entry) => entry.node)
 
   const toShelf = (node: TreeNode<(typeof collections)[number]>): ShelfNode => ({
     id: String(node.collection.id),
     title: node.collection.title,
-    books: onShelf(String(node.collection.id)),
-    children: node.children.map(toShelf),
+    books: onShelf(node.collection, String(node.collection.id)),
+    children: orderChildren(node.collection, node.children).map(toShelf),
   })
 
   const tree = buildTree(collections)
@@ -142,8 +163,13 @@ export default async function BooksPage({
   const selectedNode = selected
     ? (flattenTree(tree).find((node) => node.collection.id === selected.id) ?? null)
     : null
-  const shelves = (selectedNode ? selectedNode.children : tree).map(toShelf)
-  const lead = selected ? onShelf(String(selected.id)) : []
+  // Root shelves have no parent to carry a `childOrder`, so they take
+  // the library's own default rather than inheriting from nowhere.
+  const shelves = orderChildren(
+    selectedNode ? selectedNode.collection : null,
+    selectedNode ? selectedNode.children : tree,
+  ).map(toShelf)
+  const lead = selected ? onShelf(selected, String(selected.id)) : []
 
   // Every published book belongs to a collection eventually, but not
   // today — so anything uncollected still gets a shelf rather than
@@ -207,8 +233,21 @@ export default async function BooksPage({
         {/* A link with a query string, like the level beside it and for
             the same reason: how a shelf is ordered is part of the view,
             so it stays in the URL and every ordering of the library
-            remains bookmarkable. */}
+            remains bookmarkable.
+
+            Three options rather than two, because the first one is a
+            real answer and not the absence of one: each shelf reads the
+            way its curator set it, which for most of them is A–Z and
+            for a volume set is volume order. The other two force one
+            rule across the whole page. */}
         <nav className="filters filters--sort" aria-label="Order">
+          <a
+            href={href({ sort: undefined })}
+            title="Each shelf in the order its curator chose"
+            aria-current={sort === null ? 'true' : undefined}
+          >
+            As arranged
+          </a>
           {SHELF_SORTS.map((value) => (
             <a
               key={value}

@@ -7,7 +7,7 @@ import {
   canNest,
   parentIdOf,
 } from '../domain/collectionTree'
-import { UNPLACED_ORDER_ID } from '../domain/shelfOrder'
+import { DEFAULT_CHILD_ORDER, SHELF_SORTS, nextOrderId } from '../domain/shelfOrder'
 
 const NESTING_ERRORS: Record<NestingRefusal, string> = {
   self: 'A collection cannot be filed under itself.',
@@ -63,12 +63,12 @@ const enforceNesting: CollectionBeforeChangeHook = async ({ data, originalDoc, r
 /**
  * A shelf's place among its own siblings.
  *
- * The same rule books get in `collections/Books.ts`, for the same
- * reasons, and it changed on the same day: a shelf nobody has placed
- * takes `UNPLACED_ORDER_ID` rather than the next free number, so a
- * parent's children read alphabetically until an editor orders them.
- * It was "one past the highest", which made every new shelf land at the
- * end of a queue nobody had chosen.
+ * The same rule books get in `collections/Books.ts`: one past the
+ * highest already standing on this parent, so a shelf's `sequence`
+ * order is the order its children arrived in until somebody renumbers
+ * them. Whether a reader ever *sees* that order is the parent's
+ * `childOrder`, which defaults to alphabetical — the number is always
+ * assigned, and only consulted when the shelf asks for it.
  *
  * A stated number is obeyed exactly, collisions included — two shelves
  * may share a number and then read alphabetically between themselves.
@@ -85,6 +85,7 @@ const assignSiblingOrder: CollectionBeforeChangeHook = async ({
   data,
   operation,
   originalDoc,
+  req,
 }) => {
   if (!data) return data
 
@@ -101,7 +102,29 @@ const assignSiblingOrder: CollectionBeforeChangeHook = async ({
   const moved = operation === 'create' || parent !== was
   if (!moved && typeof originalDoc?.sortOrder === 'number') return data
 
-  return { ...data, sortOrder: UNPLACED_ORDER_ID }
+  const all = await req.payload.find({
+    collection: 'book-collections',
+    limit: 500,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+
+  return {
+    ...data,
+    sortOrder: nextOrderId(
+      all.docs
+        .filter(
+          (collection) =>
+            collection.id !== originalDoc?.id && parentIdOf(collection) === parent,
+        )
+        .map((collection) => ({
+          id: collection.id,
+          title: collection.title,
+          order: collection.sortOrder,
+        })),
+    ),
+  }
 }
 
 /**
@@ -133,6 +156,31 @@ export const BookCollections: CollectionConfig = {
       relationTo: 'book-collections',
       admin: {
         description: `The shelf this one stands on. A parent shows every book beneath it, so filing "Confucian" under "Chinese Classics" means the classics shelf shows both. Nests ${MAX_DEPTH} levels deep at most; a collection cannot be filed under itself or under its own sub-collection.`,
+      },
+    },
+    {
+      name: 'childOrder',
+      type: 'select',
+      defaultValue: DEFAULT_CHILD_ORDER,
+      options: [
+        { label: 'A–Z, by title', value: 'alphabetical' },
+        { label: 'Curated, by order id', value: 'sequence' },
+      ],
+      /**
+       * How this shelf's own children are ordered — the books filed
+       * directly on it and the shelves standing on it, both.
+       *
+       * A curator's decision and not a reader's, so it is written where
+       * the other curatorial fields are: administrators only, at every
+       * door and not just the one with the control on it.
+       */
+      access: {
+        create: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
+        update: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
+      },
+      admin: {
+        description:
+          'How the books and shelves on this one are ordered. A–Z unless this shelf has an order of its own — a volume set, a reading path — in which case order ids decide. Set from /admin/library.',
       },
     },
     {

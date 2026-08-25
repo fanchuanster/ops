@@ -973,13 +973,28 @@ themselves.
 ## 5.4 Two orders, on every shelf
 
 A collection's children — the books filed on it, and the shelves
-standing on it — are ordered two ways, and a reader picks which with
-`?sort=` on `/books`:
+standing on it — are ordered two ways:
 
-    sequence      the order somebody put them in     the default
-    alphabetical  by title
+    alphabetical  by title                        the default
+    sequence      by the order id each item carries
 
-The default is the curated one, since 2026-08-25. The library is
+**The shelf decides, not the reader.** Every collection carries
+`childOrder`, and it defaults to alphabetical: a library nobody has
+curated reads A–Z, which is the order a reader can predict and scan. A
+curator switches one shelf to `sequence` when its contents have an
+order of their own — a ten-volume set, a reading path, a "start here" —
+and only that shelf changes. Root shelves have no parent to inherit
+from and take the library's default.
+
+It was one global answer until 2026-08-25, chosen by the reader with
+`?sort=` and defaulting to `sequence`. One answer is wrong for a
+library where most shelves have no order of their own and a few have a
+strong one: the alphabet was something a reader had to ask for, and the
+volume set only read correctly by luck of the numbers it had been
+handed.
+
+The reader's toggle survives as an **override** — "As arranged" (no
+parameter, each shelf its own way), "A–Z", "Curated". The library is
 curated: the order an editor put a shelf in is a judgement about where a
 reader should start, and the alphabet is not. Alphabetical is what you
 want when you are *looking for* a book rather than being shown one,
@@ -989,19 +1004,16 @@ ordering of the library is a view somebody would send to somebody else,
 so it stays in the URL and the page still renders on the server.
 
 The sequence is **a number the item carries**, not a position in a list.
-An editor types it; nobody is given one automatically. Two rules about
-that number changed on 2026-08-25 and both loosened it:
+It is handed out one past the highest on the shelf when the item is
+filed, and an editor can change it — so `sequence` means "the order they
+arrived in" until somebody renumbers. Every filed item carries one
+whether or not any shelf consults it; `childOrder` decides that.
 
-- **It need not be unique.** Two books on a shelf may both be 3 and
-  then read alphabetically between themselves. Setting a number writes
-  one row and moves nothing else. It used to *shift* the run of
-  occupants along to keep the numbers unique, so one edit rewrote half
-  a shelf and books nobody touched moved.
-- **A shelf is alphabetical until somebody curates it.** An arrival is
-  no longer given the next free number; it takes `UNPLACED_ORDER_ID`,
-  which everything unplaced shares, so they all tie and fall to the
-  title comparison. A shelf nobody has ordered reads A–Z, and a book
-  given a real number rises out of that run to where it was put. Collections carry the same number among their own
+**It need not be unique.** Two books on a shelf may both be 3 and then
+read alphabetically between themselves, so setting a number writes one
+row and moves nothing else. It used to *shift* the run of occupants
+along to keep the numbers unique, so one edit rewrote half a shelf and
+books nobody touched moved. Collections carry the same number among their own
 siblings; `sortOrder` has been exactly this idea for shelves since
 2026-08-21, and this makes it a number an editor types rather than only
 something the reorder arrows move.
@@ -1011,15 +1023,13 @@ because a book left it, so 1, 2, 5 is a normal state and the gap is not
 a bug to tidy: an order id an editor typed is a fact they stated, and
 closing a gap under them would move books nobody touched.
 
-**"Unplaced" is a stored number and not null**, which reads worse and is
-required. The catalog sorts in the database because `limit` truncates —
-browsing in the curated order has to take the first forty-eight *by that
-order*. SQLite sorts NULLs **first** in an ascending sort and the
-adapter emits no `NULLS LAST`, so a null would put every uncurated book
-ahead of the ones an editor deliberately numbered: exactly backwards. A
-large shared number sorts last by ordinary arithmetic, in the database
-and in `compareSequence` alike. Null still means something different —
-a book on no shelf at all, which has no position to hold.
+Ordering happens **per shelf, in the page**, not in the catalog query.
+One SQL `ORDER BY` cannot be alphabetical for one shelf and by order id
+for the next, so the query returns a stable order and
+`books/page.tsx` sorts each shelf's own children with
+`shelfSortFor`. The admin tree does the same, from the same function,
+so an editor arranging a shelf is looking at what the shelf actually
+does.
 
 **Choosing a number is an administrator's.** Filing is not: an uploader
 picks their book's collection on their own book page, and the arrival
@@ -1038,12 +1048,12 @@ is now wired into the collection rather than only asserted in tests.
 `lib/shelfPlacement.ts` is gone with the shifting. A place is one field
 on one row now, written with the rest of the edit rather than in a
 second pass against the shelf the book ended up on, so the admin screen
-and the admin JSON API both just set the field.
+and the admin JSON API both just set the field. An editor sets a
+shelf's `childOrder` on the same card, beside the number.
 
 The hooks (`assignCollectionOrder`, `assignSiblingOrder`) therefore do
-one thing: send something that has just arrived, or has just moved to
-another shelf, to the back of it — `UNPLACED_ORDER_ID`, no sibling query
-at all, so filing a book reads nothing. There is a trap in them worth knowing about,
+one thing: give a number to something that has just arrived, or has just
+moved to another shelf — one past the highest already on it. There is a trap in them worth knowing about,
 because it bit once already — Payload hands a `beforeChange` hook the
 whole document with the update merged into it, so the order field is
 *always* present on an update. "The caller stated a number" has to mean

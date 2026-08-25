@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { coverCandidatePages, coverKey } from '../../../domain/cover'
-import { UNPLACED_ORDER_ID, orderIdFrom } from '../../../domain/shelfOrder'
+import { orderIdFrom } from '../../../domain/shelfOrder'
 import { isBookLevel, levelId } from '../../../domain/levels'
 import { ADMIN_DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
 import { currentAdmin } from '../../../lib/adminAuth'
@@ -135,16 +135,16 @@ export async function saveBookDetails(
         // Numbers may repeat now, so a place is one field on one row
         // and there is nothing to sequence.
         //
-        // Null means the editor cleared the box: back of the shelf,
-        // where everything nobody has placed reads alphabetically
-        // (`domain/shelfOrder.ts`). The hook only fills in a number for
-        // a book that has just arrived, so it would leave a cleared one
-        // alone.
+        // A cleared box leaves the book's number alone rather than
+        // wiping it: the field is a place on the shelf, and "no place"
+        // is only meaningful for a book on no shelf — which the line
+        // above already handles by clearing the collection. Undefined
+        // is how Payload is told a field was not part of this update.
         collectionOrder:
           collectionId === null
             ? null
             : collectionOrder === null
-              ? UNPLACED_ORDER_ID
+              ? undefined
               : orderIdFrom(collectionOrder),
       },
       overrideAccess: true,
