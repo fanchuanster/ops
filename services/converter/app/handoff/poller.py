@@ -127,13 +127,6 @@ class Poller:
             # set. None preserves exactly that, so the two sides may be
             # deployed in either order.
             formats=_formats(job.get("formats")),
-            # Only a cover job sends these; all three are None otherwise.
-            source_format=job.get("source_format"),
-            cover_key=job.get("cover_key"),
-            # Absent from a web application that predates candidates,
-            # which asks for page one and nothing else. None preserves
-            # exactly that, so the two sides deploy in either order.
-            cover_keys=job.get("cover_keys") or None,
             title=job.get("title"),
             author=job.get("author"),
             # Taken from the server's answer, never assumed here. The
@@ -147,26 +140,6 @@ class Poller:
         # makes the book readable. Reporting the wrong one would either
         # publish a book with no EPUB or rebuild it forever.
         body: dict = {"book_id": job.book_id, "kind": job.kind.value}
-
-        # A cover reports the one key it wrote and nothing else. It is
-        # not an artifact and must not arrive as one — a completion
-        # carrying an empty artifact list is refused, and a cover that
-        # moved the book's conversion state would publish or fail a book
-        # over a picture.
-        if job.kind is JobKind.COVER:
-            if job.state.value == "completed":
-                # Both, always: `cover_key` is what an older web
-                # application reads, `cover_keys` is the page order a
-                # newer one records as the candidates.
-                body |= {
-                    "state": "completed",
-                    "cover_key": job.cover,
-                    "cover_keys": job.covers or ([job.cover] if job.cover else []),
-                }
-            else:
-                body |= {"state": "failed", "message": job.error or "No cover could be rendered."}
-            self._client.post("/api/conversion", json=body).raise_for_status()
-            return
 
         if job.state.value == "completed":
             body |= {

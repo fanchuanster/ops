@@ -21,7 +21,6 @@ import logging
 import tempfile
 from pathlib import Path
 
-from ..cover import CoverUnavailable, render_covers
 from ..docx.builder import build_docx
 from ..epub import build_epub
 from ..models import Document
@@ -69,8 +68,6 @@ def run(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> J
         return run_master_job(job, store, on_change=on_change)
     if job.kind is JobKind.FORMATS:
         return run_formats_job(job, store, on_change=on_change)
-    if job.kind is JobKind.COVER:
-        return run_cover_job(job, store, on_change=on_change)
     return run_job(job, store, on_change=on_change)
 
 
@@ -223,74 +220,6 @@ def run_formats_job(job: Job, store: ObjectStore | None, *, on_change=lambda job
 
     except Exception as error:  # noqa: BLE001
         log.exception("formats job %s failed", job.id)
-        job.advance(JobState.FAILED, error=_readable(error))
-        on_change(job)
-        return job
-
-
-def run_cover_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
-    """Render the opening pages of a finished book as its cover candidates.
-
-    Neither phase of production, and deliberately nothing like them: it
-    reads one artifact the book already has, writes one image, and
-    touches no format the reader is given. A book whose cover cannot be
-    rendered is still a whole book — the web side records the failure on
-    the cover alone and the tile falls back to the title's own first
-    character (`apps/web/src/domain/cover.ts`).
-
-    Which artifact to read is decided on the web side, because only that
-    side knows what the book has; this runs what it is told. The same
-    goes for how many pages to offer and what to call them: the keys
-    arrive named, and their order is the page numbering the web side
-    will store.
-    """
-    try:
-        with tempfile.TemporaryDirectory(prefix=f"noblesee-cover-{job.id}-") as tmp:
-            work = Path(tmp)
-            if store is None:
-                raise RuntimeError("object storage is not configured")
-            if not job.source_key or not job.cover_key:
-                raise RuntimeError("a cover job needs a source and a destination key")
-
-            job.advance(JobState.FORMAT_GENERATION)
-            on_change(job)
-
-            source = work / Path(job.source_key).name
-            store.download(job.source_key, source)
-
-            # Page one alone unless the web application named more.
-            keys = job.cover_keys or [job.cover_key]
-
-            rendered = render_covers(
-                source,
-                job.source_format or Path(job.source_key).suffix.lstrip("."),
-                [work / f"cover-{number}.jpg" for number in range(1, len(keys) + 1)],
-            )
-
-            # Only the pages that exist. A two-page book asked about
-            # three simply has two candidates, and uploading against the
-            # third key would leave an object nothing points at.
-            for image, key in zip(rendered, keys):
-                store.upload(image, key, content_type=CONTENT_TYPES[".jpg"])
-
-            job.covers = keys[: len(rendered)]
-            job.cover = job.covers[0]
-
-            job.advance(JobState.COMPLETED)
-            on_change(job)
-            return job
-
-    except CoverUnavailable as reason:
-        # An ordinary outcome, not a broken converter: an EPUB with no
-        # declared cover is a valid EPUB. Logged at info so a run of them
-        # does not read as a service in trouble.
-        log.info("book %s has no cover to render: %s", job.book_id, reason)
-        job.advance(JobState.FAILED, error=_readable(reason))
-        on_change(job)
-        return job
-
-    except Exception as error:  # noqa: BLE001
-        log.exception("cover job %s failed", job.id)
         job.advance(JobState.FAILED, error=_readable(error))
         on_change(job)
         return job

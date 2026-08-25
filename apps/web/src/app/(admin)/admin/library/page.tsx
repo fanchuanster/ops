@@ -14,6 +14,7 @@ import {
   chosenCoverPage,
   coverCandidatePages,
   coverImageUrl,
+  coverSourceFormat,
 } from '../../../../domain/cover'
 import { levelFromId } from '../../../../domain/levels'
 import {
@@ -202,6 +203,10 @@ export default async function AdminLibraryPage({
         // never has to ask a second time.
         coverPage: chosenCoverPage(selected.generatedCover ?? {}),
         coverPages: coverCandidatePages(selected.generatedCover ?? {}),
+        // A browser can render pages from a PDF or an EPUB. A book with
+        // only a master waits for the PDF phase 2 builds anyway.
+        canMakeCover:
+          coverSourceFormat((selected.artifacts ?? []).map((a) => a.format)) !== null,
       }
     : null
 

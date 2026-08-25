@@ -26,9 +26,23 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
-import { chosenCoverPage, coverCandidateCount, coverKey } from '../../../../domain/cover'
+import {
+  COVER_CANDIDATE_MAX_BYTES,
+  COVER_CANDIDATE_PAGES,
+  chosenCoverPage,
+  coverCandidateCount,
+  coverKey,
+} from '../../../../domain/cover'
+import { isAdmin } from '../../../../lib/adminAuth'
 import { getCurrentUser } from '../../../../lib/auth'
-import { artifactStream, localArtifactPath, streamLocalArtifact } from '../../../../lib/storage'
+import { logError } from '../../../../lib/logError'
+import { revalidateCover } from '../../../../lib/revalidateCover'
+import {
+  artifactStream,
+  localArtifactPath,
+  objectBucket,
+  streamLocalArtifact,
+} from '../../../../lib/storage'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,4 +110,101 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       'Cache-Control': 'private, max-age=3600',
     },
   })
+}
+
+
+/**
+ * Stores the candidates a browser rendered for this book.
+ *
+ * The other half of `lib/client/coverImages.ts`. The pages arrive as
+ * JPEGs, in page order, from the uploader's browser at upload time or
+ * from an editor's browser for a book already in the library.
+ *
+ * **The keys are ours, not the client's.** The old converter reported
+ * where it had written, which needed a containment check on every key
+ * it named; here the position in the list is the page number and the
+ * key is derived from it, so a caller cannot name a path at all. That
+ * is not a small difference — it is a whole class of bug that no longer
+ * has a door.
+ *
+ * Owner or administrator, the same rule as choosing which page a book
+ * wears (`actions/cover.ts`), for the same reason: a cover is not a
+ * claim about the book, only which photograph of it looks right.
+ *
+ * Replaces whatever was there. Re-rendering is the fix for a cover that
+ * came out wrong, and a partial set left over from a previous run would
+ * leave `candidates` counting pages that no longer exist — so the page
+ * choice goes back to one with it.
+ */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+
+  const user = await getCurrentUser()
+  if (!user) return Response.json({ error: 'Sign in first.' }, { status: 401 })
+
+  const payload = await getPayload({ config })
+  const book = await payload
+    .findByID({ collection: 'books', id: Number(id), depth: 0, overrideAccess: true })
+    .catch(() => null)
+
+  const ownerId = typeof book?.owner === 'object' ? book?.owner?.id : book?.owner
+  const mine = Boolean(ownerId) && String(ownerId) === String(user.id)
+  if (!book || (!mine && !isAdmin(user))) {
+    return Response.json({ error: 'Not found.' }, { status: 404 })
+  }
+
+  const form = await request.formData().catch(() => null)
+  const pages = (form?.getAll('pages') ?? []).filter(
+    (entry): entry is File => entry instanceof File,
+  )
+  if (pages.length === 0) return Response.json({ error: 'No pages sent.' }, { status: 400 })
+
+  // JPEG only, because these are ours: the browser renders to JPEG and
+  // nothing else should be arriving. An allowlist of one is the
+  // narrowest this can be, and it keeps the SVG-is-a-script problem
+  // that `COVER_MIME_TYPES` exists for permanently out of this door.
+  for (const page of pages.slice(0, COVER_CANDIDATE_PAGES)) {
+    if (page.type !== 'image/jpeg') {
+      return Response.json({ error: 'Pages must be JPEG.' }, { status: 415 })
+    }
+    if (page.size === 0 || page.size > COVER_CANDIDATE_MAX_BYTES) {
+      return Response.json({ error: 'That page is the wrong size.' }, { status: 413 })
+    }
+  }
+
+  const bucket = await objectBucket()
+  if (!bucket) return Response.json({ error: 'Storage is not available.' }, { status: 503 })
+
+  const wanted = pages.slice(0, COVER_CANDIDATE_PAGES)
+  const written: string[] = []
+
+  try {
+    for (const [index, page] of wanted.entries()) {
+      const key = coverKey(book.id, index + 1)
+      await bucket.put(key, await page.arrayBuffer(), {
+        httpMetadata: { contentType: 'image/jpeg' },
+      })
+      written.push(key)
+    }
+
+    await payload.update({
+      collection: 'books',
+      id: book.id,
+      data: {
+        generatedCover: {
+          state: 'ready',
+          key: written[0],
+          candidates: written.length,
+          page: 1,
+        },
+      },
+      overrideAccess: true,
+    })
+  } catch (error) {
+    logError('cover.store', error)
+    return Response.json({ error: 'Those pages could not be stored.' }, { status: 502 })
+  }
+
+  revalidateCover(book.slug)
+  return Response.json({ candidates: written.length })
 }

@@ -24,6 +24,9 @@
     "migrate": "NEXT_RUNTIME=nodejs payload migrate",
     "//migrate:remote": "Applies pending migrations to the LIVE database. npm run migrate always targets local D1 by design; see scripts/migrate-remote.ts. Migrate before deploying the Worker.",
     "migrate:remote": "MIGRATE_TARGET=remote NEXT_RUNTIME=nodejs payload run scripts/migrate-remote.ts",
+    "//requeue-covers": "Puts books whose cover was claimed but never delivered back to pending. Only `pending` is ever offered to a renderer, so a claim that never reported leaves the book with no cover and nothing retrying it.",
+    "requeue-covers": "NEXT_RUNTIME=nodejs payload run scripts/requeue-covers.ts",
+    "requeue-covers:remote": "COVER_TARGET=remote NEXT_RUNTIME=nodejs payload run scripts/requeue-covers.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:boundary": "sh scripts/check-domain-boundary.sh",
@@ -41,6 +44,7 @@
     "next": "16.3.0",
     "payload": "3.88.0",
     "payload-oapi": "^0.2.5",
+    "pdfjs-dist": "^5.6.205",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

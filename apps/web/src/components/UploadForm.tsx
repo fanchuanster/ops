@@ -3,6 +3,7 @@
 import React, { useRef, useState, type DragEvent, type FormEvent } from 'react'
 
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '../domain/publication'
+import { coverSourceFor, makeCoversFor } from '../lib/client/coverImages'
 
 /**
  * The conversion portal's first step: the file, and nothing else.
@@ -50,6 +51,8 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   /** Null when idle; 0-100 while the file is going up. */
   const [progress, setProgress] = useState<number | null>(null)
+  /** The upload is done and this browser is rendering the cover. */
+  const [makingCover, setMakingCover] = useState(false)
   const pending = progress !== null
 
   // Checked here as well as in the route, because the server's answer
@@ -105,9 +108,7 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
       }
 
       if (request.status >= 200 && request.status < 300 && body.bookId !== undefined) {
-        // Not `router.push`: the draft page must load fresh, and this
-        // navigation ends the upload rather than continuing the session.
-        window.location.assign(`/account/books/${body.bookId}`)
+        void finish(body.bookId, file)
         return
       }
 
@@ -123,6 +124,26 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
     request.addEventListener('abort', () => setProgress(null))
 
     request.send(file)
+  }
+
+  /**
+   * Render the cover, then go to the draft.
+   *
+   * The wait is a second or two for a scan and nothing at all for a
+   * file that has no pages to rasterize, so it is shown rather than
+   * hidden: a progress bar that sits at 100% with no explanation reads
+   * as a hang.
+   */
+  async function finish(bookId: string | number, file: File) {
+    const source = coverSourceFor(file.name, file.type)
+    if (source) {
+      setMakingCover(true)
+      await makeCoversFor(bookId, file, source)
+    }
+
+    // Not `router.push`: the draft page must load fresh, and this
+    // navigation ends the upload rather than continuing the session.
+    window.location.assign(`/account/books/${bookId}`)
   }
 
   function onDrop(event: DragEvent<HTMLLabelElement>) {
@@ -211,7 +232,7 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
 
       <div className="upload-form__actions">
         <button type="submit" className="cta" disabled={pending || tooBig !== null}>
-          {pending ? `Uploading… ${progress}%` : 'Upload'}
+          {makingCover ? 'Making a cover…' : pending ? `Uploading… ${progress}%` : 'Upload'}
         </button>
       </div>
 

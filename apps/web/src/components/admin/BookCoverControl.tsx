@@ -4,6 +4,7 @@ import { useActionState, useRef } from 'react'
 
 import { removeBookCover, saveBookCover, type CoverState } from '../../app/(admin)/actions/cover'
 import { CoverPagePicker } from '../CoverPagePicker'
+import { MakeCoverButton } from '../MakeCoverButton'
 
 /**
  * The book's face in the edit panel, and the way to change it.
@@ -37,6 +38,7 @@ export function BookCoverControl({
   slug,
   coverUrl,
   hasUploadedCover,
+  canMakeCover,
   coverPage,
   coverPages,
   face,
@@ -45,6 +47,8 @@ export function BookCoverControl({
   slug: string
   coverUrl: string | null
   hasUploadedCover: boolean
+  /** Whether the book has an artifact a browser can render pages from. */
+  canMakeCover: boolean
   /** Which rendered page the book wears. */
   coverPage: number
   /** Every page the converter rendered for it, in order. */
@@ -110,6 +114,15 @@ export function BookCoverControl({
           </button>
         </form>
       ) : null}
+
+      {hasUploadedCover || !canMakeCover ? null : (
+        <p className="admin-cover__make">
+          <MakeCoverButton
+            bookId={bookId}
+            label={coverUrl ? 'Render again' : 'Make a cover'}
+          />
+        </p>
+      )}
 
       {hasUploadedCover ? null : (
         <CoverPagePicker

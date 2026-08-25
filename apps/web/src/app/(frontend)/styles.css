@@ -3426,6 +3426,23 @@ h3 {
   background: var(--paper-band);
 }
 
+/* No picture yet, but one can be made: the same frame, with the book's
+   own first character in it, so the button below has something to be
+   about. */
+.cover-panel__img--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 7.5rem;
+  height: 10.5rem;
+  font-size: 3rem;
+  color: var(--ink-faint);
+}
+
+.cover-panel__make {
+  margin: 0.75rem 0 0;
+}
+
 .coverpick__label {
   margin: 0 0 0.5rem;
   font-family: var(--font-sans);

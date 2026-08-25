@@ -5,6 +5,7 @@ import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
 import { CoverPagePicker } from '../../../../../components/CoverPagePicker'
+import { MakeCoverButton } from '../../../../../components/MakeCoverButton'
 import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
 import { BookActions } from '../../../../../components/BookActions'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
@@ -17,6 +18,7 @@ import {
   coverAltFor,
   coverCandidatePages,
   coverImageUrl,
+  coverSourceFormat,
 } from '../../../../../domain/cover'
 import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
 import { uploadStep } from '../../../../../domain/pipeline'
@@ -105,6 +107,11 @@ export default async function BookDetailsPage({
     bookId: book.id,
     generated: generatedCover,
   })
+  // Whether this browser could make one. Books uploaded from now on
+  // arrive with a cover already rendered; this is the offer for the
+  // ones that did not, and for a cover that came out wrong.
+  const canMakeCover =
+    coverSourceFormat((book.artifacts ?? []).map((a) => a.format)) !== null
 
   return (
     <>
@@ -226,15 +233,21 @@ export default async function BookDetailsPage({
           been generated. */}
       {draft ? null : (
         <>
-          {coverUrl ? (
+          {coverUrl || canMakeCover ? (
             <section className="cover-panel">
               <h3>Cover</h3>
               <div className="cover-panel__body">
-                <img
-                  className="cover-panel__img"
-                  src={coverUrl}
-                  alt={coverAltFor(book.title)}
-                />
+                {coverUrl ? (
+                  <img
+                    className="cover-panel__img"
+                    src={coverUrl}
+                    alt={coverAltFor(book.title)}
+                  />
+                ) : (
+                  <span className="cover-panel__img cover-panel__img--empty cjk" aria-hidden="true">
+                    {Array.from((book.originalTitle || book.title).trim())[0] ?? '·'}
+                  </span>
+                )}
                 {/* Only when the converter rendered alternatives, and
                     never over an uploaded cover — that is an editor's
                     deliberate choice and wins whatever is picked here
@@ -242,11 +255,22 @@ export default async function BookDetailsPage({
                 {uploadedCover ? (
                   <p className="hint">An editor chose this cover for your book.</p>
                 ) : (
-                  <CoverPagePicker
-                    bookId={Number(book.id)}
-                    page={chosenCoverPage(generatedCover)}
-                    pages={coverCandidatePages(generatedCover)}
-                  />
+                  <div>
+                    <CoverPagePicker
+                      bookId={Number(book.id)}
+                      page={chosenCoverPage(generatedCover)}
+                      pages={coverCandidatePages(generatedCover)}
+                    />
+                    {canMakeCover ? (
+                      <p className="cover-panel__make">
+                        <MakeCoverButton
+                          bookId={Number(book.id)}
+                          className="cta cta--compact"
+                          label={coverUrl ? 'Render the pages again' : 'Make a cover from the book'}
+                        />
+                      </p>
+                    ) : null}
+                  </div>
                 )}
               </div>
             </section>

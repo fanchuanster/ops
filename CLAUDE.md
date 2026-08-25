@@ -710,11 +710,9 @@ rather than doubling every book (`apps/web/src/domain/publication.ts`).
 
 The cover is a fifth file and is not one of those four. Since
 2026-08-23 a book with no uploaded cover gets **page one of itself**,
-rendered by the converter as a JPEG beside its artifacts
-(`apps/web/src/domain/cover.ts`, `services/converter/app/cover/`). For a
-scan that page *is* the cover the publisher printed, which is why the
-PDF is preferred over the EPUB's declared cover and the master's first
-typeset page.
+rendered as a JPEG beside its artifacts (`apps/web/src/domain/cover.ts`).
+For a scan that page *is* the cover the publisher printed, which is why
+the PDF is preferred over the EPUB's declared cover.
 
 Two covers, and the order between them is the whole rule: an uploaded
 `cover` is an editor's decision and always wins; `generatedCover` is
@@ -723,8 +721,8 @@ book's own first character, which was the only answer before this and
 remains the right one for a book nothing can be rendered from.
 
 Page one is the default rather than the definition, since 2026-08-25.
-The converter renders the **first three pages** and the book records
-which of them it wears, because the page a publisher printed the cover
+The **first three pages** are rendered and the book records which of
+them it wears, because the page a publisher printed the cover
 on is frequently not the first leaf a scanner fed — a blank verso, a
 library stamp, a half-title. Three is the number for the same reason
 the choice exists at all: past a leaf or two it stops being "which of
@@ -749,9 +747,41 @@ owner's own book page now shows it.
 
 Books whose cover was rendered before this keep it, at the unsuffixed
 key page one has always had, and are simply offered no alternatives —
-nothing was rendered to offer. Clearing `generatedCover.state` back to
-`pending` re-renders one with candidates, which is the same lever that
-already existed for a cover that failed.
+nothing was rendered to offer. "Make a cover from the book" on either
+screen renders a fresh set.
+
+**The rendering happens in the browser**, and that is the important
+part. It was job kind three on the converter until 2026-08-25, claimed
+off the same poll as OCR and format generation — an accident of where
+the renderer happened to be written, and it cost the library every
+cover it had: a converter claimed each of the fourteen books, never
+reported back, and `claimCover` only ever offered `pending`, so nothing
+retried and nothing said so. Rasterizing page one has nothing to do
+with converting a book.
+
+So it happens on the machine that already has the file open
+(`apps/web/src/lib/client/coverImages.ts`). The uploader's browser
+renders the candidates between the upload finishing and the draft page
+loading, so a book has a cover *before* its conversion is queued; an
+editor's browser does it for a book already in the library, reading the
+source back through `/covers/<id>/source` (owner or administrator
+only). pdf.js rasterizes a PDF, epub.js pulls the declared image out of
+an EPUB, and both are dynamically imported so a reader who never
+uploads downloads neither.
+
+Two things this cannot do, and they are the price. **There is no DOCX
+renderer in a browser**, so a book whose only artifact is a master
+waits for the PDF phase 2 builds anyway — what the converter produced
+there was the first page of typeset text, the unhappy case even when it
+worked. And making a cover for an existing book means **downloading the
+book to photograph its first page**, which for a 60 MB scan is a real
+wait on a slow connection; the button says so rather than pretending
+otherwise.
+
+The Worker was never a candidate for this. pdf.js is a megabyte of
+JavaScript against a bundle already at 7.7 MB of a 10 MB limit, and
+rasterizing is exactly the CPU-shaped work section 3 says does not
+belong there.
 
 What the split bought was staged release — a per-reader clock that paced
 someone through a book. That is also gone. The credit price in section
@@ -1368,28 +1398,15 @@ The endpoint authenticates with `CONVERTER_SECRET` and **fails closed**:
 with no secret configured it 404s as though it does not exist, so
 deploying ahead of the secret exposes nothing.
 
-A job now carries a `kind`, because there are three of them:
+A job carries a `kind`, and there are two of them:
 
-    kind: "master"    source_key              → DOCX master
-    kind: "formats"   master_key              → EPUB, PDF…
-    kind: "cover"     source_key + cover_keys → the opening pages, as JPEGs
+    kind: "master"    source_key   → DOCX master
+    kind: "formats"   master_key   → EPUB, PDF…
 
-`cover` is not a phase and moves the book through none: it is claimed
-separately, from books whose conversion has stopped moving, and both its
-outcomes are recorded on the cover alone. The keys are named by the web
-application and their **order is the page numbering** it will store, so
-a converter returns them truncated rather than sparse: a two-page book
-asked about three has two candidates, never a third pointing at nothing.
-`cover_key` is still sent and still reported alongside the list, which
-is what lets either side be deployed first. A page that will not render
-leaves a whole and readable book without a picture, which is not a
-failed conversion. It is offered last, after both phases, because it is
-the only cosmetic work here.
-
-Its own kind rather than a stage of `formats` for one reason: the books
-that most need a cover are the two `formats` never runs for — an EPUB
-upload and a PDF published as it stands are finished the moment they are
-filed, and would otherwise never see a converter at all.
+There was a third, `cover`, from 2026-08-23 until 2026-08-25. It is
+gone and the endpoint now refuses one: covers are rendered in the
+browser (section 5), and a `cover` completion read as `formats` would
+publish or fail a whole book over a picture.
 
 A `formats` job also carries a **`formats` list** saying which editions
 to build. Absent means "all of them", which is what the CLI and the job
@@ -1520,7 +1537,8 @@ books/
   {book_id}/
     cover.jpg          page one, when nobody uploaded a cover
     cover-2.jpg        the other candidates, when it is not the cover
-    cover-3.jpg
+    cover-3.jpg        (all three written by the browser that rendered
+                        them, through POST /covers/{id})
     book/
       master.docx
       book.epub

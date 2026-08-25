@@ -46,12 +46,6 @@ class JobKind(str, Enum):
 
     MASTER = "master"
     FORMATS = "formats"
-    # Neither phase: page one of a finished book, rendered as its
-    # default cover. Its own kind because the books that need it most
-    # are the ones the two phases never touch — an EPUB upload and a PDF
-    # published as it stands are finished the moment they are filed. See
-    # `app/cover/` and `apps/web/src/domain/cover.ts`.
-    COVER = "cover"
     # Both, in one run. What the CLI and the job API do: they are driven
     # by an editor at a terminal rather than by the web application's
     # handoff, and there is no reason to make someone converting a book
@@ -93,16 +87,6 @@ class Job:
     # only that side knows either. See `formatsToBuild` in
     # `apps/web/src/domain/pipeline.ts`.
     formats: list[str] | None = None
-    # A COVER job reads this artifact and writes that key. The format is
-    # sent rather than inferred from the key's extension: the key is the
-    # web application's to name, and the format is the instruction.
-    source_format: str | None = None
-    cover_key: str | None = None
-    # The candidate pages to render, in page order, page one first.
-    # `cover_key` is that same first key and is still sent on its own,
-    # so a web application that predates candidates is understood: an
-    # absent list means "page one only".
-    cover_keys: list[str] | None = None
     title: str | None = None
     author: str | None = None
     # Whether this book may be sent to a third-party LLM for OCR
@@ -118,16 +102,6 @@ class Job:
     updated_at: float = field(default_factory=time.time)
     # format -> storage key, filled in as generation completes.
     artifacts: dict[str, str] = field(default_factory=dict)
-    # Where the rendered cover was written, once it has been. Not an
-    # artifact: it is not a format, not downloadable, and not something a
-    # reader is ever charged for.
-    #
-    # `cover` is page one and `covers` every page written, in order. Two
-    # fields rather than one because the position in `covers` is the
-    # page number the web side stores, and because `cover` alone is what
-    # an older web application knows how to read.
-    cover: str | None = None
-    covers: list[str] = field(default_factory=list)
     page_count: int | None = None
 
     def advance(self, state: JobState, *, error: str | None = None) -> None:
@@ -143,8 +117,6 @@ class Job:
             "title": self.title,
             "error": self.error,
             "artifacts": self.artifacts,
-            "cover": self.cover,
-            "covers": self.covers,
             "page_count": self.page_count,
             "created_at": self.created_at,
             "updated_at": self.updated_at,

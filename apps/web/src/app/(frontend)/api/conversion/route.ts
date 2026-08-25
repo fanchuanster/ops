@@ -34,15 +34,6 @@ import { getPayload } from 'payload'
 
 import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
 import {
-  COVER_CANDIDATE_PAGES,
-  acceptCoverKey,
-  acceptCoverKeys,
-  coverCandidateKeys,
-  coverKey,
-  coverSourceFormat,
-  needsCover,
-} from '../../../../domain/cover'
-import {
   IN_FLIGHT_STATES,
   claimFor,
   completedState,
@@ -207,104 +198,13 @@ export async function GET(request: Request) {
     }
   }
 
-  // Nothing to build. A cover is the last thing offered, because it is
-  // the only cosmetic job here: a book with no picture is still
-  // perfectly readable, and a converter's time belongs to the editions
-  // first.
-  const cover = await claimCover(payload)
-  if (cover) return NextResponse.json({ job: cover })
-
+  // Nothing to build. Covers are deliberately absent from this queue
+  // since 2026-08-25: they are rendered in the browser that has the
+  // file open (`lib/client/coverImages.ts`), which is what a picture of
+  // page one always should have been. Every book in the library had no
+  // cover because a converter claimed each one and never reported, and
+  // only `pending` is ever re-offered.
   return NextResponse.json({ job: null })
-}
-
-/**
- * Claim the rendering of a book's default cover — page one of the book.
- *
- * Its own claim rather than a stage of the pipeline, because the books
- * that need it most are the two the pipeline never touches: an EPUB
- * upload and a PDF published as it stands are finished the moment they
- * are filed, and would otherwise never see a converter at all.
- *
- * Restricted to books whose conversion has stopped moving. Page one is
- * taken from the best artifact a book has, so rendering one mid-pipeline
- * would take a text upload's cover from its DOCX master seconds before
- * its PDF existed.
- *
- * Compare-and-swap on the cover state, exactly like the claim above and
- * for the same reason: two converters polling at once must not both
- * render the same page.
- */
-async function claimCover(payload: Awaited<ReturnType<typeof getPayload>>) {
-  const waiting = await payload.find({
-    collection: 'books',
-    where: {
-      and: [
-        { 'generatedCover.state': { equals: 'pending' } },
-        { 'conversion.state': { not_in: IN_FLIGHT_STATES } },
-      ],
-    },
-    sort: 'createdAt',
-    limit: 10,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  for (const book of waiting.docs) {
-    const formats = (book.artifacts ?? []).map((artifact) => artifact.format)
-    if (
-      !needsCover({
-        state: book.generatedCover?.state,
-        // Depth 0, so this is the media id rather than the document —
-        // which is all the question needs.
-        hasUploadedCover: Boolean(book.cover),
-        formats,
-      })
-    ) {
-      continue
-    }
-
-    const format = coverSourceFormat(formats)
-    const source = (book.artifacts ?? []).find((artifact) => artifact.format === format)
-    if (!source?.storageKey) continue
-
-    const claimed = await payload.update({
-      collection: 'books',
-      where: {
-        and: [{ id: { equals: book.id } }, { 'generatedCover.state': { equals: 'pending' } }],
-      },
-      data: { generatedCover: { ...book.generatedCover, state: 'rendering' } },
-      overrideAccess: true,
-    })
-    // Lost the race — another converter has it.
-    if (claimed.docs.length === 0) continue
-
-    return {
-      job_id: `cover-${book.id}`,
-      book_id: String(book.id),
-      kind: 'cover' as const,
-      // Which artifact page one comes out of, and how to read it. Sent
-      // rather than inferred from the key's extension, because the key
-      // is ours to name and the format is the actual instruction.
-      source_key: source.storageKey,
-      source_format: format,
-      // Where to put it. Named by this side so the containment rule and
-      // the serving route agree without either guessing (domain/cover.ts).
-      //
-      // `cover_key` is page one and is sent on its own as well as at the
-      // head of the list, so a converter built before candidates existed
-      // still renders a cover rather than none. A newer converter uses
-      // the list and renders as many of those pages as the source has.
-      cover_key: coverKey(book.id),
-      cover_keys: coverCandidateKeys(book.id),
-      cover_pages: COVER_CANDIDATE_PAGES,
-      formats: [],
-      title: book.title,
-      author: book.author ?? null,
-      allow_third_party_ai: false,
-    }
-  }
-
-  return null
 }
 
 interface CompletionBody {
@@ -314,8 +214,6 @@ interface CompletionBody {
   page_count?: unknown
   message?: unknown
   artifacts?: unknown
-  cover_key?: unknown
-  cover_keys?: unknown
 }
 
 /** Report a conversion finished, or failed. */
@@ -347,52 +245,13 @@ export async function POST(request: Request) {
   // Which phase finished. Defaulted to 'formats' so a converter that
   // predates the two-phase split still lands a book on 'ready' rather
   // than stalling it in a state it will never report again.
-  const kind =
-    body.kind === 'master' ? 'master' : body.kind === 'cover' ? 'cover' : ('formats' as const)
+  const kind = body.kind === 'master' ? 'master' : ('formats' as const)
 
-  // A cover is not a phase of the pipeline and must not move the book
-  // through one. Both outcomes are recorded on the cover alone: a page
-  // that would not render leaves a perfectly good book with no picture,
-  // which is not a failed conversion.
-  if (kind === 'cover') {
-    // The candidate list if the converter sent one, otherwise the single
-    // key an older build reports — which is page one, and one candidate.
-    const keys =
-      body.state === 'failed'
-        ? []
-        : (() => {
-            const many = acceptCoverKeys({ bookId, keys: body.cover_keys })
-            if (many.length > 0) return many
-            const one = acceptCoverKey({ bookId, key: body.cover_key })
-            return one ? [one] : []
-          })()
-
-    await payload.update({
-      collection: 'books',
-      id: bookId,
-      data: {
-        generatedCover: {
-          ...book.generatedCover,
-          // A rejected key is a failure too: the converter believes it
-          // wrote something, and leaving the book 'pending' would have
-          // every later poll render the same page again.
-          state: keys.length > 0 ? 'ready' : 'failed',
-          ...(keys.length > 0
-            ? {
-                key: keys[0],
-                candidates: keys.length,
-                // Back to page one. A re-render is only ever reached by
-                // clearing the state by hand, and what it produces is a
-                // fresh set of pages — an old choice of "the second one"
-                // is a statement about images that no longer exist.
-                page: 1,
-              }
-            : {}),
-        },
-      },
-      overrideAccess: true,
-    })
-    return NextResponse.json({ ok: true })
+  // A `cover` completion from an older converter lands here and is read
+  // as `formats`, which would publish or fail a book over a picture —
+  // so it is refused outright. Covers left this endpoint on 2026-08-25.
+  if (body.kind === 'cover') {
+    return NextResponse.json({ error: 'Covers are not converted here.' }, { status: 410 })
   }
 
   if (body.state === 'failed') {

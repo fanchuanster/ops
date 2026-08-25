@@ -1,11 +1,16 @@
 /**
- * The default cover: page one of the book.
+ * The default cover: a page of the book.
  *
- * Two things are worth holding still here. The containment rule, for
- * the same reason `conversion.test.ts` holds its own: a cover key is
- * streamed out of the bucket by id, so one book must never be able to
- * point at another's files. And the precedence — an uploaded cover is an
- * editor's decision and outranks anything rendered.
+ * Two things are worth holding still here. The page numbering, because
+ * the key a page is stored under is derived from it — page one keeps
+ * the unsuffixed name every cover rendered before candidates existed
+ * still lives at. And the precedence: an uploaded cover is an editor's
+ * decision and outranks anything rendered.
+ *
+ * The containment rules that used to be here went with the converter on
+ * 2026-08-25. Nothing reports a key from outside any more — the browser
+ * posts images and this side names every key — so there is no longer a
+ * door to check.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -13,81 +18,36 @@ import { describe, expect, it } from 'vitest'
 import {
   COVER_CANDIDATE_PAGES,
   COVER_MAX_BYTES,
-  acceptCoverKey,
-  acceptCoverKeys,
   checkCoverUpload,
   chosenCoverPage,
   coverAltFor,
-  coverCandidateKeys,
   coverCandidatePages,
   coverImageUrl,
   coverKey,
   coverPageUrl,
   coverSourceFormat,
-  needsCover,
 } from './cover'
 
-describe('choosing what to render page one from', () => {
+describe('choosing what to render the opening pages from', () => {
   it('prefers the PDF, which for a scan is the book itself', () => {
     expect(coverSourceFormat(['docx', 'epub', 'pdf'])).toBe('pdf')
   })
 
-  it('falls back to the EPUB, and then to the master', () => {
+  it('falls back to the EPUB, which declares a cover of its own', () => {
     expect(coverSourceFormat(['docx', 'epub'])).toBe('epub')
-    expect(coverSourceFormat(['docx'])).toBe('docx')
+  })
+
+  it('will not take a master: a browser has no DOCX renderer', () => {
+    // It waits for the PDF phase 2 builds anyway. This is the one thing
+    // the browser cannot do that the converter could, and what it
+    // produced — the first typeset page — was the unhappy case even
+    // when it worked.
+    expect(coverSourceFormat(['docx'])).toBeNull()
   })
 
   it('has nothing to render from a book with no artifacts yet', () => {
     expect(coverSourceFormat([])).toBeNull()
     expect(coverSourceFormat(['mobi'])).toBeNull()
-  })
-})
-
-describe('which books need a cover', () => {
-  const book = { state: 'pending', hasUploadedCover: false, formats: ['pdf'] }
-
-  it('takes a pending book with something to render', () => {
-    expect(needsCover(book)).toBe(true)
-  })
-
-  it('treats a missing state as pending, so old books need no backfill', () => {
-    expect(needsCover({ ...book, state: undefined })).toBe(true)
-    expect(needsCover({ ...book, state: 'nonsense' })).toBe(true)
-  })
-
-  it('leaves a book alone once an editor has uploaded a cover', () => {
-    expect(needsCover({ ...book, hasUploadedCover: true })).toBe(false)
-  })
-
-  it('does not re-offer a rendered or a failed cover', () => {
-    expect(needsCover({ ...book, state: 'ready' })).toBe(false)
-    expect(needsCover({ ...book, state: 'rendering' })).toBe(false)
-    // Terminal on purpose: a cover is cosmetic, and a source the
-    // renderer cannot open must not be retried on every poll forever.
-    expect(needsCover({ ...book, state: 'failed' })).toBe(false)
-  })
-
-  it('waits for a book that has nothing to render yet', () => {
-    expect(needsCover({ ...book, formats: [] })).toBe(false)
-  })
-})
-
-describe('accepting the key a converter reports', () => {
-  it('accepts a key under the book’s own prefix', () => {
-    expect(acceptCoverKey({ bookId: 42, key: coverKey(42) })).toBe('books/42/cover.jpg')
-  })
-
-  it('refuses another book’s prefix', () => {
-    expect(acceptCoverKey({ bookId: 42, key: 'books/7/cover.jpg' })).toBeNull()
-  })
-
-  it('refuses a key that walks out of the prefix', () => {
-    expect(acceptCoverKey({ bookId: 42, key: 'books/42/../7/cover.jpg' })).toBeNull()
-  })
-
-  it('refuses anything that is not a string', () => {
-    expect(acceptCoverKey({ bookId: 42, key: null })).toBeNull()
-    expect(acceptCoverKey({ bookId: 42, key: 7 })).toBeNull()
   })
 })
 
@@ -126,16 +86,9 @@ describe('the candidate pages', () => {
     expect(coverKey(7, 2).endsWith('cover-2.jpg')).toBe(true)
   })
 
-  it('names one key per page, in page order', () => {
-    const keys = coverCandidateKeys(7)
-    expect(keys).toHaveLength(COVER_CANDIDATE_PAGES)
-    expect(keys[0]).toBe(coverKey(7, 1))
-    expect(keys[2]).toBe(coverKey(7, 3))
-  })
-
-  it('never asks for more pages than are offered', () => {
-    expect(coverCandidateKeys(7, 99)).toHaveLength(COVER_CANDIDATE_PAGES)
-    expect(coverCandidateKeys(7, 0)).toHaveLength(1)
+  it('never counts more pages than are offered', () => {
+    expect(coverCandidatePages({ candidates: 99 })).toHaveLength(COVER_CANDIDATE_PAGES)
+    expect(coverCandidatePages({ candidates: 0 })).toEqual([1])
   })
 
   it('reads a book with no recorded candidates as having one', () => {
@@ -164,34 +117,6 @@ describe('the candidate pages', () => {
         generated: { state: 'ready', key: 'books/42/cover.jpg', page: 2, candidates: 3 },
       }),
     ).toBe('/covers/42?page=2')
-  })
-})
-
-describe('accepting the candidate keys a converter reports', () => {
-  it('accepts a list under the book’s own prefix', () => {
-    expect(
-      acceptCoverKeys({ bookId: 42, keys: [coverKey(42, 1), coverKey(42, 2)] }),
-    ).toEqual([coverKey(42, 1), coverKey(42, 2)])
-  })
-
-  it('stops at the first key it will not accept', () => {
-    // Truncated rather than filtered: the position in this list is the
-    // page number, so skipping a bad key would silently renumber every
-    // page after it.
-    expect(
-      acceptCoverKeys({ bookId: 42, keys: [coverKey(42, 1), coverKey(9, 2), coverKey(42, 3)] }),
-    ).toEqual([coverKey(42, 1)])
-  })
-
-  it('refuses anything that is not a list of keys', () => {
-    expect(acceptCoverKeys({ bookId: 42, keys: undefined })).toEqual([])
-    expect(acceptCoverKeys({ bookId: 42, keys: coverKey(42, 1) })).toEqual([])
-    expect(acceptCoverKeys({ bookId: 42, keys: [7] })).toEqual([])
-  })
-
-  it('never records more pages than are offered', () => {
-    const many = [1, 2, 3, 4, 5].map((page) => coverKey(42, page))
-    expect(acceptCoverKeys({ bookId: 42, keys: many })).toHaveLength(COVER_CANDIDATE_PAGES)
   })
 })
 

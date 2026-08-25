@@ -10,12 +10,13 @@
  *
  *   `cover`           an editor's upload. A deliberate choice, and it
  *                     always wins.
- *   `generatedCover`  a page of the book, rendered by the converter.
- *                     A default, and only ever a default.
+ *   `generatedCover`  a page of the book, rendered in the browser that
+ *                     had the file open. A default, and only ever a
+ *                     default.
  *
  * The generated one is page one *by default*, not by definition. The
- * converter renders the first few pages (`COVER_CANDIDATE_PAGES`) and
- * the book records which of them it wears, because the page a publisher
+ * first few pages are rendered (`COVER_CANDIDATE_PAGES`) and the book
+ * records which of them it wears, because the page a publisher
  * printed the cover on is frequently not the first leaf a scanner fed:
  * a blank verso, a library stamp or a half-title comes first often
  * enough that the choice is worth offering. Page one remains what a
@@ -25,17 +26,19 @@
  * overwrite a chosen one, and an editor who deletes their upload should
  * fall back to the page rather than to nothing.
  *
- * **Rendered from the book's own artifacts, not from its upload.** The
- * artifact is what survives — a converted scan's `pdf` artifact *is* the
- * uploaded scan (`domain/publication.ts`), and a book with no upload at
- * all still has editions to take a page from. It also means a cover is
- * only ever attempted once there is something to render, so a book
- * waiting on its conversion simply stays pending.
+ * **Rendered in the browser, not by the converter.** It was job kind
+ * three on the converter until 2026-08-25, which was an accident of
+ * where the renderer happened to be written — and it cost the library
+ * every cover it had, because a converter claimed each book and never
+ * reported back. Rasterizing page one has nothing to do with converting
+ * a book, so it happens on the machine that already has the file open:
+ * the uploader's browser at upload time, an editor's for a book already
+ * in the library (`lib/client/coverImages.ts`).
  *
  * Framework-independent, like everything in `src/domain`.
  */
 
-import { ARTIFACT_FORMATS, type ArtifactFormat, artifactPrefix } from './conversion'
+import { type ArtifactFormat, artifactPrefix } from './conversion'
 
 /**
  * How far a book has got towards having a generated cover.
@@ -54,16 +57,19 @@ export function isCoverState(value: unknown): value is CoverState {
 }
 
 /**
- * Which artifact page one is taken from, best first.
+ * Which artifact the opening pages are taken from, best first.
  *
  * The PDF leads because for most of this library it is the scan itself,
  * so its first page is the real cover of the real book. An EPUB carries
- * its own cover image and is next. The DOCX master is last and is the
- * unhappy case: it has no cover of its own, so what comes back is the
- * first page of the typeset text — which is still more use on a shelf
- * than nothing.
+ * its own cover image and is next.
+ *
+ * The DOCX master was last, and was dropped when rendering moved into
+ * the browser on 2026-08-25: there is no DOCX renderer there, and what
+ * it produced was the first page of the typeset text — the unhappy case
+ * even when it worked. A book whose only artifact is a master waits for
+ * its PDF, which phase 2 builds anyway.
  */
-export const COVER_SOURCE_FORMATS = ['pdf', 'epub', 'docx'] as const
+export const COVER_SOURCE_FORMATS = ['pdf', 'epub'] as const
 
 /** The artifact to render this book's cover from, or null if it has none yet. */
 export function coverSourceFormat(formats: readonly unknown[]): ArtifactFormat | null {
@@ -108,19 +114,30 @@ export function coverKey(bookId: string | number, page: number = 1): string {
 export const COVER_CANDIDATE_PAGES = 3
 
 /**
- * The keys the candidates are written to, page one first.
+ * The box a rendered page is fitted into, and how hard it is squeezed.
  *
- * Named on this side rather than the converter's, exactly like the
- * single key was: the key is the web application's to choose, so the
- * containment rule and the serving route agree without either guessing.
+ * Wide enough for the largest slot a cover is drawn in — the book
+ * page's own header — at 2x. Bigger costs bytes on every catalog page
+ * for detail nothing renders. The quality is high enough that a page of
+ * type stays crisp and low enough that a cover is tens of kilobytes.
+ *
+ * Here rather than in the renderer because the renderer is now the
+ * reader's own browser (`lib/client/coverImages.ts`), and a constant
+ * living there would be a constant nothing on the server could check.
  */
-export function coverCandidateKeys(
-  bookId: string | number,
-  count: number = COVER_CANDIDATE_PAGES,
-): string[] {
-  const pages = Math.max(1, Math.min(count, COVER_CANDIDATE_PAGES))
-  return Array.from({ length: pages }, (_, index) => coverKey(bookId, index + 1))
-}
+export const COVER_IMAGE_MAX_WIDTH = 800
+export const COVER_IMAGE_MAX_HEIGHT = 1200
+export const COVER_JPEG_QUALITY = 0.82
+
+/**
+ * The biggest a single rendered candidate may be.
+ *
+ * Far smaller than `COVER_MAX_BYTES`, which is the ceiling on a picture
+ * an editor *chose*. These are produced by our own code to a known box,
+ * so anything approaching a megabyte means something other than a page
+ * of a book is being posted.
+ */
+export const COVER_CANDIDATE_MAX_BYTES = 2 * 1024 * 1024
 
 /**
  * How many candidates this book actually has.
@@ -168,84 +185,6 @@ export function coverPageUrl(bookId: string | number, page: number): string {
 }
 
 /**
- * The cover key a converter reported, or null if it is not usable.
- *
- * The same containment boundary `acceptArtifacts` enforces, for the
- * same reason: a key naming another book's prefix would let a
- * compromised converter point one book's cover at another book's files.
- * Kept as its own function because a cover is not an artifact — it is
- * not a format, not downloadable, and not something a reader is ever
- * charged for.
- */
-export function acceptCoverKey({
-  bookId,
-  key,
-}: {
-  bookId: string | number
-  key: unknown
-}): string | null {
-  if (typeof key !== 'string') return null
-  if (!key.startsWith(artifactPrefix(bookId))) return null
-  // `books/3/../4/x` starts with the right prefix and resolves
-  // elsewhere entirely.
-  if (key.includes('..')) return null
-  return key
-}
-
-/**
- * The candidate keys a converter reported, in page order.
- *
- * Every key is checked, not just the first: a converter that wrote page
- * one inside the book's prefix and page two inside someone else's would
- * otherwise get the second one accepted on the strength of the first.
- * Anything that fails the boundary ends the list rather than being
- * skipped, because the position in this list *is* the page number — a
- * hole would silently renumber every page after it.
- */
-export function acceptCoverKeys({
-  bookId,
-  keys,
-}: {
-  bookId: string | number
-  keys: unknown
-}): string[] {
-  if (!Array.isArray(keys)) return []
-  const accepted: string[] = []
-  for (const key of keys.slice(0, COVER_CANDIDATE_PAGES)) {
-    const clean = acceptCoverKey({ bookId, key })
-    if (!clean) break
-    accepted.push(clean)
-  }
-  return accepted
-}
-
-export interface CoverCandidate {
-  state: unknown
-  /** Whether an editor has uploaded a cover of their own. */
-  hasUploadedCover: boolean
-  /** The formats this book already has. */
-  formats: readonly unknown[]
-}
-
-/**
- * Is there a cover to render for this book, and something to render it
- * from?
- *
- * An uploaded cover stops it. Not because the generated one would be
- * shown — it would not, the upload always wins — but because rendering
- * a page nobody will look at is a conversion slot spent on nothing.
- *
- * A missing state reads as `pending`, so every book that existed before
- * this feature is eligible without a backfill.
- */
-export function needsCover(candidate: CoverCandidate): boolean {
-  if (candidate.hasUploadedCover) return false
-  const state = isCoverState(candidate.state) ? candidate.state : 'pending'
-  if (state !== 'pending') return false
-  return coverSourceFormat(candidate.formats) !== null
-}
-
-/**
  * Which cover a page should show, given both.
  *
  * The order is the whole policy: a chosen cover, then page one, then
@@ -267,14 +206,6 @@ export function coverImageUrl({
     return coverPageUrl(bookId, chosenCoverPage(generated))
   }
   return null
-}
-
-/** Formats a cover may be rendered from, as a set the route can test against. */
-export function isCoverSourceFormat(format: unknown): format is ArtifactFormat {
-  return (
-    ARTIFACT_FORMATS.includes(format as ArtifactFormat) &&
-    COVER_SOURCE_FORMATS.includes(format as (typeof COVER_SOURCE_FORMATS)[number])
-  )
 }
 
 /* --- An editor's own cover ------------------------------------------ */

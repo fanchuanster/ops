@@ -56,6 +56,8 @@ export interface BookEditValues {
   /** Which rendered page the book wears, and what else was rendered. */
   coverPage: number
   coverPages: number[]
+  /** Whether a browser could render pages for it from an artifact. */
+  canMakeCover: boolean
 }
 
 export function BookEditPanel({
@@ -98,6 +100,7 @@ export function BookEditPanel({
             slug={book.slug}
             coverUrl={book.coverUrl}
             hasUploadedCover={book.hasUploadedCover}
+            canMakeCover={book.canMakeCover}
             coverPage={book.coverPage}
             coverPages={book.coverPages}
             face={face}
