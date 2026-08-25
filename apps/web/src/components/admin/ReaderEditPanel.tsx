@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState, useState } from 'react'
 
 import { saveReader, type ReaderState } from '../../app/(admin)/actions/readers'
@@ -75,11 +76,11 @@ export function ReaderEditPanel({
             </p>
           </span>
         </div>
-        <a className="admin-panel__close" href={closeHref} aria-label="Close">
+        <Link className="admin-panel__close" href={closeHref} scroll={false} aria-label="Close">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-        </a>
+        </Link>
       </header>
 
       <form action={save} className="admin-panel__body admin-fields">

@@ -1,6 +1,8 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useActionState, useEffect, useState } from 'react'
 
 import {
   deleteLibraryBook,
@@ -43,6 +45,13 @@ import { BookCoverControl } from './BookCoverControl'
  * form: it is not a field, it cannot be part of Save, and a `<form>`
  * inside a `<form>` is not valid HTML. The server decides whether it is
  * allowed (`deleteLibraryBook`) — the confirmation is courtesy.
+ *
+ * Saving closes the panel. An editor working down a shelf saves one
+ * book and goes to the next, so leaving the panel open left them a
+ * screen still occupied by the book they had finished with; the tree
+ * row behind it already shows the new title, which is the confirmation
+ * that matters. A save that *fails* keeps the panel open with its
+ * error, because there is still something to do in it.
  *
  * Deliberately absent: rights status, visibility, ownership, review.
  * Visibility in particular is no longer a field anybody sets — a book
@@ -104,6 +113,17 @@ export function BookEditPanel({
     deleteLibraryBook,
     {},
   )
+  const router = useRouter()
+
+  // Close on a successful save. `state` starts empty, so this cannot
+  // fire on mount — only when the action has come back with an `ok`.
+  // `replace` rather than `push`: closing a panel is not a step an
+  // editor should have to walk back through. `scroll: false` for the
+  // same reason the tree's own rows carry it — the shelf must not move
+  // under the cursor (`LibraryTree`).
+  useEffect(() => {
+    if (state.ok && !state.error) router.replace(closeHref, { scroll: false })
+  }, [state, closeHref, router])
 
   // Keyed by the book's id so opening a different row resets the draft
   // rather than carrying the last one's half-typed title across.
@@ -176,11 +196,11 @@ export function BookEditPanel({
             ) : null}
           </span>
         </div>
-        <a className="admin-panel__close" href={closeHref} aria-label="Close">
+        <Link className="admin-panel__close" href={closeHref} scroll={false} aria-label="Close">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-        </a>
+        </Link>
       </header>
 
       <form action={save} className="admin-panel__body admin-fields">

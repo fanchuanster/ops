@@ -1,3 +1,4 @@
+import Link from "next/link";
 import React from "react";
 
 import {
@@ -122,9 +123,13 @@ export default async function AdminUsersPage({
                             {Array.from(name.trim())[0] ?? "·"}
                           </span>
                           <span>
-                            <a className="admin-rowlink" href={href(user.id)}>
+                            <Link
+                              className="admin-rowlink"
+                              href={href(user.id)}
+                              scroll={false}
+                            >
                               {name}
-                            </a>
+                            </Link>
                             {user.displayName ? <em>{user.email}</em> : null}
                           </span>
                         </span>

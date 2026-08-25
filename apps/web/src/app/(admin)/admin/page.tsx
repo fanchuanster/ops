@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import React from 'react'
 
 import { ReviewDecision } from '../../../components/admin/ReviewDecision'
@@ -156,9 +157,13 @@ export default async function ReviewQueuePage({
                             {/* The stretched link is what makes the
                                 whole row clickable while still being
                                 one link a keyboard can reach. */}
-                            <a className="admin-rowlink" href={query({ book: String(book.id) })}>
+                            <Link
+                              className="admin-rowlink"
+                              href={query({ book: String(book.id) })}
+                              scroll={false}
+                            >
                               {book.title}
-                            </a>
+                            </Link>
                             <em>
                               {[book.author, kind === 'text' ? 'txt' : kind.toUpperCase()]
                                 .filter(Boolean)
@@ -245,11 +250,11 @@ function SubmissionPanel({
           <h2>{book.title}</h2>
           {book.author ? <p className="admin-panel__author">{book.author}</p> : null}
         </div>
-        <a className="admin-panel__close" href={closeHref} aria-label="Close">
+        <Link className="admin-panel__close" href={closeHref} scroll={false} aria-label="Close">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-        </a>
+        </Link>
       </header>
 
       <div className="admin-panel__body">

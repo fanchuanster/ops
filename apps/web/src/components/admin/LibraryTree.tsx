@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useActionState, useState } from 'react'
+import Link from 'next/link'
+import React, { useActionState, useEffect, useRef, useState } from 'react'
 
 import {
   applyShelfLevel,
@@ -432,6 +433,15 @@ function ShelfRow({
 /**
  * One book on a shelf.
  *
+ * The title is a `Link` with `scroll={false}`, and both halves of that
+ * matter. A plain `<a>` reloaded the page, which threw away the tree's
+ * scroll position — so an editor working down a long shelf was returned
+ * to the top of the library after every book they opened, and had to
+ * scroll back to find the next one. `Link` keeps `.admin-scroll` the
+ * same DOM node across the navigation; `scroll={false}` stops Next
+ * scrolling the new segment into view, which walks up the ancestors and
+ * would undo exactly what the first half bought.
+ *
  * The uploader and the date sit between the title and the level, and
  * are the reason an editor can tell a reader's submission from a book
  * staff entered without opening either. Both are quiet: they are
@@ -453,8 +463,21 @@ function BookRow({
   depth: number
   selected: boolean
 }) {
+  const row = useRef<HTMLDivElement>(null)
+
+  // On mount only. A *fresh* load of `?book=25` — a bookmark, a link
+  // somebody was sent, the redirect after a delete — starts the tree at
+  // the top with the selected book somewhere below the fold. Selecting
+  // from the tree is a client navigation that does not remount the row,
+  // so this never fires on a click and never moves the shelf out from
+  // under the editor.
+  useEffect(() => {
+    if (row.current?.dataset.selected) row.current.scrollIntoView({ block: 'center' })
+  }, [])
+
   return (
     <div
+      ref={row}
       className="admin-lib__book"
       data-selected={selected ? 'true' : undefined}
       style={{ '--depth': depth } as React.CSSProperties}
@@ -463,7 +486,7 @@ function BookRow({
         {book.face}
       </span>
       <span className="admin-lib__booktext">
-        <a className="admin-rowlink" href={book.href}>
+        <Link className="admin-rowlink" href={book.href} scroll={false}>
           {/* Its place on the shelf, before the title, because that is
               the order the rows are already in — a number a reader can
               follow down the column is the whole point of showing it.
@@ -474,7 +497,7 @@ function BookRow({
             </span>
           )}
           {book.title}
-        </a>
+        </Link>
         {book.author ? <em>{book.author}</em> : null}
       </span>
       {/* Who put it here, and when. A column of its own rather than a
