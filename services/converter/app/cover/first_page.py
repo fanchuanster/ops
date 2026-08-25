@@ -1,12 +1,23 @@
-"""Page one of a book, as a JPEG.
+"""The opening pages of a book, as JPEGs.
+
+Page one is the cover a book wears by default, and for most of this
+library it is the right one — but the page a publisher printed the cover
+on is frequently not the first leaf a scanner fed: a blank verso, a
+library stamp or a half-title comes first often enough that the choice
+is worth offering. So the first few pages are rendered and the web side
+records which one the book wears (`apps/web/src/domain/cover.ts`).
+
+Rendering more than one costs one rasterize and a few tens of kilobytes
+each, against a conversion that has already run OCR over the whole book.
 
 Three sources, in the order the web side prefers them:
 
     pdf    rasterize page 1. For most of this library that page is the
            scanned cover of the physical book.
     epub   the cover image the EPUB declares. An EPUB has no pages, so
-           there is nothing to rasterize — but every EPUB worth the name
-           names a cover in its manifest, by one of two mechanisms.
+           there is nothing to rasterize and there is exactly one
+           candidate — but every EPUB worth the name names a cover in
+           its manifest, by one of two mechanisms.
     docx   through LibreOffice to a PDF, then as above. The unhappy
            case: a master has no cover of its own, so what comes back is
            the first page of the typeset text.
@@ -57,17 +68,39 @@ class CoverUnavailable(RuntimeError):
 
 
 def render_cover(source: Path, source_format: str, out: Path) -> Path:
-    """Write a cover for `source` to `out`, and return the path."""
+    """Write page one of `source` to `out`, and return the path.
+
+    The single-cover door, kept for the CLI and for anything that wants
+    exactly the first page. `render_covers` is what the job runner uses.
+    """
+    return render_covers(source, source_format, [out])[0]
+
+
+def render_covers(source: Path, source_format: str, out: list[Path]) -> list[Path]:
+    """Write the opening pages of `source` to `out`, in order.
+
+    Returns the paths actually written, which may be fewer than asked
+    for: a two-page book has two pages, and an EPUB has one cover image
+    and no pages at all. Never more — the caller's list is the ceiling
+    and, since each path is a key on the web side, its numbering.
+
+    A source with no first page at all still raises `CoverUnavailable`,
+    because that is the difference between "this book has fewer pages
+    than you asked about" and "there is no cover here".
+    """
+    if not out:
+        return []
+
     if source_format == "pdf":
-        image = _from_pdf(source)
+        images = _from_pdf(source, len(out))
     elif source_format == "epub":
-        image = _from_epub(source)
+        images = [_from_epub(source)]
     elif source_format == "docx":
-        image = _from_docx(source)
+        images = _from_docx(source, len(out))
     else:
         raise CoverUnavailable(f"no cover can be rendered from a {source_format}")
 
-    return _write(image, out)
+    return [_write(image, path) for image, path in zip(images, out)]
 
 
 def _write(image: Image.Image, out: Path) -> Path:
@@ -94,26 +127,35 @@ def _write(image: Image.Image, out: Path) -> Path:
     return out
 
 
-def _from_pdf(path: Path) -> Image.Image:
+def _from_pdf(path: Path, pages: int = 1) -> list[Image.Image]:
     with pymupdf.open(path) as doc:
         if doc.page_count == 0:
             raise CoverUnavailable("the PDF has no pages")
-        page = doc[0]
 
-        # Rendered at the zoom that lands on the cover box, rather than
-        # at a fixed dpi: page sizes here range from a paperback scan to
-        # A4, and a fixed dpi makes the first cost four times the bytes
-        # of the second for the same displayed size.
-        width = page.rect.width or 1
-        zoom = min(4.0, max(1.0, MAX_WIDTH / width))
-        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
-        return Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+        images = []
+        for number in range(min(pages, doc.page_count)):
+            page = doc[number]
+
+            # Rendered at the zoom that lands on the cover box, rather
+            # than at a fixed dpi: page sizes here range from a
+            # paperback scan to A4, and a fixed dpi makes the first cost
+            # four times the bytes of the second for the same displayed
+            # size.
+            width = page.rect.width or 1
+            zoom = min(4.0, max(1.0, MAX_WIDTH / width))
+            pixmap = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
+            images.append(
+                Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+            )
+        return images
 
 
-def _from_docx(path: Path) -> Image.Image:
+def _from_docx(path: Path, pages: int = 1) -> list[Image.Image]:
+    # Converted once however many pages are wanted: LibreOffice is a
+    # subprocess and by far the expensive half of this.
     with tempfile.TemporaryDirectory(prefix="noblesee-cover-") as tmp:
         pdf = docx_to_pdf(path, Path(tmp) / "master.pdf")
-        return _from_pdf(pdf)
+        return _from_pdf(pdf, pages)
 
 
 # The two ways an EPUB names its cover. EPUB 3 marks the manifest item;

@@ -33,7 +33,15 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
 import { acceptArtifacts, acceptPageCount } from '../../../../domain/conversion'
-import { acceptCoverKey, coverKey, coverSourceFormat, needsCover } from '../../../../domain/cover'
+import {
+  COVER_CANDIDATE_PAGES,
+  acceptCoverKey,
+  acceptCoverKeys,
+  coverCandidateKeys,
+  coverKey,
+  coverSourceFormat,
+  needsCover,
+} from '../../../../domain/cover'
 import {
   IN_FLIGHT_STATES,
   claimFor,
@@ -281,7 +289,14 @@ async function claimCover(payload: Awaited<ReturnType<typeof getPayload>>) {
       source_format: format,
       // Where to put it. Named by this side so the containment rule and
       // the serving route agree without either guessing (domain/cover.ts).
+      //
+      // `cover_key` is page one and is sent on its own as well as at the
+      // head of the list, so a converter built before candidates existed
+      // still renders a cover rather than none. A newer converter uses
+      // the list and renders as many of those pages as the source has.
       cover_key: coverKey(book.id),
+      cover_keys: coverCandidateKeys(book.id),
+      cover_pages: COVER_CANDIDATE_PAGES,
       formats: [],
       title: book.title,
       author: book.author ?? null,
@@ -300,6 +315,7 @@ interface CompletionBody {
   message?: unknown
   artifacts?: unknown
   cover_key?: unknown
+  cover_keys?: unknown
 }
 
 /** Report a conversion finished, or failed. */
@@ -339,7 +355,18 @@ export async function POST(request: Request) {
   // that would not render leaves a perfectly good book with no picture,
   // which is not a failed conversion.
   if (kind === 'cover') {
-    const key = body.state === 'failed' ? null : acceptCoverKey({ bookId, key: body.cover_key })
+    // The candidate list if the converter sent one, otherwise the single
+    // key an older build reports — which is page one, and one candidate.
+    const keys =
+      body.state === 'failed'
+        ? []
+        : (() => {
+            const many = acceptCoverKeys({ bookId, keys: body.cover_keys })
+            if (many.length > 0) return many
+            const one = acceptCoverKey({ bookId, key: body.cover_key })
+            return one ? [one] : []
+          })()
+
     await payload.update({
       collection: 'books',
       id: bookId,
@@ -349,8 +376,18 @@ export async function POST(request: Request) {
           // A rejected key is a failure too: the converter believes it
           // wrote something, and leaving the book 'pending' would have
           // every later poll render the same page again.
-          state: key ? 'ready' : 'failed',
-          ...(key ? { key } : {}),
+          state: keys.length > 0 ? 'ready' : 'failed',
+          ...(keys.length > 0
+            ? {
+                key: keys[0],
+                candidates: keys.length,
+                // Back to page one. A re-render is only ever reached by
+                // clearing the state by hand, and what it produces is a
+                // fresh set of pages — an old choice of "the second one"
+                // is a statement about images that no longer exist.
+                page: 1,
+              }
+            : {}),
         },
       },
       overrideAccess: true,

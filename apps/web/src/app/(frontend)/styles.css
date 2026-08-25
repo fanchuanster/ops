@@ -3396,6 +3396,98 @@ h3 {
   line-height: 1.7;
 }
 
+/* --- the cover, and which page it comes from ---------------------- */
+
+/* The book's own face, on the page its owner manages it from. Sits
+   beside the picker rather than above it: the question is "is this the
+   right page?", and the answer is easier with the current one and the
+   alternatives in the same glance. */
+.cover-panel {
+  margin: 2rem 0 0;
+}
+
+.cover-panel h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.cover-panel__body {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.cover-panel__img {
+  display: block;
+  width: 7.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--rule);
+  background: var(--paper-band);
+}
+
+.coverpick__label {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.coverpick__pages {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+/* A thumbnail with its page number under it. Bordered rather than
+   filled, so the pages themselves — which are mostly white paper —
+   carry the row and the chrome stays out of the way. */
+.coverpick__page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.coverpick__page img {
+  display: block;
+  width: 3.25rem;
+  height: 4.5rem;
+  object-fit: cover;
+  background: var(--paper-band);
+}
+
+.coverpick__page:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.coverpick__page:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* The page in use. Marked by a ring rather than by dimming the others:
+   every one of them is a real page of the book and worth seeing. */
+.coverpick__page--on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+
 /* --- my books ----------------------------------------------------- */
 
 /* The row grows a card of its own, to match the shelf cards the rest

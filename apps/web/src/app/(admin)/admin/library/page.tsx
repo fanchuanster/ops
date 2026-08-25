@@ -10,7 +10,11 @@ import {
   flattenTree,
   parentIdOf,
 } from '../../../../domain/collectionTree'
-import { coverImageUrl } from '../../../../domain/cover'
+import {
+  chosenCoverPage,
+  coverCandidatePages,
+  coverImageUrl,
+} from '../../../../domain/cover'
 import { levelFromId } from '../../../../domain/levels'
 import {
   countDeliveries,
@@ -193,6 +197,11 @@ export default async function AdminLibraryPage({
           generated: selected.generatedCover ?? {},
         }),
         hasUploadedCover: uploadedCover !== null,
+        // Which page it wears, and which pages there are to wear. Both
+        // read from the same record the picture came from, so the panel
+        // never has to ask a second time.
+        coverPage: chosenCoverPage(selected.generatedCover ?? {}),
+        coverPages: coverCandidatePages(selected.generatedCover ?? {}),
       }
     : null
 

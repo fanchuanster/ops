@@ -722,6 +722,37 @@ only ever the default. When there is neither, the tile still draws the
 book's own first character, which was the only answer before this and
 remains the right one for a book nothing can be rendered from.
 
+Page one is the default rather than the definition, since 2026-08-25.
+The converter renders the **first three pages** and the book records
+which of them it wears, because the page a publisher printed the cover
+on is frequently not the first leaf a scanner fed — a blank verso, a
+library stamp, a half-title. Three is the number for the same reason
+the choice exists at all: past a leaf or two it stops being "which of
+these is the cover" and becomes browsing the book, which the reader
+already does. An EPUB has one declared cover image and no pages, so it
+has one candidate and no choice.
+
+The choice belongs to **the owner or an administrator**, which is the
+one place a book's uploader and its editors have equal power over it.
+Everything else on that boundary is asymmetric — rights, visibility and
+level are the administrator's (section 6.1), the bibliographic fields
+are the uploader's. A cover is neither: it is not a claim about the
+book, only which photograph of it looks right, and the person holding
+the physical copy is at least as well placed to say. The control is one
+component (`components/CoverPagePicker.tsx`) on both screens, over one
+action (`app/(frontend)/actions/cover.ts`).
+
+That also fixed something quieter: until then the one person who never
+saw a book's cover was the person who uploaded it. It is rendered after
+conversion, onto pages a private upload appears on none of — so the
+owner's own book page now shows it.
+
+Books whose cover was rendered before this keep it, at the unsuffixed
+key page one has always had, and are simply offered no alternatives —
+nothing was rendered to offer. Clearing `generatedCover.state` back to
+`pending` re-renders one with candidates, which is the same lever that
+already existed for a cover that failed.
+
 What the split bought was staged release — a per-reader clock that paced
 someone through a book. That is also gone. The credit price in section
 5.2 is what governs access now.
@@ -1341,11 +1372,16 @@ A job now carries a `kind`, because there are three of them:
 
     kind: "master"    source_key              → DOCX master
     kind: "formats"   master_key              → EPUB, PDF…
-    kind: "cover"     source_key + cover_key  → page one, as a JPEG
+    kind: "cover"     source_key + cover_keys → the opening pages, as JPEGs
 
 `cover` is not a phase and moves the book through none: it is claimed
 separately, from books whose conversion has stopped moving, and both its
-outcomes are recorded on the cover alone. A page that will not render
+outcomes are recorded on the cover alone. The keys are named by the web
+application and their **order is the page numbering** it will store, so
+a converter returns them truncated rather than sparse: a two-page book
+asked about three has two candidates, never a third pointing at nothing.
+`cover_key` is still sent and still reported alongside the list, which
+is what lets either side be deployed first. A page that will not render
 leaves a whole and readable book without a picture, which is not a
 failed conversion. It is offered last, after both phases, because it is
 the only cosmetic work here.
@@ -1483,6 +1519,8 @@ Suggested structure:
 books/
   {book_id}/
     cover.jpg          page one, when nobody uploaded a cover
+    cover-2.jpg        the other candidates, when it is not the cover
+    cover-3.jpg
     book/
       master.docx
       book.epub

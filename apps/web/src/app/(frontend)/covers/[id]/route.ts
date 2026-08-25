@@ -26,12 +26,13 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
+import { chosenCoverPage, coverCandidateCount, coverKey } from '../../../../domain/cover'
 import { getCurrentUser } from '../../../../lib/auth'
 import { artifactStream, localArtifactPath, streamLocalArtifact } from '../../../../lib/storage'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   const reader = await getCurrentUser()
@@ -51,8 +52,29 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const book = found?.docs[0]
   if (!book) return new Response(null, { status: 404 })
 
-  const key = book.generatedCover?.key
-  if (book.generatedCover?.state !== 'ready' || !key) return new Response(null, { status: 404 })
+  const generated = book.generatedCover ?? {}
+  if (generated.state !== 'ready' || !generated.key) return new Response(null, { status: 404 })
+
+  // `?page=` asks for one particular candidate — what the picker draws
+  // its thumbnails from, and where a chosen page other than the first
+  // is served. Without it the book's own choice answers, so every link
+  // written before candidates existed still resolves.
+  //
+  // Validated against the count this book actually has rather than
+  // against the ceiling: an unrendered page is a 404, not a stream of
+  // whatever happens to be at that key.
+  const asked = Number(new URL(request.url).searchParams.get('page'))
+  let page = chosenCoverPage(generated)
+  if (Number.isInteger(asked) && asked >= 1) {
+    if (asked > coverCandidateCount(generated)) return new Response(null, { status: 404 })
+    page = asked
+  }
+
+  // Page one is served from the key the book records, which is what it
+  // has always been. The alternatives are derived, because only page
+  // one is stored — the rest are named by the same rule that told the
+  // converter where to put them.
+  const key = page <= 1 ? generated.key : coverKey(id, page)
 
   const stream = await artifactStream(key)
   if (stream) {

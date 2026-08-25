@@ -1,11 +1,11 @@
 'use server'
 
 import config from '@payload-config'
-import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
 import { COVER_MAX_BYTES, checkCoverUpload, coverAltFor } from '../../../domain/cover'
 import { currentAdmin } from '../../../lib/adminAuth'
+import { revalidateCover } from '../../../lib/revalidateCover'
 import { logError } from '../../../lib/logError'
 
 /**
@@ -176,12 +176,4 @@ export async function removeBookCover(
   // was never rendered — because an upload made it ineligible — becomes
   // eligible again the moment this clears, with no state to reset.
   return { ok: 'Cover removed. Page one is showing again.' }
-}
-
-function revalidateCover(slug: string) {
-  revalidatePath('/admin/library')
-  revalidatePath('/')
-  revalidatePath('/books')
-  revalidatePath('/collections')
-  if (slug) revalidatePath(`/books/${slug}`)
 }

@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
+import { CoverPagePicker } from '../../../../../components/CoverPagePicker'
 import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
 import { BookActions } from '../../../../../components/BookActions'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
@@ -11,6 +12,12 @@ import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { Stepper } from '../../../../../components/Stepper'
 import { buildTree, flattenTree } from '../../../../../domain/collectionTree'
+import {
+  chosenCoverPage,
+  coverAltFor,
+  coverCandidatePages,
+  coverImageUrl,
+} from '../../../../../domain/cover'
 import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
 import { uploadStep } from '../../../../../domain/pipeline'
 import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
@@ -84,6 +91,20 @@ export default async function BookDetailsPage({
   const sourceKind = readSourceKind(book.conversion ?? {})
   const plan = resolvePlan(sourceKind, book.conversion?.plan)
   const share = shareDescription(book.rightsStatus)
+
+  // The face the book will wear on a shelf. Shown here because until
+  // now the one person who never saw it was the person who uploaded it:
+  // the cover is rendered after conversion, on pages this book's owner
+  // has no reason to be looking at, and a private upload appears on
+  // none of them at all.
+  const uploadedCover =
+    typeof book.cover === 'object' && book.cover !== null ? book.cover : null
+  const generatedCover = book.generatedCover ?? {}
+  const coverUrl = coverImageUrl({
+    uploadedUrl: uploadedCover?.url,
+    bookId: book.id,
+    generated: generatedCover,
+  })
 
   return (
     <>
@@ -205,6 +226,32 @@ export default async function BookDetailsPage({
           been generated. */}
       {draft ? null : (
         <>
+          {coverUrl ? (
+            <section className="cover-panel">
+              <h3>Cover</h3>
+              <div className="cover-panel__body">
+                <img
+                  className="cover-panel__img"
+                  src={coverUrl}
+                  alt={coverAltFor(book.title)}
+                />
+                {/* Only when the converter rendered alternatives, and
+                    never over an uploaded cover — that is an editor's
+                    deliberate choice and wins whatever is picked here
+                    (`domain/cover.ts`). */}
+                {uploadedCover ? (
+                  <p className="hint">An editor chose this cover for your book.</p>
+                ) : (
+                  <CoverPagePicker
+                    bookId={Number(book.id)}
+                    page={chosenCoverPage(generatedCover)}
+                    pages={coverCandidatePages(generatedCover)}
+                  />
+                )}
+              </div>
+            </section>
+          ) : null}
+
           <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />
           <SubmitForReview
             bookId={Number(book.id)}

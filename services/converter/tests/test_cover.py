@@ -1,10 +1,14 @@
-"""Page one of a book, as its default cover.
+"""The opening pages of a book, as its cover candidates.
 
 What is worth protecting here is not the pixels — it is that the three
-sources all land on one JPEG inside the cover box, and that a source
+sources all land on JPEGs inside the cover box, and that a source
 carrying no cover says so plainly rather than producing something wrong.
 A cover that is silently the wrong page is worse than no cover, because
 nothing downstream can tell.
+
+The candidates carry one more rule: the position of a path in the list
+is the page number the web side stores against it, so the list must
+never be padded, reordered, or have a hole in it.
 """
 
 from __future__ import annotations
@@ -17,7 +21,7 @@ import pymupdf
 import pytest
 from PIL import Image
 
-from app.cover import CoverUnavailable, render_cover
+from app.cover import CoverUnavailable, render_cover, render_covers
 from app.cover.first_page import MAX_HEIGHT, MAX_WIDTH
 
 
@@ -141,3 +145,62 @@ def test_a_transparent_cover_lands_on_white(tmp_path: Path) -> None:
     with Image.open(out) as image:
         r, g, b = image.convert("RGB").getpixel((5, 5))
         assert r > 240 and g > 240 and b > 240
+
+
+def test_candidates_are_the_opening_pages_in_order(tmp_path: Path) -> None:
+    out = render_covers(
+        _pdf(tmp_path / "book.pdf", pages=3),
+        "pdf",
+        [tmp_path / "1.jpg", tmp_path / "2.jpg", tmp_path / "3.jpg"],
+    )
+
+    assert [path.name for path in out] == ["1.jpg", "2.jpg", "3.jpg"]
+
+    # Three different pages, not the same page three times — which is
+    # the failure that would look completely fine in a picker.
+    assert len({path.read_bytes() for path in out}) == 3
+
+
+def test_a_short_book_yields_fewer_candidates(tmp_path: Path) -> None:
+    # Asked about three pages, and there are two. The answer is two
+    # candidates rather than a third pointing at nothing: the caller
+    # writes each to a key, and a key with no object behind it is a
+    # cover that 404s.
+    out = render_covers(
+        _pdf(tmp_path / "book.pdf", pages=2),
+        "pdf",
+        [tmp_path / "1.jpg", tmp_path / "2.jpg", tmp_path / "3.jpg"],
+    )
+
+    assert [path.name for path in out] == ["1.jpg", "2.jpg"]
+
+
+def test_an_epub_has_exactly_one_candidate(tmp_path: Path) -> None:
+    # An EPUB has no pages to rasterize — only the one cover image it
+    # declares — so asking for three is still answered with one.
+    book = _epub(tmp_path / "book.epub", cover=_png(tmp_path / "cover.png"))
+
+    out = render_covers(book, "epub", [tmp_path / "1.jpg", tmp_path / "2.jpg"])
+
+    assert [path.name for path in out] == ["1.jpg"]
+
+
+def test_the_first_candidate_is_what_render_cover_writes(tmp_path: Path) -> None:
+    # The single-page door is the same rendering, so a CLI run and a job
+    # run cannot disagree about what page one looks like.
+    one = render_cover(_pdf(tmp_path / "book.pdf", pages=3), "pdf", tmp_path / "one.jpg")
+    many = render_covers(
+        tmp_path / "book.pdf", "pdf", [tmp_path / "a.jpg", tmp_path / "b.jpg"]
+    )
+
+    assert one.read_bytes() == many[0].read_bytes()
+
+
+def test_a_source_with_no_cover_still_says_so(tmp_path: Path) -> None:
+    # Not "zero candidates": an EPUB declaring no cover is a different
+    # thing from a book shorter than the number of pages asked about,
+    # and only one of them is worth recording as a failure.
+    book = _epub(tmp_path / "book.epub", cover=None)
+
+    with pytest.raises(CoverUnavailable):
+        render_covers(book, "epub", [tmp_path / "1.jpg"])

@@ -98,6 +98,11 @@ class Job:
     # web application's to name, and the format is the instruction.
     source_format: str | None = None
     cover_key: str | None = None
+    # The candidate pages to render, in page order, page one first.
+    # `cover_key` is that same first key and is still sent on its own,
+    # so a web application that predates candidates is understood: an
+    # absent list means "page one only".
+    cover_keys: list[str] | None = None
     title: str | None = None
     author: str | None = None
     # Whether this book may be sent to a third-party LLM for OCR
@@ -116,7 +121,13 @@ class Job:
     # Where the rendered cover was written, once it has been. Not an
     # artifact: it is not a format, not downloadable, and not something a
     # reader is ever charged for.
+    #
+    # `cover` is page one and `covers` every page written, in order. Two
+    # fields rather than one because the position in `covers` is the
+    # page number the web side stores, and because `cover` alone is what
+    # an older web application knows how to read.
     cover: str | None = None
+    covers: list[str] = field(default_factory=list)
     page_count: int | None = None
 
     def advance(self, state: JobState, *, error: str | None = None) -> None:
@@ -133,6 +144,7 @@ class Job:
             "error": self.error,
             "artifacts": self.artifacts,
             "cover": self.cover,
+            "covers": self.covers,
             "page_count": self.page_count,
             "created_at": self.created_at,
             "updated_at": self.updated_at,

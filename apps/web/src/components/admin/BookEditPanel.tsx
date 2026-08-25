@@ -53,6 +53,9 @@ export interface BookEditValues {
   coverUrl: string | null
   /** Whether that picture is an editor's upload, so removable. */
   hasUploadedCover: boolean
+  /** Which rendered page the book wears, and what else was rendered. */
+  coverPage: number
+  coverPages: number[]
 }
 
 export function BookEditPanel({
@@ -95,6 +98,8 @@ export function BookEditPanel({
             slug={book.slug}
             coverUrl={book.coverUrl}
             hasUploadedCover={book.hasUploadedCover}
+            coverPage={book.coverPage}
+            coverPages={book.coverPages}
             face={face}
           />
           <span>

@@ -10,8 +10,16 @@
  *
  *   `cover`           an editor's upload. A deliberate choice, and it
  *                     always wins.
- *   `generatedCover`  page one of the book, rendered by the converter.
+ *   `generatedCover`  a page of the book, rendered by the converter.
  *                     A default, and only ever a default.
+ *
+ * The generated one is page one *by default*, not by definition. The
+ * converter renders the first few pages (`COVER_CANDIDATE_PAGES`) and
+ * the book records which of them it wears, because the page a publisher
+ * printed the cover on is frequently not the first leaf a scanner fed:
+ * a blank verso, a library stamp or a half-title comes first often
+ * enough that the choice is worth offering. Page one remains what a
+ * book wears until somebody says otherwise.
  *
  * Separate fields rather than one, because a generated cover must never
  * overwrite a chosen one, and an editor who deletes their upload should
@@ -75,8 +83,88 @@ export function coverSourceFormat(formats: readonly unknown[]): ArtifactFormat |
  * encoding of a scan is several times the size for no visible gain on a
  * tile 150px wide.
  */
-export function coverKey(bookId: string | number): string {
-  return `${artifactPrefix(bookId)}cover.jpg`
+export function coverKey(bookId: string | number, page: number = 1): string {
+  const prefix = artifactPrefix(bookId)
+  // Page one keeps the unsuffixed name it has always had, so every
+  // cover rendered before candidates existed is still at the key its
+  // book records. The alternatives are new names and can be anything.
+  return page <= 1 ? `${prefix}cover.jpg` : `${prefix}cover-${page}.jpg`
+}
+
+/**
+ * How many opening pages are offered to choose between.
+ *
+ * Three, and the number is a judgement rather than a constant with a
+ * reason behind it: a scan's cover is page one often enough to be the
+ * default, and when it is not, what a reader wants is almost always the
+ * title page a leaf or two in — behind a blank verso, a library stamp,
+ * or a half-title. Past three it stops being "which of these is the
+ * cover" and becomes browsing the book, which the reader already does.
+ *
+ * Each candidate is one rasterize and a few tens of kilobytes, so the
+ * cost of offering them is nothing next to the conversion that
+ * preceded it.
+ */
+export const COVER_CANDIDATE_PAGES = 3
+
+/**
+ * The keys the candidates are written to, page one first.
+ *
+ * Named on this side rather than the converter's, exactly like the
+ * single key was: the key is the web application's to choose, so the
+ * containment rule and the serving route agree without either guessing.
+ */
+export function coverCandidateKeys(
+  bookId: string | number,
+  count: number = COVER_CANDIDATE_PAGES,
+): string[] {
+  const pages = Math.max(1, Math.min(count, COVER_CANDIDATE_PAGES))
+  return Array.from({ length: pages }, (_, index) => coverKey(bookId, index + 1))
+}
+
+/**
+ * How many candidates this book actually has.
+ *
+ * One unless the converter said otherwise — which is the answer for
+ * every book whose cover was rendered before candidates existed, and
+ * for every EPUB, which has one declared cover image and no pages to
+ * rasterize.
+ */
+export function coverCandidateCount(generated: { candidates?: unknown }): number {
+  const count = Number(generated.candidates)
+  if (!Number.isInteger(count) || count < 1) return 1
+  return Math.min(count, COVER_CANDIDATE_PAGES)
+}
+
+/**
+ * Which page this book wears, clamped to what exists.
+ *
+ * Clamped rather than trusted, because the count can shrink under a
+ * stored choice: a re-rendered book whose source now yields fewer pages
+ * would otherwise point at a candidate that is no longer there, and a
+ * cover that 404s is worse than the first page.
+ */
+export function chosenCoverPage(generated: { page?: unknown; candidates?: unknown }): number {
+  const page = Number(generated.page)
+  if (!Number.isInteger(page) || page < 1) return 1
+  return Math.min(page, coverCandidateCount(generated))
+}
+
+/** The pages an editor may choose between, for a picker to render. */
+export function coverCandidatePages(generated: { candidates?: unknown }): number[] {
+  return Array.from({ length: coverCandidateCount(generated) }, (_, index) => index + 1)
+}
+
+/**
+ * The URL one particular candidate is served from.
+ *
+ * Page one is the bare address and the rest carry `?page=`, which is
+ * not only tidiness: covers are cached for an hour under a URL with no
+ * digest in it, so a choice that did not change the address would leave
+ * the old page on screen until the cache let go of it.
+ */
+export function coverPageUrl(bookId: string | number, page: number): string {
+  return page <= 1 ? `/covers/${bookId}` : `/covers/${bookId}?page=${page}`
 }
 
 /**
@@ -102,6 +190,33 @@ export function acceptCoverKey({
   // elsewhere entirely.
   if (key.includes('..')) return null
   return key
+}
+
+/**
+ * The candidate keys a converter reported, in page order.
+ *
+ * Every key is checked, not just the first: a converter that wrote page
+ * one inside the book's prefix and page two inside someone else's would
+ * otherwise get the second one accepted on the strength of the first.
+ * Anything that fails the boundary ends the list rather than being
+ * skipped, because the position in this list *is* the page number — a
+ * hole would silently renumber every page after it.
+ */
+export function acceptCoverKeys({
+  bookId,
+  keys,
+}: {
+  bookId: string | number
+  keys: unknown
+}): string[] {
+  if (!Array.isArray(keys)) return []
+  const accepted: string[] = []
+  for (const key of keys.slice(0, COVER_CANDIDATE_PAGES)) {
+    const clean = acceptCoverKey({ bookId, key })
+    if (!clean) break
+    accepted.push(clean)
+  }
+  return accepted
 }
 
 export interface CoverCandidate {
@@ -145,11 +260,11 @@ export function coverImageUrl({
 }: {
   uploadedUrl?: string | null
   bookId: string | number
-  generated: { state?: unknown; key?: unknown }
+  generated: { state?: unknown; key?: unknown; page?: unknown; candidates?: unknown }
 }): string | null {
   if (uploadedUrl) return uploadedUrl
   if (generated.state === 'ready' && typeof generated.key === 'string' && generated.key) {
-    return `/covers/${bookId}`
+    return coverPageUrl(bookId, chosenCoverPage(generated))
   }
   return null
 }

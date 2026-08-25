@@ -127,9 +127,13 @@ class Poller:
             # set. None preserves exactly that, so the two sides may be
             # deployed in either order.
             formats=_formats(job.get("formats")),
-            # Only a cover job sends these; both are None otherwise.
+            # Only a cover job sends these; all three are None otherwise.
             source_format=job.get("source_format"),
             cover_key=job.get("cover_key"),
+            # Absent from a web application that predates candidates,
+            # which asks for page one and nothing else. None preserves
+            # exactly that, so the two sides deploy in either order.
+            cover_keys=job.get("cover_keys") or None,
             title=job.get("title"),
             author=job.get("author"),
             # Taken from the server's answer, never assumed here. The
@@ -151,7 +155,14 @@ class Poller:
         # over a picture.
         if job.kind is JobKind.COVER:
             if job.state.value == "completed":
-                body |= {"state": "completed", "cover_key": job.cover}
+                # Both, always: `cover_key` is what an older web
+                # application reads, `cover_keys` is the page order a
+                # newer one records as the candidates.
+                body |= {
+                    "state": "completed",
+                    "cover_key": job.cover,
+                    "cover_keys": job.covers or ([job.cover] if job.cover else []),
+                }
             else:
                 body |= {"state": "failed", "message": job.error or "No cover could be rendered."}
             self._client.post("/api/conversion", json=body).raise_for_status()

@@ -1266,6 +1266,31 @@
   font-size: 0.6875rem;
 }
 
+/* The page picker in the edit panel, which is a narrow column beside a
+   list rather than a page of its own — so the thumbnails shrink and the
+   label goes, since the cover it belongs to is right above it. */
+.coverpick--admin {
+  margin-top: 0.55rem;
+}
+
+.coverpick--admin .coverpick__label {
+  display: none;
+}
+
+.coverpick--admin .coverpick__pages {
+  gap: 0.35rem;
+}
+
+.coverpick--admin .coverpick__page {
+  padding: 0.15rem;
+  font-size: 0.625rem;
+}
+
+.coverpick--admin .coverpick__page img {
+  width: 2rem;
+  height: 2.75rem;
+}
+
 /* A refusal or a confirmation about the cover belongs under the cover,
    not stretched across the panel head. */
 .admin-cover .form-error,

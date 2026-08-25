@@ -10,7 +10,14 @@ export interface BookTileData {
   originalTitle?: string | null
   cover?: { url?: string | null; alt?: string | null } | string | number | null
   /** Page one, rendered by the converter when nobody uploaded a cover. */
-  generatedCover?: { state?: string | null; key?: string | null } | null
+  generatedCover?: {
+    state?: string | null
+    key?: string | null
+    // Which of the rendered pages this book wears, so a tile shows the
+    // chosen cover rather than always page one (`domain/cover.ts`).
+    page?: number | null
+    candidates?: number | null
+  } | null
   artifacts?: { format: string }[] | null
 }
 

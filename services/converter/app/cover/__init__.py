@@ -9,6 +9,6 @@ one cannot be made, live on the web side in `apps/web/src/domain/cover.ts`.
 This module only renders what it is handed.
 """
 
-from .first_page import CoverUnavailable, render_cover
+from .first_page import CoverUnavailable, render_cover, render_covers
 
-__all__ = ["CoverUnavailable", "render_cover"]
+__all__ = ["CoverUnavailable", "render_cover", "render_covers"]

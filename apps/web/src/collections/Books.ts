@@ -251,6 +251,25 @@ export const Books: CollectionConfig = {
           type: 'text',
           admin: { readOnly: true, description: 'The rendered cover in object storage.' },
         },
+        {
+          name: 'candidates',
+          type: 'number',
+          defaultValue: 1,
+          admin: {
+            readOnly: true,
+            description:
+              'How many opening pages the converter rendered to choose between. One for an EPUB, which has a single declared cover image, and for every book rendered before candidates existed.',
+          },
+        },
+        {
+          name: 'page',
+          type: 'number',
+          defaultValue: 1,
+          admin: {
+            description:
+              'Which of those pages the book wears. One unless its owner or an editor picked another (domain/cover.ts).',
+          },
+        },
       ],
     },
     {

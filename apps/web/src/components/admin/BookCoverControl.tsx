@@ -3,6 +3,7 @@
 import { useActionState, useRef } from 'react'
 
 import { removeBookCover, saveBookCover, type CoverState } from '../../app/(admin)/actions/cover'
+import { CoverPagePicker } from '../CoverPagePicker'
 
 /**
  * The book's face in the edit panel, and the way to change it.
@@ -23,18 +24,31 @@ import { removeBookCover, saveBookCover, type CoverState } from '../../app/(admi
  *
  * Remove appears only when there is an upload to remove, because it is
  * not a way to have no cover — it falls back to page one.
+ *
+ * Under it, when the converter rendered alternatives and no upload is
+ * covering them, the choice of *which* page the book wears. That
+ * control is shared with the uploader's own book page rather than being
+ * an admin one: a cover is not a claim about the book, so the person
+ * who has it open is as well placed to pick as an editor
+ * (`actions/cover.ts`).
  */
 export function BookCoverControl({
   bookId,
   slug,
   coverUrl,
   hasUploadedCover,
+  coverPage,
+  coverPages,
   face,
 }: {
   bookId: number
   slug: string
   coverUrl: string | null
   hasUploadedCover: boolean
+  /** Which rendered page the book wears. */
+  coverPage: number
+  /** Every page the converter rendered for it, in order. */
+  coverPages: number[]
   /** The book's first character, drawn when there is no picture at all. */
   face: string
 }) {
@@ -96,6 +110,15 @@ export function BookCoverControl({
           </button>
         </form>
       ) : null}
+
+      {hasUploadedCover ? null : (
+        <CoverPagePicker
+          bookId={bookId}
+          page={coverPage}
+          pages={coverPages}
+          className="coverpick--admin"
+        />
+      )}
 
       {state.error ? <p className="form-error">{state.error}</p> : null}
       {state.ok ? <p className="admin-ok">{state.ok}</p> : null}

@@ -21,7 +21,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from ..cover import CoverUnavailable, render_cover
+from ..cover import CoverUnavailable, render_covers
 from ..docx.builder import build_docx
 from ..epub import build_epub
 from ..models import Document
@@ -229,7 +229,7 @@ def run_formats_job(job: Job, store: ObjectStore | None, *, on_change=lambda job
 
 
 def run_cover_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
-    """Render page one of a finished book as its default cover.
+    """Render the opening pages of a finished book as its cover candidates.
 
     Neither phase of production, and deliberately nothing like them: it
     reads one artifact the book already has, writes one image, and
@@ -239,7 +239,10 @@ def run_cover_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: 
     character (`apps/web/src/domain/cover.ts`).
 
     Which artifact to read is decided on the web side, because only that
-    side knows what the book has; this runs what it is told.
+    side knows what the book has; this runs what it is told. The same
+    goes for how many pages to offer and what to call them: the keys
+    arrive named, and their order is the page numbering the web side
+    will store.
     """
     try:
         with tempfile.TemporaryDirectory(prefix=f"noblesee-cover-{job.id}-") as tmp:
@@ -255,13 +258,23 @@ def run_cover_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: 
             source = work / Path(job.source_key).name
             store.download(job.source_key, source)
 
-            cover = render_cover(
+            # Page one alone unless the web application named more.
+            keys = job.cover_keys or [job.cover_key]
+
+            rendered = render_covers(
                 source,
                 job.source_format or Path(job.source_key).suffix.lstrip("."),
-                work / "cover.jpg",
+                [work / f"cover-{number}.jpg" for number in range(1, len(keys) + 1)],
             )
-            store.upload(cover, job.cover_key, content_type=CONTENT_TYPES[".jpg"])
-            job.cover = job.cover_key
+
+            # Only the pages that exist. A two-page book asked about
+            # three simply has two candidates, and uploading against the
+            # third key would leave an object nothing points at.
+            for image, key in zip(rendered, keys):
+                store.upload(image, key, content_type=CONTENT_TYPES[".jpg"])
+
+            job.covers = keys[: len(rendered)]
+            job.cover = job.covers[0]
 
             job.advance(JobState.COMPLETED)
             on_change(job)
