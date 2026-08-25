@@ -17,8 +17,8 @@ from pathlib import Path
 
 
 class SourceKind(str, Enum):
-    PDF_SCANNED = "pdf_scanned"  # page images; needs OCR
-    PDF_TEXT = "pdf_text"  # born-digital; the text is already exact
+    PDF_SCANNED = "pdf_scanned"  # at least one page must be read by OCR
+    PDF_TEXT = "pdf_text"  # every page carries its own exact text
     DOCX = "docx"
     TEXT = "text"
 
@@ -50,10 +50,17 @@ def sniff(path: Path) -> str:
 def detect(path: Path) -> SourceKind:
     """Classify a source file, or refuse it.
 
-    A PDF is split by whether it already carries extractable text.
-    That distinction decides whether OCR runs at all, and OCR is the
-    expensive, lossy step — a born-digital PDF sent through it comes out
-    worse than it went in.
+    A PDF is split by whether *any* of its pages has to be read by OCR,
+    which is a coarser question than the one the reader actually asks:
+    `pdf_in.read_pdf` decides page by page, and a book can hold both
+    kinds. This exists for the callers who need one answer up front —
+    whether hours of OCR are in prospect at all.
+
+    Erring towards `PDF_SCANNED` is the safe direction. It says "some of
+    this needs reading", and the reader will still extract every page
+    that carries its own text. The reverse mistake is the one that used
+    to be made here, and it lost whole books: a document declared
+    text-layer had its scanned pages read as empty and dropped.
     """
     if not path.is_file():
         raise UnsupportedSource(f"{path} is not a file")
@@ -61,9 +68,9 @@ def detect(path: Path) -> SourceKind:
     container = sniff(path)
 
     if container == "pdf":
-        from ..pipeline.render import has_text_layer
+        from ..pipeline.render import classify_pages
 
-        return SourceKind.PDF_TEXT if has_text_layer(path) else SourceKind.PDF_SCANNED
+        return SourceKind.PDF_SCANNED if classify_pages(path).ocr else SourceKind.PDF_TEXT
 
     if container == "zip":
         # A DOCX is a zip with a word/document.xml inside it. An .xlsx or

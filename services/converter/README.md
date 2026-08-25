@@ -38,16 +38,49 @@ FastAPI job API and the Cloudflare Queues consumer come later
 
     .venv/bin/python -m app.cli inspect book.pdf
 
-Reports the page count, metadata, whether there is already a text layer,
-and the outline. A PDF that has a real text layer should not be OCR'd —
-`convert` refuses unless you pass `--force-ocr`.
+Reports the page count, metadata, the outline, and how many pages carry
+their own text, how many need OCR, and how many are blank. That last
+breakdown is the cost estimate: OCR is charged per page, and the pages
+with a text layer are free.
 
-### `convert` — scan to master
+### `convert` — PDF to master
 
     .venv/bin/python -m app.cli convert book.pdf --title 論語別裁 --author 南懷瑾
 
-Renders pages (PyMuPDF), reads them (PaddleOCR, behind
-`app/ocr/base.py`), reconstructs structure from page geometry, and writes:
+**Decides page by page how each page has to be read**, which is the only
+thing in this pipeline that costs real money and time:
+
+| the page | how it is read | cost |
+|---|---|---|
+| carries text | extracted exactly (PyMuPDF spans) | free |
+| is an image | rendered, then OCR'd (PaddleOCR, behind `app/ocr/base.py`) | seconds per page |
+| is empty | skipped | free |
+
+Books are mixed far more often than not — a scan with a born-digital
+title page or index, a digital book with plates and blank versos — so
+this is not an edge case, it is most books. A volume that is half
+born-digital costs half as much to convert and finishes in half the
+time. The plan is printed before any of it starts:
+
+    pages:      412
+      text layer  38  (extracted, no OCR)
+      needs ocr   369
+      blank       5  (skipped)
+    reading pdf text…
+    ocr…
+      ocr 41/369  2.3s/page  ~12 min left
+
+It used to be one decision for the whole file, taken from a 40-page
+sample, and getting it wrong lost books silently: a scan with a single
+digital title page was declared text-layer, and every scanned page then
+extracted to nothing and vanished. `pages` in the review report records
+exactly which pages went which way.
+
+`--force-ocr` sends every page to the engine, for when the embedded text
+is known to be bad.
+
+Both readers feed the same geometry rules and merge back into page
+order, then this reconstructs structure and writes:
 
 | file | what it is |
 |---|---|
@@ -77,14 +110,16 @@ handed to PyMuPDF.
 | DOCX | paragraph styles. A NobleSee master round-trips exactly, heading *levels* included — `Heading 1`/`Title` → chapter, anything below it → section, everything else → prose. A foreign DOCX takes the same fallback |
 | text-layer PDF | PyMuPDF spans fed through the *same* geometry rules the scanned path uses, so verse, footnotes and attributions are recovered identically — with no OCR |
 | plain text | blank lines separate paragraphs; `# heading` and a lone `（十一）` marker are recognised |
-| scanned PDF | refused, with a pointer to `convert` |
+| PDF with any page needing OCR | refused, with a pointer to `convert` and a count of how many pages it would have to read |
 
 Two deliberate refusals to guess:
 
 - **Punctuation normalization is off for exact text.** Those rules repair
   what an OCR engine got wrong about full-width punctuation. A DOCX or a
   born-digital PDF has nothing to repair, and "repairing" it would be
-  editing the author rather than correcting the machine.
+  editing the author rather than correcting the machine. It follows the
+  *page*, not the document: in a mixed PDF the OCR'd pages are
+  normalized and the extracted ones are left exactly as they are.
 - **Short lines in a text file are not treated as verse.** Classical
   Chinese prose is set in short lines too, and a wrong guess shatters a
   paragraph into fake poetry. Verse is better marked up by an editor in
@@ -204,7 +239,7 @@ app/
   cli.py            the entry point: inspect, convert, import, correct, apply
   models.py         Box, OcrPage, Block, Document, Suggestion — no library types
   serialize.py      document.json and suggestions.json
-  sources/          input adapters: detect, docx_in, text, pdf_text
+  sources/          input adapters: detect, docx_in, text, pdf_in
   ocr/              the OCR abstraction; PaddleOCR behind it
   pipeline/         render, OCR pass, line grouping, normalization, structure
   llm/              client (provider-agnostic), correct (guardrails), apply

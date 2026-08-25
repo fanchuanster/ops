@@ -20,16 +20,14 @@ from pathlib import Path
 
 from .docx.builder import build_docx
 from .models import BlockKind
-from .ocr.base import get_engine
-from .pipeline.ocr_pass import ocr_pages
-from .pipeline.render import has_text_layer, read_outline, render_pages
-from .pipeline.structure import build_document
+from .pipeline.render import classify_pages, read_outline
 from .serialize import (
     read_document,
     read_suggestions,
     suggestion_to_dict,
     write_document,
 )
+from .sources.pdf_in import plan_pages, read_pdf
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
@@ -40,7 +38,10 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         for key, value in doc.metadata.items():
             if value:
                 print(f"  {key:<12}{value}")
-        print(f"text layer: {has_text_layer(Path(args.pdf))}")
+        sources = classify_pages(Path(args.pdf))
+        print(f"text layer: {len(sources.text)} pages")
+        print(f"needs ocr:  {len(sources.ocr)} pages")
+        print(f"blank:      {len(sources.blank)} pages")
     outline = read_outline(Path(args.pdf))
     print(f"outline:    {len(outline)} entries")
     for entry in outline:
@@ -53,22 +54,21 @@ def cmd_convert(args: argparse.Namespace) -> int:
     work = Path(args.work)
     out = Path(args.out)
 
-    if has_text_layer(pdf) and not args.force_ocr:
-        print(
-            f"{pdf.name} already has a text layer — OCR would only degrade it.\n"
-            "Re-run with --force-ocr if the embedded text is known to be bad.",
-            file=sys.stderr,
-        )
-        return 2
-
     pages = list(range(args.limit)) if args.limit else None
 
-    print("rendering pages…", flush=True)
-    images = render_pages(pdf, work / "images", dpi=args.dpi, pages=pages)
-    indices = pages if pages is not None else list(range(len(images)))
-    print(f"  {len(images)} pages", flush=True)
+    # Said before anything happens, because what it says is how long this
+    # will take: OCR is charged per page, and the pages that carry their
+    # own text are free.
+    sources = plan_pages(pdf, pages, force_ocr=args.force_ocr)
+    print(f"pages:      {sources.total}")
+    print(f"  text layer  {len(sources.text)}  (extracted, no OCR)")
+    print(f"  needs ocr   {len(sources.ocr)}")
+    print(f"  blank       {len(sources.blank)}  (skipped)")
 
-    engine = get_engine(args.engine)
+    if not sources.ocr and not sources.text:
+        print(f"{pdf.name} has no readable pages.", file=sys.stderr)
+        return 2
+
     started = time.time()
     done = 0
 
@@ -77,21 +77,33 @@ def cmd_convert(args: argparse.Namespace) -> int:
         done += 1
         elapsed = time.time() - started
         rate = elapsed / done
-        remaining = (len(images) - done) * rate
+        remaining = (len(sources.ocr) - done) * rate
         print(
-            f"  ocr {done}/{len(images)}  {rate:.1f}s/page  ~{remaining/60:.0f} min left",
+            f"  ocr {done}/{len(sources.ocr)}  {rate:.1f}s/page  ~{remaining/60:.0f} min left",
             end="\r",
             flush=True,
         )
 
-    print(f"reading with {engine.name}…", flush=True)
-    ocr = ocr_pages(images, engine, work / "ocr", indices=indices, on_page=tick)
-    print()
+    def stage(name):
+        print(f"{name}…", flush=True)
 
-    outline = read_outline(pdf)
     title = args.title or pdf.stem
-    doc, report = build_document(ocr, outline, title)
-    doc.author = args.author
+    doc, report, _ = read_pdf(
+        pdf,
+        title=title,
+        author=args.author,
+        cache_dir=work,
+        # A name, not an engine: constructing one loads an OCR model
+        # into memory, and a PDF that needs no OCR must not pay for that.
+        engine=args.engine,
+        dpi=args.dpi,
+        pages=pages,
+        force_ocr=args.force_ocr,
+        on_stage=stage,
+        on_page=tick,
+    )
+    if sources.ocr:
+        print()
 
     kinds = Counter(b.kind.value for b in doc.blocks)
     print(f"structure:  {dict(kinds)}")
@@ -116,6 +128,11 @@ def cmd_convert(args: argparse.Namespace) -> int:
             {
                 "title": title,
                 "source": str(pdf),
+                "pages": {
+                    "text_layer": list(sources.text),
+                    "ocr": list(sources.ocr),
+                    "blank": list(sources.blank),
+                },
                 "blocks": dict(kinds),
                 "dropped_furniture": report.dropped_furniture,
                 "normalizations": report.normalization.changes,
@@ -304,7 +321,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("pdf")
     p.set_defaults(func=cmd_inspect)
 
-    p = sub.add_parser("convert", help="scanned PDF → editable DOCX master")
+    p = sub.add_parser(
+        "convert", help="PDF → DOCX master, OCR'ing only the pages that need it"
+    )
     p.add_argument("pdf")
     p.add_argument("-o", "--out", default="out", help="where the DOCX and review report go")
     p.add_argument("-w", "--work", default="work", help="render and OCR cache")

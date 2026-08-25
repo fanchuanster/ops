@@ -18,11 +18,38 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.docx.builder import build_docx  # noqa: E402
-from app.models import Block, BlockKind, Document  # noqa: E402
+from app.models import Block, BlockKind, Document, OcrPage  # noqa: E402
+from app.pipeline.render import classify_pages  # noqa: E402
 from app.sources import SourceKind, UnsupportedSource, load_source  # noqa: E402
 from app.sources.detect import detect  # noqa: E402
 from app.sources.docx_in import read_docx  # noqa: E402
+from app.sources.pdf_in import read_pdf  # noqa: E402
 from app.sources.text import read_text  # noqa: E402
+
+
+def write_pdf(path: Path, pages: list[str]) -> Path:
+    """A PDF whose pages are each `text`, `image` or `blank`.
+
+    Real books mix them — a scan with a born-digital colophon, a digital
+    book with plates and blank versos — and every rule about what gets
+    OCR'd is a rule about one page, so the fixture has to be able to say
+    what each page is.
+    """
+    import pymupdf
+
+    doc = pymupdf.open()
+    for index, kind in enumerate(pages):
+        page = doc.new_page()
+        if kind == "text":
+            page.insert_text((72, 120), f"Page {index}.", fontsize=11)
+        elif kind == "image":
+            # No text layer, something to look at: a scanned leaf.
+            pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 16, 16), False)
+            pixmap.clear_with(255)
+            page.insert_image(pymupdf.Rect(72, 72, 172, 172), pixmap=pixmap)
+    doc.save(str(path))
+    doc.close()
+    return path
 
 
 # --------------------------------------------------------------------------
@@ -281,16 +308,79 @@ def test_load_source_carries_the_author_through(tmp_path):
 
 
 def test_load_source_sends_a_scanned_pdf_to_the_right_command(tmp_path):
-    import pymupdf
-
-    pdf = tmp_path / "scan.pdf"
-    doc = pymupdf.open()
-    doc.new_page()  # a page with no text layer
-    doc.save(str(pdf))
-    doc.close()
+    pdf = write_pdf(tmp_path / "scan.pdf", ["image"])
 
     with pytest.raises(UnsupportedSource, match="converter convert"):
         load_source(pdf)
+
+
+def test_one_scanned_page_in_a_digital_book_is_not_quietly_dropped(tmp_path):
+    """The bug this whole page-by-page split exists to close.
+
+    Detection used to sample the document and ask whether *any* page had
+    text. A 400-page scan with one born-digital title page passed, was
+    read through the text-layer path, and converted "successfully" into a
+    one-page book — every scanned page yielded nothing and vanished. Now
+    the scanned page is what decides, and the book is refused rather than
+    silently gutted.
+    """
+    pdf = write_pdf(tmp_path / "mixed.pdf", ["text", "image", "text"])
+
+    assert detect(pdf) is SourceKind.PDF_SCANNED
+    with pytest.raises(UnsupportedSource, match="1 of its 3 pages"):
+        load_source(pdf)
+
+
+def test_a_blank_page_does_not_send_a_digital_book_to_ocr(tmp_path):
+    # A chapter verso is not a scan. OCR would spend seconds on it to
+    # return nothing, and — before per-page classification — its presence
+    # would have condemned the whole book to the expensive path.
+    pdf = write_pdf(tmp_path / "versos.pdf", ["text", "blank", "text"])
+
+    assert detect(pdf) is SourceKind.PDF_TEXT
+
+    result = load_source(pdf)
+
+    assert "2 of 3 pages read from the text layer, 1 blank" in result.notes[0]
+
+
+def test_pages_are_classified_one_by_one(tmp_path):
+    pdf = write_pdf(tmp_path / "book.pdf", ["text", "image", "blank", "text"])
+
+    sources = classify_pages(pdf)
+
+    assert sources.text == (0, 3)
+    assert sources.ocr == (1,)
+    assert sources.blank == (2,)
+    assert sources.total == 4
+
+
+def test_only_the_pages_that_need_reading_reach_the_engine(tmp_path, monkeypatch):
+    """The saving, stated as a test: OCR is charged per page.
+
+    A book that is mostly born-digital must not pay to have its whole
+    length rasterized and read.
+    """
+    pdf = write_pdf(tmp_path / "book.pdf", ["text", "image", "blank", "image"])
+    seen: list[int] = []
+
+    class CountingEngine:
+        name = "counting"
+
+        def read(self, image_path, index):
+            seen.append(index)
+            return OcrPage(index=index, width=100, height=100, spans=[])
+
+    monkeypatch.setattr("app.ocr.base.get_engine", lambda name: CountingEngine())
+
+    document, _report, sources = read_pdf(
+        pdf, title="Mixed", cache_dir=tmp_path / "work", engine="counting"
+    )
+
+    assert seen == [1, 3], "only the image pages are read"
+    assert sources.text == (0,)
+    assert sources.blank == (2,)
+    assert "Page 0." in "\n".join(b.text for b in document.blocks)
 
 
 def test_load_source_reads_a_born_digital_pdf_without_ocr(tmp_path):

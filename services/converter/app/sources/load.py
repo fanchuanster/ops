@@ -7,9 +7,12 @@ that convergence actually happens: it picks the right reader and hands
 back a `Document`, so the job runner does not need a branch per format.
 
 The one real difference between them is OCR, and it is a difference of
-*cost*, not of outcome — a scanned PDF has to be rasterised and read
+*cost*, not of outcome — a scanned page has to be rasterised and read
 before there is any text at all, which is why `on_stage` exists: that
 stage takes minutes to hours and a caller needs to say so.
+
+Note "page", not "file". Both PDF kinds go to the same reader, which
+decides page by page and OCRs only what it must (`pdf_in.read_pdf`).
 """
 
 from __future__ import annotations
@@ -47,34 +50,21 @@ def load_source(
         document.author = author or document.author
         return document
 
-    if kind is SourceKind.PDF_TEXT:
-        on_stage("reading pdf text")
-        from .pdf_text import read_pdf_text
+    if kind in (SourceKind.PDF_TEXT, SourceKind.PDF_SCANNED):
+        # One reader for both. The OCR cache under `cache_dir` is kept
+        # because a book takes hours to read and an editor re-running the
+        # structure stage must not pay for the OCR again — the same
+        # reason the CLI exists (services/converter/README).
+        from .pdf_in import read_pdf
 
-        document, _report = read_pdf_text(path, title=name, author=author)
+        document, _report, _sources = read_pdf(
+            path,
+            title=name,
+            author=author,
+            cache_dir=cache_dir or path.parent / "cache",
+            engine="paddle",
+            on_stage=on_stage,
+        )
         return document
 
-    if kind is SourceKind.PDF_SCANNED:
-        on_stage("ocr")
-        return _ocr_pdf(path, name, author, cache_dir or path.parent / "cache")
-
     raise UnsupportedSource(f"cannot read {path.name}")
-
-
-def _ocr_pdf(path: Path, title: str, author: str | None, cache_dir: Path) -> Document:
-    """The expensive path: rasterise every page, then read it.
-
-    The OCR cache is kept because a book takes hours to read and an
-    editor re-running the structure stage must not pay for the OCR
-    again — the same reason the CLI exists (services/converter/README).
-    """
-    from ..ocr.paddle import PaddleOcrEngine
-    from ..pipeline.ocr_pass import ocr_pages
-    from ..pipeline.render import read_outline, render_pages
-    from ..pipeline.structure import build_document
-
-    images = render_pages(path, cache_dir / "pages")
-    pages = ocr_pages(images, PaddleOcrEngine(), cache_dir / "ocr")
-    document, _report = build_document(pages, read_outline(path), title)
-    document.author = author
-    return document

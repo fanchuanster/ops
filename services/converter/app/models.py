@@ -80,6 +80,13 @@ class OcrPage:
     width: int
     height: int
     spans: list[OcrSpan] = field(default_factory=list)
+    #: True when the text was extracted from the PDF's own text layer
+    #: rather than read off an image. It is exact, so the punctuation
+    #: normalization rules — which exist to repair what an OCR engine got
+    #: wrong — must not run on it. A single book can carry both kinds of
+    #: page (`pipeline/render.classify_pages`), which is why this travels
+    #: with the page rather than with the document.
+    exact: bool = False
 
 
 @dataclass

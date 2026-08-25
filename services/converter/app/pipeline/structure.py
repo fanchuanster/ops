@@ -141,6 +141,11 @@ def build_document(
     was never OCR'd — a born-digital PDF or a DOCX carries exact
     characters, and "repairing" those is editing the author rather than
     correcting the machine.
+
+    It is the document's default, not its rule: a page that says its text
+    is exact (`OcrPage.exact`) opts out of it whatever this is set to,
+    because one PDF can hold both kinds of page and the choice belongs to
+    whichever of them the line came off.
     """
     report = StructureReport()
     doc = Document(title=title)
@@ -181,6 +186,9 @@ def build_document(
         if not lines:
             continue
 
+        # Exact text has nothing to repair; see the docstring.
+        normalize_page = normalize and not page.exact
+
         # The prose left margin on this page, taken from the lines that
         # run the full measure — those are necessarily continuation lines
         # or full first lines, never a short last line of a paragraph.
@@ -201,7 +209,7 @@ def build_document(
 
         for line in lines:
             text, ref = extract_ref(line.text)
-            if normalize:
+            if normalize_page:
                 text = normalize_text(text, report.normalization)
                 if ref:
                     ref = normalize_text(ref, report.normalization)
@@ -280,7 +288,7 @@ def build_document(
                         kind=BlockKind.ATTRIBUTION,
                         lines=[
                             normalize_attribution(text, report.normalization)
-                            if normalize
+                            if normalize_page
                             else text
                         ],
                         page=page.index,
