@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useState } from 'react'
 
 import {
   deleteLibraryBook,
@@ -11,6 +11,7 @@ import {
 } from '../../app/(admin)/actions/library'
 import { BOOK_LEVELS, LEVEL_DESCRIPTIONS, LEVEL_LABELS, type BookLevel } from '../../domain/levels'
 import { BookCoverControl } from './BookCoverControl'
+import { useOnSaved } from './useOnSaved'
 
 /**
  * The panel beside the Books list, where a book is actually edited.
@@ -115,15 +116,12 @@ export function BookEditPanel({
   )
   const router = useRouter()
 
-  // Close on a successful save. `state` starts empty, so this cannot
-  // fire on mount — only when the action has come back with an `ok`.
-  // `replace` rather than `push`: closing a panel is not a step an
-  // editor should have to walk back through. `scroll: false` for the
-  // same reason the tree's own rows carry it — the shelf must not move
-  // under the cursor (`LibraryTree`).
-  useEffect(() => {
-    if (state.ok && !state.error) router.replace(closeHref, { scroll: false })
-  }, [state, closeHref, router])
+  // Close on a successful save (`useOnSaved`). `replace` rather than
+  // `push`: closing a panel is not a step an editor should have to walk
+  // back through. `scroll: false` for the same reason the tree's own
+  // rows carry it — the shelf must not move under the cursor
+  // (`LibraryTree`).
+  useOnSaved(state, () => router.replace(closeHref, { scroll: false }))
 
   // Keyed by the book's id so opening a different row resets the draft
   // rather than carrying the last one's half-typed title across.

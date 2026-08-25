@@ -319,6 +319,7 @@ function SubmissionPanel({
           canApprove={publication.allowed && !alreadyPublic}
           alreadyPublic={alreadyPublic}
           rightsCleared={isPubliclyDistributable(rights)}
+          closeHref={closeHref}
         />
       </div>
     </aside>

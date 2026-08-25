@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useActionState, useState } from 'react'
 
 import {
@@ -8,6 +9,7 @@ import {
   type ReviewState as ActionState,
 } from '../../app/(admin)/actions/review'
 import type { ReviewState } from '../../domain/moderation'
+import { useOnSaved } from './useOnSaved'
 
 /**
  * The editor's decision, and the words that go with it.
@@ -31,6 +33,11 @@ import type { ReviewState } from '../../domain/moderation'
  * asymmetry is the point: a rejection without a reason is not a review,
  * while an approval explains itself by the book appearing.
  *
+ * A decision closes the panel, like every other editing surface in the
+ * admin (`useOnSaved`). It is the strongest case for it: a reviewed
+ * book leaves the queue behind the panel, so what the panel is showing
+ * after an approval is a submission that is no longer waiting for one.
+ *
  * The design has a fourth control, a permanent Reject distinct from
  * requesting changes. There is no such state in `domain/moderation.ts`
  * and one was not invented here — `rejected` is explicitly
@@ -47,6 +54,7 @@ export function ReviewDecision({
   canApprove,
   alreadyPublic,
   rightsCleared,
+  closeHref,
 }: {
   bookId: number
   reviewState: ReviewState
@@ -56,6 +64,8 @@ export function ReviewDecision({
   alreadyPublic: boolean
   /** Whether the rights permit public distribution — the gate nobody waives. */
   rightsCleared: boolean
+  /** Where the panel goes when the decision is made. */
+  closeHref: string
 }) {
   const [approveState, approve, approving] = useActionState<ActionState, FormData>(
     approveSubmission,
@@ -66,10 +76,18 @@ export function ReviewDecision({
     {},
   )
 
+  const router = useRouter()
+
   const [note, setNote] = useState(savedNote)
   const busy = approving || changing
   const result = approveState.error || changesState.error
   const done = approveState.ok || changesState.ok
+
+  // Either decision closes the panel. Both are terminal: the book is
+  // published, or its uploader has been asked for changes, and neither
+  // leaves anything else to do on this screen.
+  useOnSaved(approveState, () => router.replace(closeHref, { scroll: false }))
+  useOnSaved(changesState, () => router.replace(closeHref, { scroll: false }))
 
   return (
     <section className="admin-decision">

@@ -1,9 +1,11 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useActionState, useState } from 'react'
 
 import { saveReader, type ReaderState } from '../../app/(admin)/actions/readers'
+import { useOnSaved } from './useOnSaved'
 
 /**
  * The panel beside the Readers list, where an account is changed.
@@ -46,6 +48,11 @@ export function ReaderEditPanel({
   closeHref: string
 }) {
   const [state, save, saving] = useActionState<ReaderState, FormData>(saveReader, {})
+  const router = useRouter()
+
+  // Closes itself once the account is saved, like the Library panel
+  // beside it (`useOnSaved`).
+  useOnSaved(state, () => router.replace(closeHref, { scroll: false }))
 
   const [draft, setDraft] = useState(reader)
   const [openedAs, setOpenedAs] = useState(reader)

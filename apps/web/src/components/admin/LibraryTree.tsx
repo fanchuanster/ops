@@ -26,6 +26,7 @@ import {
   SHELF_SORT_LABELS,
   type ShelfSort,
 } from '../../domain/shelfOrder'
+import { useOnSaved } from './useOnSaved'
 
 export interface ParentOption {
   id: number
@@ -142,6 +143,10 @@ export function LibraryTree({
     {},
   )
 
+  // The new shelf appears in the tree behind the form, so the form has
+  // said everything it has to say (`useOnSaved`).
+  useOnSaved(createState, () => setAdding(false))
+
   return (
     <div className="admin-lib">
       {rows.map((row) => (
@@ -247,6 +252,11 @@ function ShelfRow({
   const [moveState, move, moving] = useActionState<CollectionsState, FormData>(moveCollection, {})
   const [levelling, setLevelling] = useState(false)
   const [addingChild, setAddingChild] = useState(false)
+
+  // Saved shelves close, like the book panel on the Library screen and
+  // the reader panel on Readers (`useOnSaved`). The row underneath
+  // already reads back the new name, the new parent and the new order.
+  useOnSaved(saveState, onDone)
 
   return (
     <section
@@ -416,7 +426,7 @@ function ShelfRow({
       {moveState.error ? <p className="form-error admin-lib__error">{moveState.error}</p> : null}
 
       {addingChild ? <AddChild parentId={row.id} onDone={() => setAddingChild(false)} /> : null}
-      {levelling ? <ShelfLevel row={row} /> : null}
+      {levelling ? <ShelfLevel row={row} onDone={() => setLevelling(false)} /> : null}
 
       {row.books.map((book) => (
         <BookRow
@@ -534,6 +544,8 @@ function AddChild({ parentId, onDone }: { parentId: number; onDone: () => void }
     {},
   )
 
+  useOnSaved(state, onDone)
+
   return (
     <form action={create} className="admin-lib__inline">
       <input type="hidden" name="parentId" value={parentId} />
@@ -565,9 +577,15 @@ function AddChild({ parentId, onDone }: { parentId: number; onDone: () => void }
  * this is an act performed on the books, and the result shows up in
  * their own chips a few rows below.
  */
-function ShelfLevel({ row }: { row: LibraryRow }) {
+function ShelfLevel({ row, onDone }: { row: LibraryRow; onDone: () => void }) {
   const [state, apply, applying] = useActionState<CollectionsState, FormData>(applyShelfLevel, {})
   const [mode, setMode] = useState<(typeof LEVEL_APPLY_MODES)[number]>('cap')
+
+  // Closes when it has been applied. What it did is not lost by
+  // closing: the books it moved are a few rows below with their new
+  // level on them, which is the same answer the form's own message gave
+  // and is the one an editor was going to check anyway.
+  useOnSaved(state, onDone)
 
   return (
     <form action={apply} className="admin-lib__level">

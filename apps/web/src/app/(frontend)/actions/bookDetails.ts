@@ -326,6 +326,7 @@ export async function submitForReview(
   // still what decides, exactly as it would for anybody else, and an
   // administrator whose own book is `user_owned` gets the same private
   // book a reader would.
+  let published = false
   if (isAdmin(user)) {
     const publication = canPublishToLibrary({
       reviewState: 'submitted',
@@ -345,6 +346,7 @@ export async function submitForReview(
           // approval against them (`collections/Books.ts`).
           user,
         })
+        published = true
         revalidatePath('/')
         revalidatePath('/books')
       } catch (error) {
@@ -356,6 +358,22 @@ export async function submitForReview(
   }
 
   revalidatePath(`/account/books/${bookId}`)
+
+  // Publishing ends the editing. The book is in the library, there is
+  // nothing further to do to it on this screen, and leaving the uploader
+  // on it means one more click before they can start the next book — so
+  // it closes the way every panel in the admin now closes, by going back
+  // to the list. `My books` says "In the public library" against the row,
+  // which is the confirmation the page would have shown in place.
+  //
+  // Only when it actually published. A submission that is waiting for a
+  // reviewer has something left to show — "Under review", the note, the
+  // timeline — and the list has no column for any of it.
+  if (published) {
+    revalidatePath('/account/books')
+    redirect('/account/books')
+  }
+
   return {}
 }
 
