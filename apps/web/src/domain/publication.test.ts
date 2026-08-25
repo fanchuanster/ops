@@ -11,6 +11,7 @@ import {
   originalArtifact,
   originalKey,
   plansFor,
+  reopensForConversion,
   readSourceKind,
   readingFormat,
   resolvePlan,
@@ -41,12 +42,16 @@ describe('classifying a source', () => {
 })
 
 describe('what an uploader may choose', () => {
-  it('gives a PDF a real choice', () => {
-    expect(plansFor('pdf')).toEqual(['convert', 'as_is'])
+  it('gives a PDF a real choice, the quick way first', () => {
+    expect(plansFor('pdf')).toEqual(['as_is', 'convert'])
   })
 
-  it('converts by default, because reading is the point', () => {
-    expect(defaultPlanFor('pdf')).toBe('convert')
+  it('publishes a PDF as it stands by default — the path that finishes', () => {
+    // Reversed on 2026-08-25. Converting is the expensive path and was
+    // being taken on behalf of someone who had only chosen a file; the
+    // default is now the one that cannot be regretted, since the
+    // original is kept either way and converting later is a button.
+    expect(defaultPlanFor('pdf')).toBe('as_is')
   })
 
   it('offers a DOCX nothing to decide — it is already the master', () => {
@@ -62,8 +67,32 @@ describe('what an uploader may choose', () => {
     // though it were a book.
     expect(resolvePlan('docx', 'as_is')).toBe('convert')
     expect(resolvePlan('epub', 'convert')).toBe('as_is')
-    expect(resolvePlan('pdf', 'nonsense')).toBe('convert')
-    expect(resolvePlan('pdf', 'as_is')).toBe('as_is')
+    expect(resolvePlan('pdf', 'nonsense')).toBe('as_is')
+    expect(resolvePlan('pdf', 'convert')).toBe('convert')
+  })
+})
+
+describe('changing your mind about a settled book', () => {
+  it('reopens a PDF published as it stands', () => {
+    expect(reopensForConversion('pdf', 'as_is', 'convert')).toBe(true)
+  })
+
+  it('never reopens in the other direction', () => {
+    // A converted book set back to `as_is` is a preference, not an
+    // instruction to delete an EPUB someone may already have been sent.
+    expect(reopensForConversion('pdf', 'convert', 'as_is')).toBe(false)
+  })
+
+  it('does not reopen a book with nothing to convert', () => {
+    // An EPUB upload can only ever be `as_is`, so "convert" here is a
+    // form value the source cannot honour — and would queue a book for
+    // a converter with no work to do.
+    expect(reopensForConversion('epub', 'as_is', 'convert')).toBe(false)
+  })
+
+  it('is not triggered by saving the same plan again', () => {
+    expect(reopensForConversion('pdf', 'as_is', 'as_is')).toBe(false)
+    expect(reopensForConversion('pdf', 'convert', 'convert')).toBe(false)
   })
 })
 

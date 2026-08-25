@@ -14,7 +14,12 @@ import { levelId, parseProposedLevel } from '../../../domain/levels'
 import { hasMaster, isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
 import { isUploaderSelectableRights, type RightsStatus } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
-import { needsConverter, readSourceKind, resolvePlan } from '../../../domain/publication'
+import {
+  needsConverter,
+  readSourceKind,
+  reopensForConversion,
+  resolvePlan,
+} from '../../../domain/publication'
 import { isAdmin } from '../../../lib/adminAuth'
 import { getCurrentUser } from '../../../lib/auth'
 import { objectBucket } from '../../../lib/storage'
@@ -97,17 +102,42 @@ export async function saveBookDetails(
   const alreadyConverting = book.conversion?.state !== 'draft'
 
   const sourceKind = readSourceKind(book.conversion ?? {})
+  const previousPlan = resolvePlan(sourceKind, book.conversion?.plan)
   const plan = resolvePlan(sourceKind, formData.get('plan'))
+
+  // **Changing your mind, which is now the ordinary path.**
+  //
+  // Publishing a PDF as it stands is the default (`defaultPlanFor`), so
+  // the reader who wants a reflowable edition arrives here *after* the
+  // book has already settled — and settled means `ready`, which
+  // `alreadyConverting` reads as "do not touch the state". Without this,
+  // such a book would record the new plan and then sit there for ever,
+  // finished, with nothing queued and no EPUB coming.
+  //
+  // The rule is `reopensForConversion`; what this line adds is only
+  // *when* it applies — to a book already past `draft`, since a draft
+  // is queued by this same save anyway.
+  const startsConverting =
+    alreadyConverting && reopensForConversion(sourceKind, previousPlan, plan)
 
   // The quota counts conversions, so a book that will not be converted
   // does not consume one. Publishing a PDF as it stands, or filing an
   // uploaded EPUB, costs no pages read and no rendering — charging for
   // it would be charging for a decision to *not* use the pipeline.
-  if (!alreadyConverting && needsConverter(sourceKind, plan)) {
+  //
+  // Which is also why the flip above is checked here: the decision not
+  // to convert is being reversed, and that is the moment the cost is
+  // actually incurred.
+  if ((!alreadyConverting || startsConverting) && needsConverter(sourceKind, plan)) {
     const quota = await checkQuotaFor(payload, {
       userId: user.id,
       pagesRequested: book.estimatedPages ?? 0,
       isAdmin: Boolean(user.roles?.includes('admin')),
+      // This book is past `draft` on the flip, so it is already inside
+      // the month's own usage. Counting it there *and* as the book
+      // being requested would charge a 700-page scan 1400 pages and
+      // refuse it on the strength of itself.
+      excludeBookId: bookId,
     })
     if (!quota.allowed) {
       // The draft survives, deliberately. The book is not the problem;
@@ -139,19 +169,29 @@ export async function saveBookDetails(
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collection: collectionId,
-        status: 'in_production',
+        // Only while the book is on its way through the pipeline.
+        // Setting it unconditionally would take a finished book — which
+        // a PDF published as it stands is the moment it settles — and
+        // quietly move it back out of `published`, where the catalog
+        // query and `authorizeDownload` both look for it, because
+        // somebody corrected its title.
+        ...(alreadyConverting && !startsConverting ? {} : { status: 'in_production' as const }),
         // Queued either way. A reader who is not asking for publication
         // still wants their EPUB.
         conversion: {
           ...book.conversion,
-          state: alreadyConverting ? book.conversion?.state : 'queued',
+          state: alreadyConverting && !startsConverting ? book.conversion?.state : 'queued',
           // What the uploader chose, narrowed to what this source can
           // actually do. A form value is untrusted input: asking for
           // `as_is` on a DOCX would publish a Word file as a book.
           plan,
-          // Stamped once, when the book first enters the pipeline. This
-          // is what the monthly count is scoped by.
-          startedAt: book.conversion?.startedAt ?? new Date().toISOString(),
+          // Stamped when the book enters the pipeline. This is what the
+          // monthly count is scoped by, which is why the flip re-stamps
+          // it: the conversion is being paid for in *this* month, not
+          // in whichever month the file was first uploaded as it stood.
+          startedAt: startsConverting
+            ? new Date().toISOString()
+            : (book.conversion?.startedAt ?? new Date().toISOString()),
         },
       },
       overrideAccess: true,

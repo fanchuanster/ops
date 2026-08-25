@@ -3,7 +3,12 @@
 import { type CSSProperties, useActionState } from 'react'
 
 import { saveBookDetails, type DetailsState } from '../app/(frontend)/actions/bookDetails'
-import { type PublicationPlan, type SourceKind, plansFor } from '../domain/publication'
+import {
+  type PublicationPlan,
+  type SourceKind,
+  defaultPlanFor,
+  plansFor,
+} from '../domain/publication'
 
 /**
  * The editable summary of an uploaded book.
@@ -75,19 +80,31 @@ export interface EditableBook {
   plan: PublicationPlan
 }
 
-/** What each plan actually does, in the uploader's terms. */
+/**
+ * What each plan actually does, in the uploader's terms.
+ *
+ * The tags say which one is going to happen if the uploader does
+ * nothing, and that is `as_is` since 2026-08-25 (`defaultPlanFor`).
+ * "Recommended" therefore moved with it — a pre-selected option sitting
+ * next to a differently-labelled recommendation is the form telling the
+ * reader two things at once.
+ *
+ * Converting keeps a tag of its own rather than losing one, because
+ * what it gives is the thing this project exists for and the copy
+ * should not read as a consolation.
+ */
 const PLAN_COPY: Record<PublicationPlan, { tag: string; label: string; detail: string }> = {
   convert: {
-    tag: 'Recommended',
+    tag: 'Best to read',
     label: 'Convert & Generate',
     detail:
-      'Pages are read and text is rebuilt to reflow — adjustable size, chapter navigation, readable on any device. Produces a typeset EPUB and PDF.',
+      'Pages are read and text is rebuilt to reflow — adjustable size, chapter navigation, readable on any device. Produces a typeset EPUB and PDF. Takes a while, and you can start it later.',
   },
   as_is: {
-    tag: 'Faster',
+    tag: 'Recommended',
     label: 'Submit PDF for Review',
     detail:
-      'Publish exactly what you uploaded. Perfect fidelity — but text won’t reflow, so it can’t adapt to a Kindle’s screen. Convert later if you change your mind.',
+      'Publish exactly what you uploaded, ready straight away. Perfect fidelity — but text won’t reflow, so it can’t adapt to a Kindle’s screen. Convert later if you change your mind.',
   },
 }
 
@@ -270,7 +287,10 @@ export function BookDetailsForm({
               <input type="radio" name="plan" value={plan} defaultChecked={plan === book.plan} />
               <span
                 className={`plan-card__tag${
-                  plan === 'convert' ? ' plan-card__tag--recommended' : ''
+                  // Follows the default rather than naming a plan, so
+                  // the highlight cannot drift away from the option
+                  // that is actually pre-selected.
+                  plan === defaultPlanFor(book.sourceKind) ? ' plan-card__tag--recommended' : ''
                 }`}
               >
                 {PLAN_COPY[plan].tag}

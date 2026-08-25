@@ -21,6 +21,17 @@ export async function usageThisMonth(
   payload: Payload,
   userId: string | number,
   now = new Date(),
+  /**
+   * A book to leave out of the count.
+   *
+   * For the one case where the book being decided about is already in
+   * the month's usage: a PDF published as it stands has settled past
+   * `draft`, so when its owner changes their mind and asks for a
+   * conversion, counting it as existing usage *and* as the request
+   * would charge it twice and refuse a long scan on the strength of
+   * itself.
+   */
+  excludeBookId?: string | number,
 ): Promise<QuotaUsage> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
 
@@ -29,6 +40,7 @@ export async function usageThisMonth(
     where: {
       and: [
         { owner: { equals: userId } },
+        ...(excludeBookId === undefined ? [] : [{ id: { not_equals: excludeBookId } }]),
         // Anything past `draft` has been through the pipeline, or is in
         // it. A failed conversion still consumed the work. Derived from
         // the state list rather than spelled out here, so a new phase
@@ -59,17 +71,20 @@ export async function checkQuotaFor(
     pagesRequested,
     isAdmin,
     now = new Date(),
+    excludeBookId,
   }: {
     userId: string | number
     pagesRequested: number
     isAdmin: boolean
     now?: Date
+    /** See `usageThisMonth`: the book being decided about, if it is already counted. */
+    excludeBookId?: string | number
   },
 ): Promise<QuotaDecision> {
   // Skip the query entirely for an administrator; there is no answer it
   // could give that would change the outcome.
   if (isAdmin) return checkUploadQuota({ uploads: 0, pages: 0, pagesRequested, isAdmin: true })
 
-  const usage = await usageThisMonth(payload, userId, now)
+  const usage = await usageThisMonth(payload, userId, now, excludeBookId)
   return checkUploadQuota({ ...usage, pagesRequested })
 }

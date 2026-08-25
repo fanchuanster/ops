@@ -139,7 +139,7 @@ export type PublicationPlan = 'convert' | 'as_is'
 export function plansFor(kind: SourceKind): PublicationPlan[] {
   switch (kind) {
     case 'pdf':
-      return ['convert', 'as_is']
+      return ['as_is', 'convert']
     case 'epub':
       return ['as_is']
     default:
@@ -151,10 +151,28 @@ export function plansFor(kind: SourceKind): PublicationPlan[] {
  * The plan to take when the uploader has not chosen, or chose something
  * this source cannot do.
  *
- * Converting is the default for a PDF. The mission is books that are
- * pleasant to *read* (CLAUDE.md), and an unconverted scan is the thing
- * that mission exists to improve on — so the reflowable edition is what
- * happens unless someone decides otherwise.
+ * It is the first plan `plansFor` offers, which for a PDF is `as_is` —
+ * publish the file as it stands, convert nothing, wait for nothing.
+ *
+ * That is a reversal, on 2026-08-25. Converting was the default until
+ * then, on the reasoning that the mission is books that are pleasant to
+ * *read* and an unconverted scan is the thing that mission exists to
+ * improve on. That reasoning is still true about the finished book; it
+ * was wrong about this moment. Converting is the expensive path — an
+ * Adobe export, a converter that may not be polling, minutes to hours
+ * before the uploader sees anything — and it was being taken on behalf
+ * of someone who had done nothing but choose a file.
+ *
+ * The default is now the one that finishes immediately, because it is
+ * the one that cannot be regretted: the original is kept whatever
+ * happens (`originalArtifact`), and converting later is a button on the
+ * book's own page. The reverse is not symmetric — a reader who wanted
+ * the file published today cannot un-wait for a conversion.
+ *
+ * Nothing about the mission is conceded by this. The uploader is still
+ * offered `convert` first-class on the same screen, and what publishing
+ * as it stands costs — no EPUB, no reflow, no Kindle-shaped text — is
+ * said in the option's own copy rather than left for them to discover.
  */
 export function defaultPlanFor(kind: SourceKind): PublicationPlan {
   return plansFor(kind)[0]!
@@ -251,6 +269,33 @@ export function needsExport(kind: SourceKind, plan: PublicationPlan): boolean {
  */
 export function needsConverter(kind: SourceKind, plan: PublicationPlan): boolean {
   return plan === 'convert' && formatsToGenerate(kind).length > 0
+}
+
+/**
+ * Has a book that was published as it stands just been asked to convert
+ * after all?
+ *
+ * The reversal in `defaultPlanFor` is what makes this a rule worth
+ * naming rather than a condition in a form handler. Publishing as it
+ * stands is the default, so "convert it after all" is no longer an
+ * unusual second thought — it is the ordinary road to an EPUB, taken
+ * *after* the book has already settled and stopped moving.
+ *
+ * A book in that position has to re-enter the queue, which is the one
+ * thing a settled book otherwise never does. Nothing it already has is
+ * lost by doing so: the uploaded PDF is filed as the book's own PDF
+ * artifact, and `formatsToGenerate` builds only the EPUB on top of it.
+ *
+ * Deliberately one-way. A converted book set back to `as_is` is a
+ * record of a preference, not an instruction to delete an EPUB that may
+ * already have been sent to somebody's device.
+ */
+export function reopensForConversion(
+  kind: SourceKind,
+  previous: PublicationPlan,
+  next: PublicationPlan,
+): boolean {
+  return previous === 'as_is' && needsConverter(kind, next)
 }
 
 /**

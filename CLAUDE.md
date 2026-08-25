@@ -530,8 +530,32 @@ list of one.
 
 Publishing as it stands means the reader gets a fixed-layout book and no
 EPUB. That is a real cost against the mission — "not merely to host
-PDFs" — and the reason converting is the default rather than the choice
-being neutral. The decision is reversible: the owner can convert later.
+PDFs" — and it was the reason converting was the default rather than the
+choice being neutral.
+
+**Since 2026-08-25 the default is the other one**: publish it as it
+stands, convert nothing, ready immediately. The reasoning above is still
+right about the finished book and was wrong about this moment.
+Converting is the expensive path — an Adobe export, a converter that may
+not be polling, minutes to hours before the uploader sees anything — and
+it was being taken on behalf of someone who had done nothing yet but
+choose a file.
+
+What makes the fast default safe is that it is the one that cannot be
+regretted. The original is kept whatever is chosen, so nothing is lost
+by starting there, and a reader who wanted their book today cannot
+un-wait for a conversion they did not ask for. The mission is served by
+the option being offered plainly on the same screen, with what it costs
+to skip it said out loud, rather than by taking the decision for them.
+
+The decision stays reversible, and *that* is now load-bearing rather
+than a footnote: switching a settled book from as-it-stands to converted
+puts it back in the queue, re-stamps its `startedAt` so the conversion
+is charged to the month it actually happens in, and builds the EPUB on
+top of the PDF already filed (`saveBookDetails`). Only in that
+direction — a converted book set back to as-it-stands is a metadata
+change, not a request to delete an EPUB somebody may already have been
+sent.
 
 ## Everything slow is queued, and a worker moves the book
 
