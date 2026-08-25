@@ -111,10 +111,15 @@ export async function getLibrary({ query, collectionId }: LibraryFilter) {
   }
   if (collectionId !== null) filters.push({ collection: { equals: collectionId } })
 
+  // The order the books sit in on their shelves, which is the order a
+  // reader browsing the library meets them in — an editor arranging
+  // that order has to be looking at it. Title underneath, for the books
+  // nobody has numbered and for the "Other" group, which has no shelf
+  // to be ordered on.
   const result = await payload.find({
     collection: 'books',
     where: filters.length > 0 ? { and: filters } : {},
-    sort: 'title',
+    sort: ['collectionOrder', 'title'],
     limit: PAGE_LIMIT,
     depth: 1,
     overrideAccess: true,

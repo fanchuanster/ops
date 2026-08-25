@@ -1,8 +1,10 @@
 import { APIError } from 'payload'
 
 import { parseCollectionUpdate } from '../../../../../../domain/adminApi'
+import { parentIdOf } from '../../../../../../domain/collectionTree'
 import { adminFromRequest, unauthorized } from '../../../../../../lib/apiAuth'
 import { logError } from '../../../../../../lib/logError'
+import { placeCollectionAmongSiblings } from '../../../../../../lib/shelfPlacement'
 import { revalidateCuration } from '../../shared'
 
 /**
@@ -72,6 +74,20 @@ export async function PATCH(
       overrideAccess: true,
       user: admin,
     })
+
+    // A stated order shifts whatever is standing at that number, so a
+    // script moving a shelf leaves the sibling group in the same state
+    // the admin screen would (`lib/shelfPlacement.ts`). After the write,
+    // because the parent whose group this is a place in may have
+    // changed in the same PATCH.
+    if (typeof parsed.data.sortOrder === 'number') {
+      await placeCollectionAmongSiblings(payload, {
+        collectionId: id,
+        parentId: parentIdOf(updated),
+        desired: parsed.data.sortOrder,
+      })
+    }
+
     await revalidateCuration()
     return Response.json({ collection: serialize(updated) })
   } catch (error) {

@@ -2,7 +2,11 @@
 
 import { useActionState, useState } from 'react'
 
-import { saveBookDetails, type LibraryState } from '../../app/(admin)/actions/library'
+import {
+  deleteLibraryBook,
+  saveBookDetails,
+  type LibraryState,
+} from '../../app/(admin)/actions/library'
 import { BOOK_LEVELS, LEVEL_DESCRIPTIONS, LEVEL_LABELS, type BookLevel } from '../../domain/levels'
 import { BookCoverControl } from './BookCoverControl'
 
@@ -12,6 +16,12 @@ import { BookCoverControl } from './BookCoverControl'
  * The design's right-hand panel, adopted as drawn: title, original
  * title, author, description, shelf and level, with an explicit Save
  * and a Discard that appears only once something has changed.
+ *
+ * One field the design does not draw: where the book sits on its shelf.
+ * A book is given that number when it is filed and it is what a reader
+ * browsing in the curated order is sorted by (`domain/shelfOrder.ts`),
+ * so without a box for it the order could only ever be the order the
+ * books happened to arrive in.
  *
  * Since the Books and Collections screens merged this is also the only
  * place a single book's level is set — the row shows it as a label
@@ -29,6 +39,11 @@ import { BookCoverControl } from './BookCoverControl'
  * the screen for changing books. It saves on choosing a file rather
  * than on Save — see `BookCoverControl`.
  *
+ * Deleting is here and is deliberately at the bottom, outside the
+ * form: it is not a field, it cannot be part of Save, and a `<form>`
+ * inside a `<form>` is not valid HTML. The server decides whether it is
+ * allowed (`deleteLibraryBook`) — the confirmation is courtesy.
+ *
  * Deliberately absent: rights status, visibility, ownership, review.
  * Visibility in particular is no longer a field anybody sets — a book
  * is in the library because it was approved (`actions/review.ts`), and
@@ -44,11 +59,24 @@ export interface BookEditValues {
   description: string
   level: BookLevel
   collectionId: number | null
+  /**
+   * Where it sits among the books on that shelf, lowest first.
+   *
+   * Null for a book on no shelf, and for one nobody has numbered — the
+   * box is empty in both cases, and leaving it empty changes nothing.
+   */
+  collectionOrder: number | null
   slug: string
   /** In the public library — which since 2026-08-24 means "approved". */
   published: boolean
   /** Deliveries to e-readers. Not downloads; NobleSee has none. */
   sent: number
+  /** Who uploaded it, or null for a book staff entered. */
+  uploader: string | null
+  /** Their email, when the name above was not already it. */
+  uploaderEmail: string | null
+  /** The day it arrived, ISO, formatted on the server. */
+  uploaded: string
   /** What a reader sees: the upload, else page one, else neither. */
   coverUrl: string | null
   /** Whether that picture is an editor's upload, so removable. */
@@ -56,6 +84,8 @@ export interface BookEditValues {
   /** Which rendered page the book wears, and what else was rendered. */
   coverPage: number
   coverPages: number[]
+  /** Whether any page of the book has been rasterized yet. */
+  hasRenderedCover: boolean
   /** Whether a browser could render pages for it from an artifact. */
   canMakeCover: boolean
 }
@@ -70,6 +100,10 @@ export function BookEditPanel({
   closeHref: string
 }) {
   const [state, save, saving] = useActionState<LibraryState, FormData>(saveBookDetails, {})
+  const [removeState, remove, removing] = useActionState<LibraryState, FormData>(
+    deleteLibraryBook,
+    {},
+  )
 
   // Keyed by the book's id so opening a different row resets the draft
   // rather than carrying the last one's half-typed title across.
@@ -86,7 +120,15 @@ export function BookEditPanel({
   // The cover is not part of the draft: it saves on its own, the moment
   // a file is chosen, so comparing it here would leave Save enabled
   // after an upload with nothing for it to write.
-  const EDITED = ['title', 'originalTitle', 'author', 'description', 'level', 'collectionId'] as const
+  const EDITED = [
+    'title',
+    'originalTitle',
+    'author',
+    'description',
+    'level',
+    'collectionId',
+    'collectionOrder',
+  ] as const
   const dirty = EDITED.some((key) => draft[key] !== book[key])
 
   const face = Array.from((book.originalTitle || book.title).trim())[0] ?? '·'
@@ -97,12 +139,12 @@ export function BookEditPanel({
         <div className="admin-bookcell">
           <BookCoverControl
             bookId={book.id}
-            slug={book.slug}
             coverUrl={book.coverUrl}
             hasUploadedCover={book.hasUploadedCover}
             canMakeCover={book.canMakeCover}
             coverPage={book.coverPage}
             coverPages={book.coverPages}
+            hasRendered={book.hasRenderedCover}
             face={face}
           />
           <span>
@@ -117,6 +159,21 @@ export function BookEditPanel({
                 {book.sent} sent
               </span>
             </p>
+            {/* Where the book came from. Below the chips rather than
+                beside them, because it is a sentence and they are
+                labels — and it is the answer to the question the
+                Library screen's own column raises. */}
+            <p className="admin-panel__meta admin-quiet">
+              {book.uploader
+                ? `Uploaded by ${book.uploader}`
+                : 'Entered by staff — no uploader'}
+              {book.uploaded ? ` · ${book.uploaded}` : null}
+            </p>
+            {/* The email only when the name shown above was something
+                else — repeating it under itself says nothing. */}
+            {book.uploaderEmail ? (
+              <p className="admin-panel__meta admin-quiet">{book.uploaderEmail}</p>
+            ) : null}
           </span>
         </div>
         <a className="admin-panel__close" href={closeHref} aria-label="Close">
@@ -198,6 +255,37 @@ export function BookEditPanel({
           </select>
         </div>
 
+        <div className="admin-field">
+          <label htmlFor="book-order">Order on shelf</label>
+          <input
+            id="book-order"
+            name="collectionOrder"
+            className="admin-num"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            value={draft.collectionOrder === null ? '' : String(draft.collectionOrder)}
+            onChange={(event) =>
+              set(
+                'collectionOrder',
+                event.target.value === '' ? null : Number(event.target.value),
+              )
+            }
+            disabled={draft.collectionId === null}
+          />
+          {/* Two sentences because two things are non-obvious: that a
+              taken number shifts rather than collides, and that this is
+              a position on one shelf rather than in the library. The
+              box is disabled under "Other" — a book on no shelf has
+              nothing to be third of. */}
+          <p className="admin-quiet">
+            {draft.collectionId === null
+              ? 'A book has a place only once it is on a shelf.'
+              : 'Where readers meet it on this shelf. A number another book has shifts that book down.'}
+          </p>
+        </div>
+
         <fieldset className="admin-field admin-field--level">
           <legend>Level</legend>
           {/* Radios rather than buttons: three mutually exclusive
@@ -236,6 +324,27 @@ export function BookEditPanel({
 
         {state.error ? <p className="form-error">{state.error}</p> : null}
         {state.ok && !state.error && !dirty ? <p className="admin-ok">{state.ok}</p> : null}
+      </form>
+
+      <form action={remove} className="admin-panel__danger">
+        <input type="hidden" name="bookId" value={book.id} />
+        <button
+          type="submit"
+          className="admin-linkbtn admin-linkbtn--danger"
+          disabled={removing}
+          onClick={(event) => {
+            const confirmed = window.confirm(
+              `Delete “${book.title}”?\n\n` +
+                'This removes the uploaded file, the DOCX master, every format made ' +
+                'from it and the cover. It cannot be undone.\n\n' +
+                'A book readers have spent credits on cannot be deleted at all.',
+            )
+            if (!confirmed) event.preventDefault()
+          }}
+        >
+          {removing ? 'Deleting…' : 'Delete this book'}
+        </button>
+        {removeState.error ? <p className="form-error">{removeState.error}</p> : null}
       </form>
     </aside>
   )

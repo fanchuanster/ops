@@ -1,9 +1,12 @@
+import { headers } from 'next/headers'
 import React from 'react'
 
 import { AccountLink } from '../../components/AccountLink'
 import { BrandMark } from '../../components/BrandMark'
+import { GoogleAnalytics } from '../../components/GoogleAnalytics'
 import { GoogleOneTap } from '../../components/GoogleOneTap'
 import { SiteNav } from '../../components/SiteNav'
+import { analyticsMeasurementId } from '../../lib/analytics'
 import { getCurrentUser } from '../../lib/auth'
 import { isGoogleSignInConfigured } from '../../lib/googleOAuth'
 import './styles.css'
@@ -22,6 +25,10 @@ export const metadata = {
 
 export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser()
+  // Null unless analytics is configured *and* this request reached the
+  // canonical public origin — which is what keeps `wrangler dev` and
+  // the `*.workers.dev` URL out of the property (`lib/analytics.ts`).
+  const measurementId = analyticsMeasurementId((await headers()).get('host'))
 
   return (
     <html lang="en">
@@ -54,6 +61,14 @@ export default async function FrontendLayout({ children }: { children: React.Rea
             Rendering it otherwise would prompt someone who already has a
             session, or load Google's script for nothing. */}
         {!user && isGoogleSignInConfigured() ? <GoogleOneTap /> : null}
+
+        {/* The public site only — `/admin` has its own layout and is
+            never measured. `/account` used to be excluded here too;
+            that needed the pathname, which needed a client component,
+            which is what stopped the tag reaching the HTML at all. Its
+            URLs carry ids rather than titles, so measuring them says
+            far less than the book pages already do. */}
+        {measurementId ? <GoogleAnalytics measurementId={measurementId} /> : null}
 
         {children}
 

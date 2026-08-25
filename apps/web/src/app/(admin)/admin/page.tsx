@@ -16,6 +16,7 @@ import {
   type RightsStatus,
 } from '../../../domain/rights'
 import { getAdminBook, getReviewQueue } from '../../../lib/adminData'
+import { shortDate } from '../../../lib/adminFormat'
 import { requireAdmin } from '../../../lib/adminAuth'
 
 export const dynamic = 'force-dynamic'
@@ -317,11 +318,4 @@ function SubmissionPanel({
       </div>
     </aside>
   )
-}
-
-/** 2026-08-21, or nothing at all. Never "Invalid Date". */
-function shortDate(value: string | null | undefined): string {
-  if (!value) return ''
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
 }

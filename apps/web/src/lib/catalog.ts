@@ -16,15 +16,18 @@ import { getPayload, type TypedUser, type Where } from 'payload'
 
 import { subtreeIds } from '../domain/collectionTree'
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
+import { DEFAULT_SHELF_SORT, type ShelfSort } from '../domain/shelfOrder'
 import { slugFromParam } from './slugParam'
 
 export async function getCatalog({
   collectionSlug,
   level = DEFAULT_BROWSE_LEVEL,
+  sort = DEFAULT_SHELF_SORT,
   limit = 48,
 }: {
   collectionSlug?: string
   level?: BookLevel
+  sort?: ShelfSort
   limit?: number
 } = {}) {
   const payload = await getPayload({ config })
@@ -71,31 +74,48 @@ export async function getCatalog({
   ]
   if (collectionIds) filters.push({ collection: { in: collectionIds } })
 
+  // Sorted in the database and not only in the page, because `limit`
+  // truncates: browsing in the curated order has to take the first
+  // forty-eight *by that order*, not the first forty-eight
+  // alphabetically and then rearrange them.
+  //
+  // `collectionOrder` is a position within one shelf, so this is not a
+  // meaningful global ordering — the page groups the result by shelf
+  // and each shelf comes out in its own order, which is the only thing
+  // asked of it. The title key underneath settles books on different
+  // shelves that share a number, and books nobody has numbered.
   const books = await payload.find({
     collection: 'books',
     where: { and: filters },
-    sort: 'title',
+    sort: sort === 'alphabetical' ? 'title' : ['collectionOrder', 'title'],
     limit,
     depth: 1,
     overrideAccess: false,
   })
 
-  return { books: books.docs, collection: collectionSlug ?? null, level }
+  return { books: books.docs, collection: collectionSlug ?? null, level, sort }
 }
 
 /**
- * Every collection, in the order an editor put them in.
+ * Every collection, in the order asked for.
  *
- * `sortOrder` first, `title` second. The second key is not decoration:
- * `sortOrder` is nullable, so a collection nobody has moved still lands
- * in the alphabetical order it has always had rather than in whatever
- * order the rows happen to come back in.
+ * Curated: `sortOrder` first, `title` second. The second key is not
+ * decoration — `sortOrder` is nullable, so a collection nobody has
+ * moved still lands in the alphabetical order it has always had rather
+ * than in whatever order the rows happen to come back in.
+ *
+ * A–Z: title alone, which is the point of asking for it.
+ *
+ * Order is per-parent, and this is a flat list of every collection at
+ * every depth — `buildTree` preserves the order it is given, so sorting
+ * the whole list here orders each sibling group correctly and there is
+ * no second ordering rule inside the tree builder to keep in step.
  */
-export async function getCollections() {
+export async function getCollections(sort: ShelfSort = DEFAULT_SHELF_SORT) {
   const payload = await getPayload({ config })
   const result = await payload.find({
     collection: 'book-collections',
-    sort: ['sortOrder', 'title'],
+    sort: sort === 'alphabetical' ? ['title'] : ['sortOrder', 'title'],
     limit: 100,
     depth: 1,
     overrideAccess: false,

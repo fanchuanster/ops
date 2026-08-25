@@ -1,6 +1,6 @@
 import React from 'react'
 
-import { coverImageUrl } from '../domain/cover'
+import { coverImageUrl, uploadedCoverId } from '../domain/cover'
 import { readingFormat } from '../domain/publication'
 
 export interface BookTileData {
@@ -58,12 +58,12 @@ export interface BookTileData {
  * apologise.
  */
 export function BookTile({ book }: { book: BookTileData }) {
-  const uploaded = typeof book.cover === 'object' && book.cover !== null ? book.cover : null
-  // An uploaded cover, then page one of the book, then neither — at
-  // which point the face below is what a NobleSee book looks like
-  // (`domain/cover.ts`).
+  // An uploaded cover, then the chosen page of the book, then neither —
+  // at which point the face below is what a NobleSee book looks like
+  // (`domain/cover.ts`). Both are served by `/covers/<id>`, so a tile
+  // for a book this reader may not see shows the face, not a picture.
   const cover = coverImageUrl({
-    uploadedUrl: uploaded?.url,
+    uploadedId: uploadedCoverId(book.cover),
     bookId: book.id,
     generated: book.generatedCover ?? {},
   })

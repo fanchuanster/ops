@@ -4,7 +4,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { SendToKindleButton } from '../../../../components/SendToKindleButton'
-import { coverImageUrl } from '../../../../domain/cover'
+import { coverAltFor, coverImageUrl, uploadedCoverId } from '../../../../domain/cover'
 import { priceInCredits } from '../../../../domain/credits'
 import { isKindleDeliverableFormat } from '../../../../domain/kindle'
 import { readingFormat } from '../../../../domain/publication'
@@ -60,11 +60,11 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
   const book = await getBookBySlug(slug, reader)
   if (!book) notFound()
 
-  const uploaded = typeof book.cover === 'object' && book.cover !== null ? book.cover : null
-  // The uploaded cover first, then page one of the book. Only when there
-  // is neither does the title itself stand in (`domain/cover.ts`).
+  // The uploaded cover first, then the chosen page of the book. Only
+  // when there is neither does the title itself stand in
+  // (`domain/cover.ts`).
   const cover = coverImageUrl({
-    uploadedUrl: uploaded?.url,
+    uploadedId: uploadedCoverId(book.cover),
     bookId: book.id,
     generated: book.generatedCover ?? {},
   })
@@ -99,8 +99,14 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
       <article>
         <header className="book-head">
           <div className="book-card__cover">
+            {/* The alt read the Media document's own `alt` before, and
+                that was only ever `coverAltFor(book.title)` — what an
+                upload stores (`actions/cover.ts`). Deriving it saves
+                populating a relationship for one string, and says the
+                same thing whether the picture is an uploaded image or a
+                page of the book. */}
             {cover ? (
-              <img src={cover} alt={uploaded?.alt || `Cover of ${book.title}`} />
+              <img src={cover} alt={coverAltFor(book.title)} />
             ) : (
               <span className="book-card__cover--empty cjk" aria-hidden="true">
                 {book.originalTitle || book.title}

@@ -6,6 +6,7 @@ import {
 } from "../../../../components/admin/ReaderEditPanel";
 import { getAdminUsers } from "../../../../lib/adminData";
 import { isAdmin, requireAdmin } from "../../../../lib/adminAuth";
+import { shortDate } from "../../../../lib/adminFormat";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Readers" };
@@ -64,7 +65,7 @@ export default async function AdminUsersPage({
         credits: selected.user.credits ?? 0,
         uploads: selected.uploads,
         published: selected.published,
-        joined: shortDate(selected.user.createdAt),
+        joined: shortDate(selected.user.createdAt, "—"),
       }
     : null;
 
@@ -138,7 +139,7 @@ export default async function AdminUsersPage({
                         {user.credits ?? 0}
                       </td>
                       <td className="admin-col--md admin-quiet">
-                        {shortDate(user.createdAt)}
+                        {shortDate(user.createdAt, "—")}
                       </td>
                       <td>
                         {isAdmin(user) ? (
@@ -167,10 +168,4 @@ export default async function AdminUsersPage({
       ) : null}
     </div>
   );
-}
-
-function shortDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toISOString().slice(0, 10);
 }

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
 import { canNest, parentIdOf, subtreeIds } from '../../../domain/collectionTree'
+import { resequence } from '../../../domain/shelfOrder'
 import {
   isBookLevel,
   isLevelApplyMode,
@@ -15,6 +16,7 @@ import {
 import type { BookCollection } from '../../../payload-types'
 import { currentAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
+import { placeCollectionAmongSiblings } from '../../../lib/shelfPlacement'
 
 /**
  * The shelves: naming them, describing them, filing them under one
@@ -147,10 +149,17 @@ export async function saveCollection(
   const before = collections.find((collection) => collection.id === id)
   if (!before) return { error: 'No collection named.' }
 
+  // The number an editor typed into the order box, if they typed one.
+  // Blank is not zero and not "put it back at the end" — it is "I did
+  // not touch this", so the shelf keeps the place it has.
+  const order = requestedOrder(formData)
+  if (order === 'invalid') return { error: 'An order is a whole number.' }
+
   // Moving to a new parent puts it among strangers, so it goes to the
   // end of them rather than landing in the middle on whatever number it
-  // happened to carry from its old siblings.
-  const sortOrder = parentIdOf(before) === parent ? undefined : lastAmong(collections, parent)
+  // happened to carry from its old siblings. That is the collection's
+  // own hook (`assignSiblingOrder`), which every door into the table
+  // passes through — not something this screen has to remember.
 
   try {
     // The slug is deliberately left alone. It is in every link a reader
@@ -160,14 +169,21 @@ export async function saveCollection(
     await payload.update({
       collection: 'book-collections',
       id,
-      data: {
-        title,
-        description: description || null,
-        parent,
-        ...(sortOrder === undefined ? {} : { sortOrder }),
-      },
+      data: { title, description: description || null, parent },
       overrideAccess: true,
     })
+
+    // After the move, not with it: the number is a place among the
+    // shelves on the *new* parent, and whatever is already standing at
+    // that number has to be shifted along to keep the numbers unique
+    // (`lib/shelfPlacement.ts`).
+    if (order !== null) {
+      await placeCollectionAmongSiblings(payload, {
+        collectionId: id,
+        parentId: parent,
+        desired: order,
+      })
+    }
   } catch (error) {
     logError('admin.collections.save', error)
     return { error: 'That change could not be saved.' }
@@ -177,14 +193,20 @@ export async function saveCollection(
   return {}
 }
 
-/** One past the last `sortOrder` among a parent's children. */
-function lastAmong(
-  collections: readonly BookCollection[],
-  parent: number | null,
-): number {
-  return collections
-    .filter((collection) => parentIdOf(collection) === parent)
-    .reduce((highest, sibling) => Math.max(highest, sibling.sortOrder ?? 0), 0) + 1
+/**
+ * The order number a form is asking for: a number, null for "leave it
+ * where it is", or `invalid` for something that is not a whole number.
+ *
+ * Blank means untouched rather than zero. The box is pre-filled with
+ * the number the shelf already has, so an editor who clears it has said
+ * nothing about the order — and reading that as "move it to the front"
+ * would reorder the library every time somebody fixed a description.
+ */
+function requestedOrder(formData: FormData): number | null | 'invalid' {
+  const raw = String(formData.get('sortOrder') ?? '').trim()
+  if (raw === '') return null
+  const order = Number(raw)
+  return Number.isInteger(order) ? order : 'invalid'
 }
 
 /**
@@ -239,12 +261,16 @@ export async function moveCollection(
   ;[order[from], order[to]] = [order[to], order[from]]
 
   try {
+    // Numbered from one, like every other order id in the library
+    // (`resequence` in `domain/shelfOrder.ts`) — the arrows and the
+    // order box on the same card must not disagree about what the first
+    // shelf is called.
     await Promise.all(
-      order.map((collectionId, index) =>
+      resequence(order.map((collectionId) => ({ id: collectionId, title: '' }))).map((write) =>
         payload.update({
           collection: 'book-collections',
-          id: collectionId,
-          data: { sortOrder: index },
+          id: write.id as number,
+          data: { sortOrder: write.order },
           overrideAccess: true,
         }),
       ),

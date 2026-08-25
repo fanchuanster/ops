@@ -2,7 +2,11 @@
 
 import { useActionState, useRef } from 'react'
 
-import { removeBookCover, saveBookCover, type CoverState } from '../../app/(admin)/actions/cover'
+import {
+  removeBookCover,
+  saveBookCover,
+  type CoverState,
+} from '../../app/(frontend)/actions/cover'
 import { CoverPagePicker } from '../CoverPagePicker'
 import { MakeCoverButton } from '../MakeCoverButton'
 
@@ -26,6 +30,12 @@ import { MakeCoverButton } from '../MakeCoverButton'
  * Remove appears only when there is an upload to remove, because it is
  * not a way to have no cover — it falls back to page one.
  *
+ * Both write through `app/(frontend)/actions/cover.ts`, which is not a
+ * layering slip: since 2026-08-25 uploading a cover is the owner's as
+ * much as an editor's, so the action sits beside the page choice it
+ * already shared a rule with. This component is the admin's *view* of
+ * it, not its own authority.
+ *
  * Under it, when the converter rendered alternatives and no upload is
  * covering them, the choice of *which* page the book wears. That
  * control is shared with the uploader's own book page rather than being
@@ -35,24 +45,25 @@ import { MakeCoverButton } from '../MakeCoverButton'
  */
 export function BookCoverControl({
   bookId,
-  slug,
   coverUrl,
   hasUploadedCover,
   canMakeCover,
   coverPage,
   coverPages,
+  hasRendered,
   face,
 }: {
   bookId: number
-  slug: string
   coverUrl: string | null
   hasUploadedCover: boolean
   /** Whether the book has an artifact a browser can render pages from. */
   canMakeCover: boolean
   /** Which rendered page the book wears. */
   coverPage: number
-  /** Every page the converter rendered for it, in order. */
+  /** Every page rendered for it, in order. */
   coverPages: number[]
+  /** Whether any page of it has actually been rasterized yet. */
+  hasRendered: boolean
   /** The book's first character, drawn when there is no picture at all. */
   face: string
 }) {
@@ -108,19 +119,19 @@ export function BookCoverControl({
       {hasUploadedCover ? (
         <form action={remove}>
           <input type="hidden" name="bookId" value={bookId} />
-          <input type="hidden" name="slug" value={slug} />
           <button type="submit" className="admin-linkbtn" disabled={busy}>
             {removing ? 'Removing…' : 'Use page one'}
           </button>
         </form>
       ) : null}
 
-      {hasUploadedCover || !canMakeCover ? null : (
+      {/* Only while there is nothing rendered: the same file's opening
+          pages rasterize to the same pictures every time, so "render
+          again" only ever cost a download and a wait. A failed render
+          never reaches `ready`, so the offer survives where it helps. */}
+      {hasUploadedCover || !canMakeCover || hasRendered ? null : (
         <p className="admin-cover__make">
-          <MakeCoverButton
-            bookId={bookId}
-            label={coverUrl ? 'Render again' : 'Make a cover'}
-          />
+          <MakeCoverButton bookId={bookId} label="Make a cover" />
         </p>
       )}
 

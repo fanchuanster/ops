@@ -3,11 +3,13 @@ import { APIError } from 'payload'
 
 import { BOOK_LEVELS, DEFAULT_BOOK_LEVEL, LEVEL_DESCRIPTIONS, LEVEL_IDS } from '../domain/levels'
 import {
+  ADMIN_ONLY_BOOK_FIELDS,
   type PublicationBlockedReason,
   REVIEW_STATES,
   canPublishToLibrary,
 } from '../domain/moderation'
 import { priceInCredits } from '../domain/credits'
+import { nextOrderId } from '../domain/shelfOrder'
 import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 
 /**
@@ -121,6 +123,91 @@ const priceFromPageCount: CollectionBeforeChangeHook = ({ data, originalDoc }) =
   return { ...data, priceCredits: priceInCredits(pages) }
 }
 
+/** The shelf a stored relationship names, whatever shape it came back in. */
+function shelfIdOf(value: unknown): number | null {
+  if (typeof value === 'number') return value
+  if (value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'number') {
+    return (value as { id: number }).id
+  }
+  return null
+}
+
+/**
+ * A book filed onto a shelf is given its order id on that shelf.
+ *
+ * The number a reader browsing in the curated order is sorted by
+ * (`domain/shelfOrder.ts`). Assigned here rather than in the upload
+ * flow because there is more than one way a book arrives on a shelf —
+ * the portal, the editorial panel, the seed script, the REST API — and
+ * a book with no number would sort to the end of its shelf whichever
+ * door it came through.
+ *
+ * Three cases, and what is *not* here matters as much as what is:
+ *
+ *   - No shelf: no order id. An order id is a position among a
+ *     collection's own books, so a book on no shelf has none rather
+ *     than a stale number from the shelf it left.
+ *   - A stated number is obeyed exactly. Collisions are resolved by the
+ *     writer that offers the editing (`placeInOrder`, which shifts the
+ *     run out of the way) — never here, because a shift arrives as
+ *     several updates and a hook that second-guessed each one in
+ *     isolation would fight the very move it was handed.
+ *
+ *     "Stated" means *different from what is stored*, and that is not
+ *     pedantry. Payload hands a `beforeChange` hook the whole document
+ *     with the update merged into it, so `data.collectionOrder` is
+ *     always a number on an update — the book's current one when
+ *     nobody touched it. Reading its mere presence as an instruction
+ *     made every move to another shelf keep the number it had on the
+ *     shelf it left, which is exactly the bug this rule exists to
+ *     prevent.
+ *   - Otherwise, a book that has just landed on this shelf goes to the
+ *     end of it. A book already on it keeps the number it has.
+ *
+ * The rule is `nextOrderId`; this hook only fetches what it needs
+ * (CLAUDE.md section 2.1).
+ */
+const assignCollectionOrder: CollectionBeforeChangeHook = async ({
+  data,
+  operation,
+  originalDoc,
+  req,
+}) => {
+  if (!data) return data
+
+  const was = shelfIdOf(originalDoc?.collection)
+  const shelf = 'collection' in data ? shelfIdOf(data.collection) : was
+  if (shelf === null) return { ...data, collectionOrder: null }
+
+  const stated =
+    typeof data.collectionOrder === 'number' &&
+    data.collectionOrder !== originalDoc?.collectionOrder
+  if (stated) return data
+
+  const moved = operation === 'create' || shelf !== was
+  if (!moved && typeof originalDoc?.collectionOrder === 'number') return data
+
+  const siblings = await req.payload.find({
+    collection: 'books',
+    where: { collection: { equals: shelf } },
+    limit: 1000,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+
+  return {
+    ...data,
+    collectionOrder: nextOrderId(
+      siblings.docs
+        // Itself excluded: a book being re-saved on the shelf it is
+        // already on must not be pushed past its own number.
+        .filter((book) => book.id !== originalDoc?.id)
+        .map((book) => ({ id: book.id, title: book.title, order: book.collectionOrder })),
+    ),
+  }
+}
+
 const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {
   not_submitted: 'it has not been submitted for review.',
   awaiting_review: 'its submission is still awaiting review.',
@@ -144,6 +231,35 @@ const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {
  * restated here, so the vocabulary cannot drift between the CMS and the
  * code that enforces it.
  */
+/**
+ * Write access for the fields in `ADMIN_ONLY_BOOK_FIELDS`.
+ *
+ * Those fields were documented as an administrator's since the portal
+ * was built (CLAUDE.md section 6.1) and were enforced only by which
+ * screen offered them — the editorial UI has no control for rights,
+ * visibility or a book's position on its shelf, so nobody could set
+ * them by accident. That is not the same as nobody being able to set
+ * them: Payload's REST and GraphQL APIs are another door, `overrideAccess`
+ * is off there, and an unspecified access rule defaults to "any logged-in
+ * user". A signed-in reader could PATCH `collectionOrder` and walk their
+ * own book to the front of a shelf.
+ *
+ * Payload strips a field a caller may not write rather than failing the
+ * request, which is the right shape here: the rest of an otherwise
+ * legitimate update still applies.
+ *
+ * Every server action and route in the application writes with
+ * `overrideAccess: true`, which skips field access entirely, so this
+ * changes nothing about the admin screens or the upload flow — it only
+ * closes the door those screens were never the lock on.
+ */
+const adminOnlyField = {
+  create: ({ req }: { req: { user?: { roles?: string[] | null } | null } }) =>
+    Boolean(req.user?.roles?.includes('admin')),
+  update: ({ req }: { req: { user?: { roles?: string[] | null } | null } }) =>
+    Boolean(req.user?.roles?.includes('admin')),
+}
+
 export const Books: CollectionConfig = {
   slug: 'books',
   admin: {
@@ -157,7 +273,7 @@ export const Books: CollectionConfig = {
     read: readBooks,
   },
   hooks: {
-    beforeChange: [enforcePublicationReview, priceFromPageCount],
+    beforeChange: [enforcePublicationReview, priceFromPageCount, assignCollectionOrder],
   },
   fields: [
     {
@@ -274,6 +390,7 @@ export const Books: CollectionConfig = {
     },
     {
       name: 'rightsStatus',
+      access: adminOnlyField,
       type: 'select',
       required: true,
       // Fails closed: an unreviewed book is never distributable.
@@ -286,6 +403,7 @@ export const Books: CollectionConfig = {
     },
     {
       name: 'visibility',
+      access: adminOnlyField,
       type: 'select',
       required: true,
       defaultValue: 'private',
@@ -297,6 +415,7 @@ export const Books: CollectionConfig = {
     },
     {
       name: 'level',
+      access: adminOnlyField,
       type: 'number',
       required: true,
       defaultValue: LEVEL_IDS[DEFAULT_BOOK_LEVEL],
@@ -353,6 +472,7 @@ export const Books: CollectionConfig = {
     },
     {
       name: 'review',
+      access: adminOnlyField,
       type: 'group',
       admin: {
         description:
@@ -641,6 +761,34 @@ export const Books: CollectionConfig = {
       admin: {
         description:
           'The shelf this book sits on. One only — a reader finds it under every parent of that shelf, so filing it twice prints it twice.',
+      },
+    },
+    {
+      /**
+       * Where this book sits among the books on its own shelf.
+       *
+       * Given when the book is filed — one past the highest already
+       * there — and unique among that shelf's books, which is what lets
+       * a reader browse the library in the order somebody put it in
+       * rather than in alphabetical order nobody chose. Typing a number
+       * another book holds shifts that book and the run behind it along
+       * (`placeInOrder` in `domain/shelfOrder.ts`); the numbers are
+       * therefore stable and need not be contiguous.
+       *
+       * Null for a book on no shelf: the number is a position among a
+       * collection's own books, so off the shelf there is nothing for
+       * it to be a position in.
+       *
+       * Indexed because the catalog sorts on it — that sort is on every
+       * browse of the library, filtered down to one subtree or not.
+       */
+      name: 'collectionOrder',
+      access: adminOnlyField,
+      type: 'number',
+      index: true,
+      admin: {
+        description:
+          'Where this book sits on its shelf, lowest first. Set from /admin/library rather than typed here; a number another book already has shifts that book down.',
       },
     },
   ],

@@ -675,6 +675,8 @@ A Book should include concepts such as:
 - status
 - created_at
 - updated_at
+- collection, and `collectionOrder` — its place among that collection's
+  own books (section 5.4)
 
 `translator` was on that list and on the book until 2026-08-25. It is
 gone, column included (`20260825_120000_drop_translator`). Nothing ever
@@ -715,10 +717,17 @@ For a scan that page *is* the cover the publisher printed, which is why
 the PDF is preferred over the EPUB's declared cover.
 
 Two covers, and the order between them is the whole rule: an uploaded
-`cover` is an editor's decision and always wins; `generatedCover` is
+`cover` is a deliberate choice and always wins; `generatedCover` is
 only ever the default. When there is neither, the tile still draws the
 book's own first character, which was the only answer before this and
 remains the right one for a book nothing can be rendered from.
+
+Rendering happens **once**. The same opening pages of the same file
+rasterize to the same pictures, so the "render again" that sat beside
+the picker was a download and a wait in exchange for the images already
+in the bucket; it is gone from both screens, and making a cover is
+offered only while nothing has been rendered — which still covers the
+case that matters, a render that failed and never reached `ready`.
 
 Page one is the default rather than the definition, since 2026-08-25.
 The **first three pages** are rendered and the book records which of
@@ -730,8 +739,22 @@ these is the cover" and becomes browsing the book, which the reader
 already does. An EPUB has one declared cover image and no pages, so it
 has one candidate and no choice.
 
-The choice belongs to **the owner or an administrator**, which is the
-one place a book's uploader and its editors have equal power over it.
+Uploading that image is **the owner's or an administrator's**, since
+2026-08-25 — it was administrators only, through
+`app/(admin)/actions/cover.ts`, which is now deleted and its two actions
+moved beside the page choice in `app/(frontend)/actions/cover.ts`. One
+rule, one file. Both covers are now served by the same
+door: `/covers/<id>` asks the Books access rule and then streams either
+the uploaded image or a rendered page, and `Media` refuses everyone but
+an administrator. It was `read: () => true`, which was survivable while
+only administrators uploaded — they upload for books already in the
+library — and became a hole the moment an owner could upload for a
+private draft, because the file sat at `/api/media/file/<filename>`
+under whatever the uploader called it. `cover.jpg` is not a secret.
+
+The choice of *which rendered page* belongs to **the owner or an
+administrator** too, which is the one place a book's uploader and its
+editors have equal power over it.
 Everything else on that boundary is asymmetric — rights, visibility and
 level are the administrator's (section 6.1), the bibliographic fields
 are the uploader's. A cover is neither: it is not a claim about the
@@ -947,6 +970,83 @@ themselves.
 
 ---
 
+## 5.4 Two orders, on every shelf
+
+A collection's children — the books filed on it, and the shelves
+standing on it — are ordered two ways, and a reader picks which with
+`?sort=` on `/books`:
+
+    sequence      the order somebody put them in     the default
+    alphabetical  by title
+
+The default is the curated one, since 2026-08-25. The library is
+curated: the order an editor put a shelf in is a judgement about where a
+reader should start, and the alphabet is not. Alphabetical is what you
+want when you are *looking for* a book rather than being shown one,
+which is why it is offered and why it is not first. Like the reading
+level beside it, the sort is a plain link with a query string — an
+ordering of the library is a view somebody would send to somebody else,
+so it stays in the URL and the page still renders on the server.
+
+The sequence is **a number the item carries**, not a position in a list.
+A book is given one when it is filed onto a shelf — one past the highest
+already there — it is unique among that shelf's own books, and an editor
+can change it. Collections carry the same number among their own
+siblings; `sortOrder` has been exactly this idea for shelves since
+2026-08-21, and this makes it a number an editor types rather than only
+something the reorder arrows move.
+
+Two consequences of it being a carried number, both deliberate
+(`domain/shelfOrder.ts`):
+
+- **The numbers need not be contiguous.** Nothing renumbers a shelf
+  because a book left it, so 1, 2, 5 is a normal state and the gap is
+  not a bug to tidy. An order id an editor typed is a fact they stated,
+  and closing a gap under them would move books nobody touched.
+- **Typing a number another book holds shifts, it does not swap.**
+  `placeInOrder` inserts at the number asked for and pushes the run of
+  occupants along, stopping at the first free number. That is what "put
+  this book third" means to the person typing 3, and it is what keeps
+  the ids unique per shelf.
+
+**Choosing a number is an administrator's.** Filing is not: an uploader
+picks their book's collection on their own book page, and the arrival
+hook gives it the next free number — a book joining the back of a
+queue. Typing a number shifts the books already there, so it moves
+other people's books and states what a reader should meet first. Since
+2026-08-25 that is enforced as field-level write access on
+`collectionOrder` (and on a collection's own `sortOrder`), not merely by
+which screen offers the control: Payload's REST and GraphQL APIs are
+another door, `overrideAccess` is off there, and an unspecified access
+rule defaults to *any logged-in user* — so a signed-in reader could
+PATCH the field and walk their own upload to the front of a shelf.
+`ADMIN_ONLY_BOOK_FIELDS` in `domain/moderation.ts` is the list, and it
+is now wired into the collection rather than only asserted in tests.
+
+Where the shifting happens matters. It is `lib/shelfPlacement.ts`,
+called by every writer that offers the editing — the admin screen and
+the admin JSON API — and never by the collection hook that *assigns* a
+number to an arrival. A shift arrives as several updates to several
+rows, and a hook sees one row at a time: it would meet each of those
+writes on its own and try to shift it out of the way of the shift.
+
+The hooks (`assignCollectionOrder`, `assignSiblingOrder`) therefore do
+one thing: give a number to something that has just arrived, or has just
+moved to another shelf. There is a trap in them worth knowing about,
+because it bit once already — Payload hands a `beforeChange` hook the
+whole document with the update merged into it, so the order field is
+*always* present on an update. "The caller stated a number" has to mean
+"a number different from the stored one"; reading its mere presence as
+an instruction made every move to another shelf keep the number it had
+on the shelf it left.
+
+An unfiled book has no order id at all. The number is a position among a
+collection's own books, so off the shelf there is nothing for it to be a
+position in — and a book nobody has numbered sorts last, under the
+alphabetical fallback, which is the rule `sortOrder` has always had.
+
+---
+
 # 6. COPYRIGHT / RIGHTS MANAGEMENT
 
 The system must include metadata describing the legal status of a book.
@@ -1089,6 +1189,21 @@ submitted. The draft is a workspace, not a form — it can be read, its
 DOCX master downloaded, corrected and re-uploaded, and it can be
 deleted. Deleting is refused only when other readers have spent credits
 on it, because an entitlement never expires.
+
+An administrator may delete **any** book, from the panel on
+`/admin/library` — the library's own withdrawal, and the one act on that
+screen that needs no ownership. It goes through the same
+`canDeleteUpload` as the uploader's own delete: the ownership gate is
+what the admin role opens, and the entitlement gate is not, because that
+one protects a reader who paid rather than the person who uploaded.
+Authority over the library is not authority over what somebody already
+bought.
+
+That panel also names the uploader and the day the book arrived, as does
+every row of the tree beside it. `owner` is field-level restricted so a
+reader cannot correlate one uploader's books (section 6.1); an
+administrator is one of the two parties it is readable to, and this is
+where they read it.
 
 Submitting for review is a separate, optional act on a finished book,
 because asking someone to decide about publication before they have

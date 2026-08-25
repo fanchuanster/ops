@@ -61,6 +61,15 @@ oversight.
   mean something is `domain/collectionTree.ts` — the subtree filter behind
   `?collection=`, the depth cap, and the refusal to file a collection under its
   own descendant. Three levels deep at most, and the limit is editorial.
+- **Two orders on every shelf** (`CLAUDE.md` section 5.4) — curated or A–Z,
+  picked with `?sort=` and applied to the books on a shelf and to the shelves
+  themselves alike (2026-08-25). Curated is the default and it is a *number the
+  book carries*: given when it is filed, unique among that shelf's books,
+  editable in the panel and over the admin API. Typing a number another book
+  holds shifts the run along rather than swapping, which is what keeps them
+  unique; `domain/shelfOrder.ts` owns the rule and `lib/shelfPlacement.ts` does
+  the writing. Backfilled in title order, so nothing a reader sees moved on the
+  day it shipped.
 - **Default covers** — page one of the book, rendered by the converter and used
   wherever nobody has uploaded a cover (2026-08-23). Its own claimable job kind
   rather than a pipeline stage, because the books that most need one are the

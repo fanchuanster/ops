@@ -450,6 +450,14 @@ describe('an administrator publishing directly', () => {
     // the flow applies it. Asking and deciding are different acts.
     expect(requiresAdmin('level')).toBe(true)
   })
+
+  it('makes a book\u2019s position on its shelf an administrator\u2019s', () => {
+    // Filing a book onto a shelf is its uploader's and gets the next
+    // free number. Choosing the number shifts other people's books
+    // along, so it is a curator's act — see ADMIN_ONLY_BOOK_FIELDS.
+    expect(requiresAdmin('collectionOrder')).toBe(true)
+    expect(requiresAdmin('collection')).toBe(false)
+  })
 })
 
 describe('proposing a level with a submission', () => {
@@ -775,7 +783,13 @@ describe('what an uploader may claim about their own file', () => {
 
 describe('deleting your own upload', () => {
   const request = (over: Partial<Parameters<typeof canDeleteUpload>[0]> = {}) =>
-    canDeleteUpload({ isOwner: true, boughtByOthers: false, isPublic: false, ...over })
+    canDeleteUpload({
+      isOwner: true,
+      isAdmin: false,
+      boughtByOthers: false,
+      isPublic: false,
+      ...over,
+    })
 
   it('lets an uploader delete their own private book', () => {
     expect(request()).toEqual({ allowed: true })
@@ -797,6 +811,21 @@ describe('deleting your own upload', () => {
 
   it('refuses anyone who is not the uploader', () => {
     expect(request({ isOwner: false })).toEqual({ allowed: false, reason: 'not_owner' })
+  })
+
+  it('lets an administrator delete a book they do not own', () => {
+    // Withdrawing a book from the library is the library's own act,
+    // and ownership is the one thing an administrator will not have.
+    expect(request({ isOwner: false, isAdmin: true })).toEqual({ allowed: true })
+  })
+
+  it('refuses an administrator a book readers have bought', () => {
+    // Authority over the library is not authority over what somebody
+    // already paid credits for.
+    expect(request({ isOwner: false, isAdmin: true, boughtByOthers: true })).toEqual({
+      allowed: false,
+      reason: 'bought_by_others',
+    })
   })
 
   it('has a message for every refusal', () => {

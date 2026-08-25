@@ -75,6 +75,7 @@ export const BOOK_WRITABLE = [
   'description',
   'level',
   'collection',
+  'collectionOrder',
   'rightsStatus',
   'visibility',
 ] as const
@@ -94,6 +95,10 @@ export function parseBookUpdate(body: unknown): Parsed {
     description: nullable(text),
     level: parseLevel,
     collection: nullableId,
+    // Null is a real instruction here too — "take the number off" —
+    // though a book on a shelf is given a fresh one immediately by the
+    // collection hook, so it is mostly of use when unshelving.
+    collectionOrder: nullableInteger,
     rightsStatus: oneOf('rightsStatus', RIGHTS_STATUSES as readonly RightsStatus[]),
     visibility: oneOf('visibility', BOOK_VISIBILITIES),
   })

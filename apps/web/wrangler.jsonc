@@ -51,7 +51,13 @@
   "vars": {
     // Payload scopes CSRF and CORS to this origin and builds absolute
     // URLs from it, so it must be the real public name, not a guess.
-    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com"
+    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com",
+
+    // Google Analytics 4. Not a secret — a measurement ID is served
+    // inside every page by design — so it is a var and not a
+    // `wrangler secret`. Unset means no tag is rendered at all, which
+    // is how `wrangler dev` and previews stay out of the property.
+    "GA_MEASUREMENT_ID": "G-794BNPG3ZJ"
 
     // Adobe PDF Services needs no vars, only two secrets:
     //

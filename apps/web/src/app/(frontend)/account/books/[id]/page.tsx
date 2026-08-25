@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
+import { CoverImageUpload } from '../../../../../components/CoverImageUpload'
 import { CoverPagePicker } from '../../../../../components/CoverPagePicker'
 import { MakeCoverButton } from '../../../../../components/MakeCoverButton'
 import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
@@ -19,6 +20,8 @@ import {
   coverCandidatePages,
   coverImageUrl,
   coverSourceFormat,
+  hasRenderedPages,
+  uploadedCoverId,
 } from '../../../../../domain/cover'
 import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
 import { uploadStep } from '../../../../../domain/pipeline'
@@ -99,11 +102,10 @@ export default async function BookDetailsPage({
   // the cover is rendered after conversion, on pages this book's owner
   // has no reason to be looking at, and a private upload appears on
   // none of them at all.
-  const uploadedCover =
-    typeof book.cover === 'object' && book.cover !== null ? book.cover : null
+  const uploadedCover = uploadedCoverId(book.cover)
   const generatedCover = book.generatedCover ?? {}
   const coverUrl = coverImageUrl({
-    uploadedUrl: uploadedCover?.url,
+    uploadedId: uploadedCover,
     bookId: book.id,
     generated: generatedCover,
   })
@@ -233,48 +235,70 @@ export default async function BookDetailsPage({
           been generated. */}
       {draft ? null : (
         <>
-          {coverUrl || canMakeCover ? (
-            <section className="cover-panel">
-              <h3>Cover</h3>
-              <div className="cover-panel__body">
-                {coverUrl ? (
-                  <img
-                    className="cover-panel__img"
-                    src={coverUrl}
-                    alt={coverAltFor(book.title)}
-                  />
-                ) : (
-                  <span className="cover-panel__img cover-panel__img--empty cjk" aria-hidden="true">
-                    {Array.from((book.originalTitle || book.title).trim())[0] ?? '·'}
-                  </span>
-                )}
-                {/* Only when the converter rendered alternatives, and
-                    never over an uploaded cover — that is an editor's
-                    deliberate choice and wins whatever is picked here
-                    (`domain/cover.ts`). */}
+          {/* Always, now that an image can be uploaded. It was shown
+              only when there was a picture or a page to render one
+              from, which left a book whose only artifact is a master —
+              nothing a browser can rasterize — with no way to have a
+              cover at all. */}
+          <section className="cover-panel">
+            <h3>Cover</h3>
+            <div className="cover-panel__body">
+              {coverUrl ? (
+                <img
+                  className="cover-panel__img"
+                  src={coverUrl}
+                  alt={coverAltFor(book.title)}
+                />
+              ) : (
+                <span className="cover-panel__img cover-panel__img--empty cjk" aria-hidden="true">
+                  {Array.from((book.originalTitle || book.title).trim())[0] ?? '·'}
+                </span>
+              )}
+              <div>
+                {/* An uploaded image wins over every page of the book
+                    (`domain/cover.ts`), so while one is in place the
+                    page picker would be a control that changes
+                    nothing visible. It comes back the moment the
+                    image is removed. */}
                 {uploadedCover ? (
-                  <p className="hint">An editor chose this cover for your book.</p>
+                  <p className="hint">
+                    This book is wearing an uploaded image rather than a page of itself.
+                  </p>
                 ) : (
-                  <div>
+                  <>
                     <CoverPagePicker
                       bookId={Number(book.id)}
                       page={chosenCoverPage(generatedCover)}
                       pages={coverCandidatePages(generatedCover)}
                     />
-                    {canMakeCover ? (
+                    {/* Offered only while there is nothing rendered.
+                        Rasterizing the same opening pages of the same
+                        file twice produces the same pictures, so a
+                        "render again" was a button whose whole effect
+                        was a wait. A render that failed leaves the
+                        state short of `ready`, so the offer stands
+                        exactly where it is still worth something. */}
+                    {canMakeCover && !hasRenderedPages(generatedCover) ? (
                       <p className="cover-panel__make">
                         <MakeCoverButton
                           bookId={Number(book.id)}
                           className="cta cta--compact"
-                          label={coverUrl ? 'Render the pages again' : 'Make a cover from the book'}
                         />
                       </p>
                     ) : null}
-                  </div>
+                  </>
                 )}
+                {/* Yours to set: a cover is not a claim about the
+                    book, and you are the one holding the copy it was
+                    scanned from. */}
+                <CoverImageUpload
+                  bookId={Number(book.id)}
+                  hasUploadedCover={uploadedCover !== null}
+                  bookIsPrivate={book.visibility !== 'public'}
+                />
               </div>
-            </section>
-          ) : null}
+            </div>
+          </section>
 
           <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />
           <SubmitForReview

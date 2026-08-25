@@ -7,6 +7,7 @@ import {
   canNest,
   parentIdOf,
 } from '../domain/collectionTree'
+import { nextOrderId } from '../domain/shelfOrder'
 
 const NESTING_ERRORS: Record<NestingRefusal, string> = {
   self: 'A collection cannot be filed under itself.',
@@ -60,6 +61,80 @@ const enforceNesting: CollectionBeforeChangeHook = async ({ data, originalDoc, r
 }
 
 /**
+ * A shelf gets its number among the shelves it stands beside.
+ *
+ * The same rule the books on it follow (`assignCollectionOrder` in
+ * `collections/Books.ts`), for the same reason: order is per-parent, so
+ * a shelf arriving on a new parent joins the end of *that* group rather
+ * than keeping a number that meant something among its old siblings.
+ *
+ * Order was nullable and mostly null before 2026-08-25 — the catalog
+ * sorted `sortOrder` then `title` precisely so unnumbered shelves still
+ * landed somewhere sensible. That fallback stays as a safety net, but
+ * every shelf now gets a number, because a number an editor types into
+ * the box on `/admin/collections` needs the others to have one for it
+ * to be relative to.
+ *
+ * A stated number is obeyed exactly, collisions included. Resolving
+ * them is `placeCollectionAmongSiblings` in `lib/shelfPlacement.ts`,
+ * which shifts the run out of the way — it cannot happen here, because
+ * a shift arrives as several updates and this hook sees one row at a
+ * time.
+ *
+ * "Stated" means *different from what is stored*: Payload hands this
+ * hook the whole document with the update merged into it, so
+ * `data.sortOrder` is always a number on an update. Reading its mere
+ * presence as an instruction would make a shelf moved to another parent
+ * keep the number it held among its old siblings — see the same rule,
+ * and the same trap, in `collections/Books.ts`.
+ */
+const assignSiblingOrder: CollectionBeforeChangeHook = async ({
+  data,
+  operation,
+  originalDoc,
+  req,
+}) => {
+  if (!data) return data
+
+  const stated =
+    typeof data.sortOrder === 'number' && data.sortOrder !== originalDoc?.sortOrder
+  if (stated) return data
+
+  const was = parentIdOf({ id: 0, title: '', parent: originalDoc?.parent ?? null })
+  // An update that does not mention the parent is not a move, so the
+  // shelf keeps whatever parent it already had.
+  const parent =
+    'parent' in data ? parentIdOf({ id: 0, title: '', parent: data.parent ?? null }) : was
+
+  const moved = operation === 'create' || parent !== was
+  if (!moved && typeof originalDoc?.sortOrder === 'number') return data
+
+  const all = await req.payload.find({
+    collection: 'book-collections',
+    limit: 500,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+
+  return {
+    ...data,
+    sortOrder: nextOrderId(
+      all.docs
+        .filter(
+          (collection) =>
+            collection.id !== originalDoc?.id && parentIdOf(collection) === parent,
+        )
+        .map((collection) => ({
+          id: collection.id,
+          title: collection.title,
+          order: collection.sortOrder,
+        })),
+    ),
+  }
+}
+
+/**
  * Curatorial groupings: "Chinese Wisdom", "Authors / Nan Huaijin", etc.
  *
  * They nest. `parent` has been here since the first migration and
@@ -77,7 +152,7 @@ export const BookCollections: CollectionConfig = {
     group: 'Library',
   },
   access: { read: () => true },
-  hooks: { beforeChange: [enforceNesting] },
+  hooks: { beforeChange: [enforceNesting, assignSiblingOrder] },
   fields: [
     { name: 'title', type: 'text', required: true },
     { name: 'slug', type: 'text', required: true, unique: true, index: true },
@@ -92,10 +167,23 @@ export const BookCollections: CollectionConfig = {
     },
     {
       name: 'sortOrder',
+      /**
+       * An administrator's, for the same reason `collectionOrder` is on
+       * a book: this is where a shelf sits among its siblings, so
+       * changing it moves every shelf it passes and decides what a
+       * reader meets first. The reorder arrows in `/admin/library` are
+       * the only control for it and they are behind `currentAdmin`;
+       * this is the same rule at the API door, which has no screen in
+       * front of it.
+       */
+      access: {
+        create: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
+        update: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
+      },
       type: 'number',
       admin: {
         description:
-          'Where this shelf sits among its siblings, lowest first. Left empty it falls to the end and sorts by title — which is what every collection did before anyone chose. Set from /admin/library rather than typed here.',
+          'Where this shelf sits among the shelves on the same parent, lowest first. Given when the shelf is filed and editable from /admin/library; a number another shelf already has shifts that shelf down. Left empty it falls to the end and sorts by title.',
       },
     },
   ],

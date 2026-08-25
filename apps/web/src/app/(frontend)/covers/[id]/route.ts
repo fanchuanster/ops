@@ -1,5 +1,13 @@
 /**
- * A book's generated cover — page one, rendered by the converter.
+ * A book's cover: the image an editor or its owner uploaded, or a page
+ * of the book itself.
+ *
+ * One address for both, since 2026-08-25. The uploaded image used to be
+ * served by Payload as an ordinary Media file, which is public — see
+ * `coverUploadUrl` in `domain/cover.ts` for why that was a hole once
+ * uploading stopped being administrators-only. `Media` now refuses
+ * everyone but an administrator and this route is the way in, which
+ * means the two covers are no longer differently private.
  *
  * Streamed through the Worker like every other object in the bucket,
  * for the reason in `lib/storage.ts`: the bucket is private, there is no
@@ -9,13 +17,13 @@
  *
  * Whoever may see the book. The lookup runs with `overrideAccess: false`
  * and the caller's session, so the Books access rule answers it — a
- * private upload's first page is its owner's, and an anonymous request
- * for one gets the same 404 the book page gives.
+ * private upload's cover is its owner's, and an anonymous request for
+ * one gets the same 404 the book page gives.
  *
- * That matters more than it looks. A cover is a picture of the first
- * page of the book, which for a scan is the title page: serving it
- * openly would publish the identity of every private upload in the
- * library to anyone willing to count upwards through the ids.
+ * That matters more than it looks. A cover is a picture of the front of
+ * the book, which for a scan is the title page: serving it openly would
+ * publish the identity of every private upload in the library to anyone
+ * willing to count upwards through the ids.
  *
  * Cached `private`, so it is never held in a shared cache under a URL
  * that carries no session. Not `immutable`: a cover can be re-rendered
@@ -23,6 +31,7 @@
  * a new one a new address.
  */
 
+import { getFileKey } from '@payloadcms/plugin-cloud-storage/utilities'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
@@ -32,6 +41,7 @@ import {
   chosenCoverPage,
   coverCandidateCount,
   coverKey,
+  uploadedCoverId,
 } from '../../../../domain/cover'
 import { isAdmin } from '../../../../lib/adminAuth'
 import { getCurrentUser } from '../../../../lib/auth'
@@ -45,6 +55,54 @@ import {
 } from '../../../../lib/storage'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Streams an uploaded cover out of the bucket, or null if it is not
+ * there.
+ *
+ * The key is computed with the storage plugin's own `getFileKey` rather
+ * than assumed to be the filename. It is the filename today, because no
+ * prefix is configured — but that is a setting in `payload.config.ts`
+ * and not a fact, and a cover that silently 404s the day someone adds
+ * one is a poor way to find out.
+ *
+ * Read with `overrideAccess: true` on purpose: `Media` refuses everyone
+ * but an administrator now, and the question of who may see this
+ * picture was already answered upstream by the Books access rule. This
+ * is the reason that lock is safe — there is exactly one door left and
+ * it checks the book.
+ */
+async function uploadedCoverResponse(
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  mediaId: number,
+): Promise<Response | null> {
+  const media = await payload
+    .findByID({ collection: 'media', id: mediaId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+  if (!media?.filename) return null
+
+  const { fileKey } = getFileKey({
+    collectionPrefix: '',
+    docPrefix: (media as { prefix?: string }).prefix,
+    filename: media.filename,
+  })
+
+  const headers = {
+    'Content-Type': media.mimeType || 'image/jpeg',
+    // Private and short, exactly as a rendered page is: the address
+    // carries the media id, so a replaced cover is a new URL and this
+    // hour only ever holds the picture it was fetched for.
+    'Cache-Control': 'private, max-age=3600',
+  }
+
+  const stream = await artifactStream(fileKey)
+  if (stream) return new Response(stream, { headers })
+
+  // Development without Cloudflare bindings.
+  const local = localArtifactPath(fileKey)
+  if (!local) return null
+  return new Response(streamLocalArtifact(local), { headers })
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -66,6 +124,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const book = found?.docs[0]
   if (!book) return new Response(null, { status: 404 })
 
+  // `?page=` asks for a rendered page explicitly, and an uploaded cover
+  // does not answer it: that parameter is what the picker's thumbnails
+  // are addressed by, and they have to keep showing the pages
+  // themselves even while an upload is covering them.
+  const asked = Number(new URL(request.url).searchParams.get('page'))
+  const wantsPage = Number.isInteger(asked) && asked >= 1
+
+  const uploaded = uploadedCoverId(book.cover)
+  if (uploaded !== null && !wantsPage) {
+    const streamed = await uploadedCoverResponse(payload, uploaded)
+    if (streamed) return streamed
+    // Fall through rather than 404: the row says there is an image and
+    // the object is gone, which is a book that should still show a page
+    // of itself rather than nothing at all.
+  }
+
   const generated = book.generatedCover ?? {}
   if (generated.state !== 'ready' || !generated.key) return new Response(null, { status: 404 })
 
@@ -77,9 +151,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // Validated against the count this book actually has rather than
   // against the ceiling: an unrendered page is a 404, not a stream of
   // whatever happens to be at that key.
-  const asked = Number(new URL(request.url).searchParams.get('page'))
   let page = chosenCoverPage(generated)
-  if (Number.isInteger(asked) && asked >= 1) {
+  if (wantsPage) {
     if (asked > coverCandidateCount(generated)) return new Response(null, { status: 404 })
     page = asked
   }

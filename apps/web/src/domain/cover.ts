@@ -167,6 +167,20 @@ export function chosenCoverPage(generated: { page?: unknown; candidates?: unknow
   return Math.min(page, coverCandidateCount(generated))
 }
 
+/**
+ * Whether this book's opening pages have actually been rasterized.
+ *
+ * The question behind "is there anything to make?", and the reason
+ * making a cover is offered once rather than repeatedly: rasterizing
+ * the same first pages of the same file is deterministic, so a second
+ * run produces the images that are already sitting in the bucket. A
+ * render that *failed* or never happened leaves the state at something
+ * other than `ready`, which is the case worth offering.
+ */
+export function hasRenderedPages(generated: { state?: unknown }): boolean {
+  return generated.state === 'ready'
+}
+
 /** The pages an editor may choose between, for a picker to render. */
 export function coverCandidatePages(generated: { candidates?: unknown }): number[] {
   return Array.from({ length: coverCandidateCount(generated) }, (_, index) => index + 1)
@@ -185,25 +199,69 @@ export function coverPageUrl(bookId: string | number, page: number): string {
 }
 
 /**
+ * The URL an uploaded cover is served from.
+ *
+ * The book's own address, not the Media document's. Until 2026-08-25
+ * this returned `media.url` — a public file under
+ * `/api/media/file/<filename>`, served straight from the bucket with no
+ * question asked about who was looking. For a book in the library that
+ * is harmless. For a private upload it is a hole: the filename is
+ * whatever the uploader's file was called, `cover.jpg` as often as not,
+ * and the picture is usually the title page. `/covers/<id>` already
+ * asks the Books access rule before it streams a rendered page, so
+ * routing the uploaded image through the same door makes both covers
+ * equally private and leaves one place where that is decided.
+ *
+ * `?v=` is the media id, and it is what makes an hour-long cache safe.
+ * The address is otherwise the same for every version of a book's
+ * cover; each upload creates a new Media document, so the id changes
+ * exactly when the picture does — the same trick `?page=` plays for the
+ * rendered candidates.
+ */
+export function coverUploadUrl(bookId: string | number, mediaId: string | number): string {
+  return `/covers/${bookId}?v=${mediaId}`
+}
+
+/**
  * Which cover a page should show, given both.
  *
- * The order is the whole policy: a chosen cover, then page one, then
- * neither — at which point the caller draws the book's own first
- * character on the tile face, which is what a NobleSee book looks like
- * when there is no picture of it.
+ * The order is the whole policy: an uploaded cover, then the chosen
+ * page of the book, then neither — at which point the caller draws the
+ * book's own first character on the tile face, which is what a NobleSee
+ * book looks like when there is no picture of it.
  */
 export function coverImageUrl({
-  uploadedUrl,
+  uploadedId,
   bookId,
   generated,
 }: {
-  uploadedUrl?: string | null
+  /** The Media document's id, when a cover image has been uploaded. */
+  uploadedId?: string | number | null
   bookId: string | number
   generated: { state?: unknown; key?: unknown; page?: unknown; candidates?: unknown }
 }): string | null {
-  if (uploadedUrl) return uploadedUrl
+  if (uploadedId !== null && uploadedId !== undefined && uploadedId !== '') {
+    return coverUploadUrl(bookId, uploadedId)
+  }
   if (generated.state === 'ready' && typeof generated.key === 'string' && generated.key) {
     return coverPageUrl(bookId, chosenCoverPage(generated))
+  }
+  return null
+}
+
+/**
+ * The id out of whatever a `cover` relationship came back as.
+ *
+ * A populated document, a bare id, or nothing — the three shapes a
+ * Payload upload field takes depending on the `depth` it was read at.
+ * Callers want the id in all three cases and should not each write this
+ * out.
+ */
+export function uploadedCoverId(cover: unknown): number | null {
+  if (typeof cover === 'number') return cover
+  if (typeof cover === 'object' && cover !== null) {
+    const id = (cover as { id?: unknown }).id
+    if (typeof id === 'number') return id
   }
   return null
 }

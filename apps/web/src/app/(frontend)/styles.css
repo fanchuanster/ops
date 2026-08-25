@@ -2100,6 +2100,17 @@ h3 {
  * kind of state and lives in the browser
  * (`components/CollectionShelves.tsx`).
  */
+/* Level on the left, order on the right: two views of the same shelf,
+   so they sit on one line and each keeps its own group of pills. They
+   stack on a narrow screen rather than shrinking the pills. */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -3441,6 +3452,44 @@ h3 {
 
 .cover-panel__make {
   margin: 0.75rem 0 0;
+}
+
+/* Upload your own image as the cover. The file input covers the label
+   rather than being hidden, so the control stays a real file input —
+   keyboard-reachable, and opening the dialog with no JavaScript. The
+   focus ring is drawn on the parent because the input is invisible. */
+.cover-upload {
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.cover-upload__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+}
+
+.cover-upload__btn input[type='file'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cover-upload__btn:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.cover-upload .form-error,
+.cover-upload .hint {
+  margin: 0;
 }
 
 .coverpick__label {

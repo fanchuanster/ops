@@ -213,7 +213,26 @@ export function canPublishToLibrary(request: PublicationRequest): PublicationDec
  * level in, and that someone is an administrator — which is the whole
  * distinction between asking and deciding.
  */
-export const ADMIN_ONLY_BOOK_FIELDS = ['visibility', 'rightsStatus', 'level', 'review'] as const
+/**
+ * Fields on a book that only an administrator may write.
+ *
+ * `collectionOrder` joined the list on 2026-08-25 and is the one that
+ * needs explaining, because *filing* a book onto a shelf is not on it.
+ * An uploader may choose their book's collection, and the arrival hook
+ * gives it the next free number on that shelf — that is a book taking
+ * its place at the back of a queue. Choosing the number is a different
+ * act: `placeInOrder` shifts the run of books already there, so it
+ * moves other people's books, and it is a curator's judgement about
+ * what a reader should meet first. Whoever can type a 1 can put
+ * themselves at the front of the library.
+ */
+export const ADMIN_ONLY_BOOK_FIELDS = [
+  'visibility',
+  'rightsStatus',
+  'level',
+  'review',
+  'collectionOrder',
+] as const
 
 export function requiresAdmin(field: string): boolean {
   return (ADMIN_ONLY_BOOK_FIELDS as readonly string[]).includes(field)
@@ -223,6 +242,15 @@ export function requiresAdmin(field: string): boolean {
 export interface DeletionRequest {
   /** Is the person asking the book's uploader? */
   isOwner: boolean
+  /**
+   * Is the person asking an administrator?
+   *
+   * Separate from `isOwner` rather than folded into it, because the two
+   * grant different things: ownership is a claim on the book, and the
+   * admin role is the library's own authority to withdraw one. Only the
+   * first gate distinguishes them — the second binds both.
+   */
+  isAdmin: boolean
   /** Do readers other than the uploader hold entitlements to it? */
   boughtByOthers: boolean
   /** Is it currently in the public library? */
@@ -236,20 +264,27 @@ export type DeletionDecision =
 export type DeletionBlockedReason = 'not_owner' | 'bought_by_others'
 
 /**
- * May this reader delete their own upload?
+ * May this person delete this upload?
  *
- * Yes, almost always. It is their book, it is private by default, and a
- * workspace you cannot clear out is not a workspace.
+ * For its uploader: yes, almost always. It is their book, it is private
+ * by default, and a workspace you cannot clear out is not a workspace.
  *
- * The exception is the one case where deleting takes something from
- * somebody else: a reader has spent credits to have this book delivered.
- * That purchase is permanent by design — an entitlement never expires —
- * and quietly deleting the book underneath it would make the promise
- * false. Being in the public library is *not* itself a reason to refuse;
- * a book nobody has taken can still be withdrawn.
+ * For an administrator: yes to any book, theirs or not. Somebody has to
+ * be able to take a book out of the library — material that turns out
+ * to be misfiled, mis-scanned, or not distributable after all — and
+ * ownership is exactly the thing they will not have.
+ *
+ * The exception binds both of them, and that is the point of it: a
+ * reader has spent credits to have this book delivered. That purchase
+ * is permanent by design — an entitlement never expires — and deleting
+ * the book underneath it would make the promise false whoever presses
+ * the button. An administrator has authority over the library, not over
+ * what a reader already bought. Being in the public library is *not*
+ * itself a reason to refuse; a book nobody has taken can still be
+ * withdrawn.
  */
 export function canDeleteUpload(request: DeletionRequest): DeletionDecision {
-  if (!request.isOwner) return { allowed: false, reason: 'not_owner' }
+  if (!request.isOwner && !request.isAdmin) return { allowed: false, reason: 'not_owner' }
   if (request.boughtByOthers) return { allowed: false, reason: 'bought_by_others' }
   return { allowed: true }
 }
@@ -258,4 +293,16 @@ export const DELETION_ERRORS: Record<DeletionBlockedReason, string> = {
   not_owner: 'That book is not yours to delete.',
   bought_by_others:
     'Other readers have spent credits to have this book sent to them, and what they bought does not expire. It cannot be deleted — ask an administrator to withdraw it from the library instead.',
+}
+
+/**
+ * The same refusal, said to an administrator.
+ *
+ * The reader-facing sentence ends by telling them to ask an
+ * administrator, which is no help to the administrator reading it.
+ */
+export const ADMIN_DELETION_ERRORS: Record<DeletionBlockedReason, string> = {
+  not_owner: 'Administrators only.',
+  bought_by_others:
+    'Readers have spent credits to have this book sent to them, and what they bought does not expire. Deleting it would take back something they paid for, so it cannot be deleted — unpublish it instead.',
 }

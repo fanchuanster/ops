@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
+import { coverCandidatePages, coverKey } from '../../../domain/cover'
 import { DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
 import { isConversionState, retryStateFor } from '../../../domain/pipeline'
 import { canAccessArtifact } from '../../../domain/rights'
@@ -60,6 +61,10 @@ export async function deleteBook(_prev: ManageState, formData: FormData): Promis
 
   const decision = canDeleteUpload({
     isOwner,
+    // Not the admin path: this action answers the reader's own screen,
+    // and an administrator deleting somebody else's book does it from
+    // `/admin/library`, where the refusals are worded for them.
+    isAdmin: false,
     boughtByOthers: bought.docs.length > 0,
     isPublic: book.visibility === 'public',
   })
@@ -67,13 +72,16 @@ export async function deleteBook(_prev: ManageState, formData: FormData): Promis
 
   // Gathered before the row goes, since afterwards there is nothing to
   // read the keys from.
-  const keys = [
+  const keys = new Set([
     ...(book.artifacts ?? []).map((artifact) => artifact.storageKey),
     book.conversion?.sourceKey,
-    // Not an artifact, but it is under the book's prefix and outlives
-    // the row exactly as they would (`domain/cover.ts`).
+    // Not artifacts, but under the book's prefix and outliving the row
+    // exactly as they would (`domain/cover.ts`). Every rendered
+    // candidate, not only the one the book wears — the stored key names
+    // the chosen page, and the pages not chosen are objects too.
     book.generatedCover?.key,
-  ].filter((key): key is string => typeof key === 'string' && key.length > 0)
+    ...coverCandidatePages(book.generatedCover ?? {}).map((page) => coverKey(book.id, page)),
+  ].filter((key): key is string => typeof key === 'string' && key.length > 0))
 
   try {
     await payload.delete({ collection: 'books', id: bookId, overrideAccess: true })
@@ -82,7 +90,7 @@ export async function deleteBook(_prev: ManageState, formData: FormData): Promis
     return { error: 'Could not delete that book. Please try again.' }
   }
 
-  await deleteObjects(keys)
+  await deleteObjects([...keys])
 
   revalidatePath('/account/books')
   redirect('/account/books')

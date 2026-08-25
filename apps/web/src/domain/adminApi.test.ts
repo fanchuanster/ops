@@ -82,6 +82,16 @@ describe('the admin API, on a book', () => {
     expect(fields(parseBookUpdate({ collections: [3] }))).toEqual(['collections'])
   })
 
+  it('takes a place on the shelf, and null to take it off', () => {
+    expect(ok(parseBookUpdate({ collectionOrder: 3 })).collectionOrder).toBe(3)
+    expect(ok(parseBookUpdate({ collectionOrder: null })).collectionOrder).toBe(null)
+    // Uniqueness is not this function's business: the route shifts
+    // whatever is standing at that number (`lib/shelfPlacement.ts`), so
+    // a number another book holds parses fine and is resolved on write.
+    expect(fields(parseBookUpdate({ collectionOrder: 2.5 }))).toEqual(['collectionOrder'])
+    expect(fields(parseBookUpdate({ collectionOrder: '3' }))).toEqual(['collectionOrder'])
+  })
+
   it('holds rights, visibility and language to their own vocabularies', () => {
     expect(ok(parseBookUpdate({ rightsStatus: 'public_domain' })).rightsStatus).toBe('public_domain')
     expect(fields(parseBookUpdate({ rightsStatus: 'public-domain' }))).toEqual(['rightsStatus'])

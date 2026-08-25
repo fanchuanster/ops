@@ -53,13 +53,15 @@ describe('choosing what to render the opening pages from', () => {
 
 describe('which cover a page shows', () => {
   it('shows an uploaded cover ahead of a rendered one', () => {
+    // The book's own address, not the Media file's: both covers go
+    // through the route that checks who may see the book.
     expect(
       coverImageUrl({
-        uploadedUrl: '/media/cover.png',
+        uploadedId: 7,
         bookId: 42,
         generated: { state: 'ready', key: 'books/42/cover.jpg' },
       }),
-    ).toBe('/media/cover.png')
+    ).toBe('/covers/42?v=7')
   })
 
   it('shows page one when there is no upload', () => {

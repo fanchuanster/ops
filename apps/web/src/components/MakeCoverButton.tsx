@@ -10,8 +10,15 @@ import { coverImagesFor, type CoverSource } from '../lib/client/coverImages'
  *
  * The upload page renders the candidates while the file is still in the
  * browser, which is free and covers every book from here on. This is
- * for the ones that came before — and for a book whose cover came out
- * wrong, which is the same act.
+ * for the ones that came before, and for a render that failed.
+ *
+ * It is offered *once*, and only while nothing has been rendered
+ * (`hasRenderedPages` in `domain/cover.ts`). Rasterizing the same
+ * opening pages of the same file is deterministic, so a "render again"
+ * could only ever hand back the pictures already in the bucket after
+ * downloading the whole book to make them — a wait in exchange for
+ * nothing. Choosing among the three pages is the control that does the
+ * work a re-render looked like it might.
  *
  * The work happens here, in whoever's browser pressed it: the book's
  * PDF is streamed back through `/covers/<id>/source` (owner or

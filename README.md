@@ -71,6 +71,14 @@ cd apps/web
   until it is restarted. `/api/graphql` itself is POST-only, and the schema can
   also be dumped without any of this: `./cf npx payload-graphql generate:schema`.
 - Health: http://localhost:8787/health — checks D1, not just the process
+- Analytics: Google Analytics 4, configured by `GA_MEASUREMENT_ID` in
+  `wrangler.jsonc` vars (not a secret — a measurement ID is served inside every
+  page). It renders only on the public site and only for requests that actually
+  arrived at `NEXT_PUBLIC_SERVER_URL`'s host, so `wrangler dev` and the
+  `*.workers.dev` URL never reach the property; `/admin` has its own layout and
+  is never measured. The tag is server-rendered — `next/script` inside a client
+  component puts nothing executable in the HTML, which is invisible to Google's
+  own tag detector. See `src/lib/analytics.ts` and `components/GoogleAnalytics.tsx`.
 
 Migrations are explicit and versioned in `apps/web/src/migrations`; the adapter
 is configured with `push: false` so nothing alters the schema at boot.

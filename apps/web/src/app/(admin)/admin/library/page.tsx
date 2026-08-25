@@ -15,6 +15,8 @@ import {
   coverCandidatePages,
   coverImageUrl,
   coverSourceFormat,
+  hasRenderedPages,
+  uploadedCoverId,
 } from '../../../../domain/cover'
 import { levelFromId } from '../../../../domain/levels'
 import {
@@ -24,6 +26,8 @@ import {
   getLibrary,
 } from '../../../../lib/adminData'
 import { requireAdmin } from '../../../../lib/adminAuth'
+import { shortDate } from '../../../../lib/adminFormat'
+import type { User } from '../../../../payload-types'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Library' }
@@ -117,6 +121,9 @@ export default async function AdminLibraryPage({
     level: levelFromId(book.level),
     published: book.visibility === 'public',
     sent: deliveries.get(book.id) ?? 0,
+    uploader: uploaderOf(book),
+    uploaded: shortDate(book.createdAt),
+    order: book.collectionOrder ?? null,
     href: href({ book: String(book.id) }),
   })
 
@@ -143,6 +150,7 @@ export default async function AdminLibraryPage({
       description: node.collection.description ?? '',
       depth: node.depth,
       parentId: parentIdOf(node.collection),
+      sortOrder: node.collection.sortOrder ?? null,
       parentOptions: eligibleParents(collections, node.collection.id).map(asOption),
       first: siblings[0]?.id === node.collection.id,
       last: siblings[siblings.length - 1]?.id === node.collection.id,
@@ -169,13 +177,10 @@ export default async function AdminLibraryPage({
     return typeof id === 'number' ? id : null
   }
 
-  // `depth: 1` populates the relationship, so a cover arrives as the
-  // Media document. An id here would mean the row was written but the
-  // image is gone, which is a cover to replace rather than one to show.
-  const uploadedCover =
-    selected && typeof selected.cover === 'object' && selected.cover !== null
-      ? (selected.cover as { url?: string | null })
-      : null
+  // The Media id, whatever shape the relationship came back as. It is
+  // the address the cover is served under now (`coverUploadUrl`), so a
+  // populated document is no longer needed here at all.
+  const uploadedCover = selected ? uploadedCoverId(selected.cover) : null
 
   const editing: BookEditValues | null = selected
     ? {
@@ -186,14 +191,18 @@ export default async function AdminLibraryPage({
         description: selected.description ?? '',
         level: levelFromId(selected.level),
         collectionId: shelfOf(selected.collection),
+        collectionOrder: selected.collectionOrder ?? null,
         slug: selected.slug,
         published: selected.visibility === 'public',
         sent: deliveries.get(selected.id) ?? 0,
+        uploader: uploaderOf(selected),
+        uploaderEmail: uploaderEmailOf(selected),
+        uploaded: shortDate(selected.createdAt),
         // The same order a reader's tile resolves — upload, then page
         // one, then neither — decided here rather than in the panel, so
         // there is one answer to "what does this book look like".
         coverUrl: coverImageUrl({
-          uploadedUrl: uploadedCover?.url ?? null,
+          uploadedId: uploadedCover,
           bookId: selected.id,
           generated: selected.generatedCover ?? {},
         }),
@@ -203,6 +212,7 @@ export default async function AdminLibraryPage({
         // never has to ask a second time.
         coverPage: chosenCoverPage(selected.generatedCover ?? {}),
         coverPages: coverCandidatePages(selected.generatedCover ?? {}),
+        hasRenderedCover: hasRenderedPages(selected.generatedCover ?? {}),
         // A browser can render pages from a PDF or an EPUB. A book with
         // only a master waits for the PDF phase 2 builds anyway.
         canMakeCover:
@@ -226,7 +236,7 @@ export default async function AdminLibraryPage({
 
         <div className="admin-libcols" aria-hidden="true">
           <span>Book</span>
-          <span>Level · Status · Sent</span>
+          <span>Uploaded by · When · Level · Status · Sent</span>
         </div>
 
         <div className="admin-scroll">
@@ -265,4 +275,30 @@ function subtreeBookCount(
   }
   walk(node)
   return seen.size
+}
+
+/**
+ * Who uploaded this book, as a name to show — or null.
+ *
+ * Null is not a gap in the data: a book entered by staff has no
+ * uploader at all (`CLAUDE.md` section 6.2), and the rows say so
+ * rather than inventing an account for it.
+ *
+ * The owner arrives populated because `getLibrary` reads at `depth: 1`
+ * with `overrideAccess: true`. That override is doing real work here —
+ * `owner` is field-level restricted in `collections/Books.ts` so that a
+ * reader cannot correlate one uploader's books, and an administrator is
+ * one of the two parties it is readable to.
+ */
+function uploaderOf(book: { owner?: unknown }): string | null {
+  const owner = typeof book.owner === 'object' ? (book.owner as User | null) : null
+  if (!owner) return null
+  return owner.displayName || owner.email || null
+}
+
+/** Their email, when the name shown above was something else. */
+function uploaderEmailOf(book: { owner?: unknown }): string | null {
+  const owner = typeof book.owner === 'object' ? (book.owner as User | null) : null
+  if (!owner?.email) return null
+  return owner.displayName ? owner.email : null
 }

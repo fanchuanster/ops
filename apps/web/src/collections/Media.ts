@@ -7,7 +7,29 @@ export const Media: CollectionConfig = {
   slug: 'media',
   admin: { group: 'Content' },
   access: {
-    read: () => true,
+    /**
+     * Administrators only, since 2026-08-25. This was `() => true`.
+     *
+     * Media is one thing: book covers. They are shown through
+     * `/covers/<id>`, which asks the Books access rule before it
+     * streams — so a private upload's cover is its owner's, exactly as
+     * a rendered page of it already was. A public read here is a second
+     * door around that check, and an unlocked one: the file lives at
+     * `/api/media/file/<filename>` under whatever the uploader called
+     * their file, which is `cover.jpg` more often than it is anything
+     * unguessable.
+     *
+     * It mattered less when only administrators could upload a cover,
+     * because they upload for books already in the library. Owners can
+     * upload for their own private drafts now
+     * (`app/(frontend)/actions/cover.ts`), so the hole became a real
+     * one and is closed here rather than papered over with a warning.
+     *
+     * Nothing in the application reads media through this rule: every
+     * cover is served by the route, which reads with
+     * `overrideAccess: true` having already checked the book.
+     */
+    read: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
   },
   upload: {
     /**

@@ -39,6 +39,20 @@ export interface LibraryBookRow {
   /** Deliveries to e-readers. Not downloads; NobleSee has none. */
   sent: number
   /**
+   * Who uploaded it — a display name, else an email. Null for a book
+   * staff entered, which has no uploader rather than a missing one.
+   */
+  uploader: string | null
+  /** The day the book arrived, ISO, formatted on the server. */
+  uploaded: string
+  /**
+   * Where it sits among the books on its own shelf, lowest first.
+   *
+   * Null for a book on no shelf: an order id is a position among a
+   * collection's books, and the "Other" group is not a collection.
+   */
+  order: number | null
+  /**
    * Where clicking this row goes — built on the server.
    *
    * A string and not a callback: a function cannot cross into a client
@@ -55,6 +69,8 @@ export interface LibraryRow {
   /** 1 for a top-level shelf; deeper rows are indented by it. */
   depth: number
   parentId: number | null
+  /** Where it sits among the shelves on the same parent, lowest first. */
+  sortOrder: number | null
   parentOptions: ParentOption[]
   first: boolean
   last: boolean
@@ -86,10 +102,12 @@ export interface LibraryRow {
  *
  * Two controls the design does not draw are kept deliberately:
  *
- *   the reorder arrows — `sortOrder` is what decides the order a reader
- *     meets the shelves in, and the homepage shows the first two. With
- *     no control for it that order goes back to being whatever the
- *     database returns.
+ *   the reorder arrows, and the order box beside the parent picker —
+ *     `sortOrder` is what decides the order a reader meets the shelves
+ *     in, and the homepage shows the first two. With no control for it
+ *     that order goes back to being whatever the database returns. The
+ *     arrows are for "one place up"; the box is for "third", which on a
+ *     long shelf is a great many clicks otherwise.
  *   the parent picker — the design's "+ sub" *creates* a shelf under a
  *     parent, which is not the same as moving one that already exists.
  *     Without it a mis-filed shelf can only be fixed by hand through
@@ -264,6 +282,27 @@ function ShelfRow({
                 </option>
               ))}
             </select>
+            {/* The same number the arrows above move, typed rather than
+                stepped. The arrows are for "one place up"; this is for
+                "third", which on a shelf of twenty is nine clicks
+                otherwise. A number another shelf holds shifts that shelf
+                down (`domain/shelfOrder.ts`) — nothing here can leave
+                two shelves claiming one place. */}
+            <label className="visually-hidden" htmlFor={`order-${row.id}`}>
+              Order among its siblings
+            </label>
+            <input
+              id={`order-${row.id}`}
+              name="sortOrder"
+              className="admin-lib__order-input admin-num"
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              defaultValue={row.sortOrder ?? ''}
+              placeholder="#"
+              title="Where this shelf sits among the shelves on the same parent"
+            />
             <div className="admin-lib__actions">
               <button type="submit" className="admin-btn admin-btn--small" disabled={saving}>
                 {saving ? 'Saving…' : 'Save'}
@@ -365,6 +404,11 @@ function ShelfRow({
 /**
  * One book on a shelf.
  *
+ * The uploader and the date sit between the title and the level, and
+ * are the reason an editor can tell a reader's submission from a book
+ * staff entered without opening either. Both are quiet: they are
+ * provenance, not the subject of the row.
+ *
  * The level is a label here and not a control. It was three buttons
  * that saved on click, which was the right shape when this list was the
  * only place a level could be set; the panel sets it now, and the shelf
@@ -392,9 +436,30 @@ function BookRow({
       </span>
       <span className="admin-lib__booktext">
         <a className="admin-rowlink" href={book.href}>
+          {/* Its place on the shelf, before the title, because that is
+              the order the rows are already in — a number a reader can
+              follow down the column is the whole point of showing it.
+              Absent for an unfiled book, which has no place to show. */}
+          {book.order === null ? null : (
+            <span className="admin-lib__order admin-num" aria-hidden="true">
+              {book.order}
+            </span>
+          )}
           {book.title}
         </a>
         {book.author ? <em>{book.author}</em> : null}
+      </span>
+      {/* Who put it here, and when. A column of its own rather than a
+          third line under the title: an editor scanning for a reader's
+          upload is comparing this down the page, and a value that
+          starts at a different x each row cannot be compared.
+          Truncated rather than wrapped — an email is as long as
+          somebody's email happens to be, and the panel shows it whole.
+          No tooltip, deliberately: the stretched row link covers this
+          span, so a `title` on it would never appear. */}
+      <span className="admin-lib__origin admin-quiet">
+        <span className="admin-lib__uploader">{book.uploader ?? '—'}</span>
+        <span className="admin-num">{book.uploaded || '—'}</span>
       </span>
       <span className={`admin-levelchip admin-levelchip--${book.level}`}>
         {LEVEL_LABELS[book.level]}

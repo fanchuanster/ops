@@ -5,6 +5,7 @@ import { parseBookUpdate } from '../../../../../../domain/adminApi'
 import { levelFromId } from '../../../../../../domain/levels'
 import { adminFromRequest, unauthorized } from '../../../../../../lib/apiAuth'
 import { logError } from '../../../../../../lib/logError'
+import { placeBookOnShelf } from '../../../../../../lib/shelfPlacement'
 import { revalidateCuration } from '../../shared'
 
 /**
@@ -107,6 +108,20 @@ export async function PATCH(
       // the approval that implies.
       user: admin,
     })
+
+    // A stated order id shifts whatever is standing at that number, so
+    // a script setting one leaves the shelf in the same state the admin
+    // screen would (`lib/shelfPlacement.ts`). After the write, because
+    // the shelf it is a place on may have changed in the same PATCH.
+    if (typeof parsed.data.collectionOrder === 'number') {
+      const shelf = updated.collection
+      await placeBookOnShelf(payload, {
+        bookId: id,
+        shelfId: typeof shelf === 'object' && shelf ? shelf.id : (shelf ?? null),
+        desired: parsed.data.collectionOrder,
+      })
+    }
+
     await revalidateCuration()
     return Response.json({ book: serialize(updated) })
   } catch (error) {
@@ -181,6 +196,7 @@ function serialize(book: {
   visibility?: string | null
   rightsStatus?: string | null
   collection?: unknown
+  collectionOrder?: number | null
   updatedAt?: string
 }) {
   return {
@@ -201,6 +217,7 @@ function serialize(book: {
       const id = typeof entry === 'object' && entry ? entry.id : entry
       return typeof id === 'number' ? id : null
     })(),
+    collectionOrder: book.collectionOrder ?? null,
     updatedAt: book.updatedAt,
   }
 }

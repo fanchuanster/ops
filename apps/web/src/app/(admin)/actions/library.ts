@@ -2,11 +2,16 @@
 
 import config from '@payload-config'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
+import { coverCandidatePages, coverKey } from '../../../domain/cover'
 import { isBookLevel, levelId } from '../../../domain/levels'
+import { ADMIN_DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
 import { currentAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
+import { placeBookOnShelf } from '../../../lib/shelfPlacement'
+import { deleteObjects } from '../../../lib/storage'
 
 /**
  * Curating the library: how a book reads, where it sits, and which
@@ -73,6 +78,17 @@ export async function saveBookDetails(
     return { error: 'That is not a collection.' }
   }
 
+  // Where the book sits among the books on that shelf. Blank means the
+  // editor said nothing about the order — not zero, and not "back to
+  // the end" — so the book keeps the number it has. A book moving to
+  // another shelf and given no number lands at the end of the new one,
+  // which is the collection hook's doing rather than this screen's.
+  const rawOrder = String(formData.get('collectionOrder') ?? '').trim()
+  const collectionOrder = rawOrder === '' ? null : Number(rawOrder)
+  if (collectionOrder !== null && !Number.isInteger(collectionOrder)) {
+    return { error: 'An order is a whole number.' }
+  }
+
   // Empty means "cleared", not "unchanged" — the panel always posts
   // every field, so a blank box is an instruction. Stored as null
   // rather than as an empty string so the absence reads the same way
@@ -115,6 +131,18 @@ export async function saveBookDetails(
       },
       overrideAccess: true,
     })
+
+    // After the shelf is written, not with it: the number is a place
+    // among the books on the shelf the book is on *now*, and whatever
+    // already holds that number is shifted along so no two books on one
+    // shelf share it (`lib/shelfPlacement.ts`).
+    if (collectionOrder !== null) {
+      await placeBookOnShelf(payload, {
+        bookId,
+        shelfId: collectionId,
+        desired: collectionOrder,
+      })
+    }
   } catch (error) {
     logError('admin.library.saveBook', error)
     return { error: 'Those changes could not be saved.' }
@@ -131,4 +159,91 @@ function revalidateLibrary() {
   revalidatePath('/')
   revalidatePath('/books')
   revalidatePath('/collections')
+}
+
+/**
+ * Delete a book, and the files behind it.
+ *
+ * The library's own withdrawal. `canDeleteUpload` decides it, the same
+ * function the reader's own delete goes through — an administrator is
+ * excused the ownership gate and is not excused the entitlement one,
+ * because that gate protects a reader who paid rather than the
+ * uploader.
+ *
+ * Everything else mirrors `actions/manageBook.ts` deliberately: the
+ * keys are read before the row goes, since afterwards there is nothing
+ * left to read them from, and the row goes before the objects. A failed
+ * object delete leaves a few unreferenced files; the other order can
+ * leave a book in the catalog whose content has been destroyed.
+ */
+export async function deleteLibraryBook(
+  _prev: LibraryState,
+  formData: FormData,
+): Promise<LibraryState> {
+  const admin = await currentAdmin()
+  if (!admin) return { error: ADMIN_DELETION_ERRORS.not_owner }
+
+  const bookId = Number(formData.get('bookId'))
+  if (!Number.isInteger(bookId)) return { error: 'No book named.' }
+
+  const payload = await getPayload({ config })
+  const book = await payload
+    .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+  if (!book) return { error: 'That book is already gone.' }
+
+  const ownerId = typeof book.owner === 'object' && book.owner ? book.owner.id : book.owner
+  const isOwner = Boolean(ownerId && String(ownerId) === String(admin.id))
+
+  // Anyone other than the uploader holding an entitlement means credits
+  // were spent on this book. An administrator deleting their own upload
+  // is asked the same question as any other uploader, which is why the
+  // owner is excluded from the query rather than the whole ledger being
+  // counted.
+  const bought = await payload.find({
+    collection: 'entitlements',
+    where: ownerId
+      ? { and: [{ book: { equals: bookId } }, { user: { not_equals: ownerId } }] }
+      : { book: { equals: bookId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  const decision = canDeleteUpload({
+    isOwner,
+    isAdmin: true,
+    boughtByOthers: bought.docs.length > 0,
+    isPublic: book.visibility === 'public',
+  })
+  if (!decision.allowed) return { error: ADMIN_DELETION_ERRORS[decision.reason] }
+
+  // A Set because the chosen candidate is named twice — once as the
+  // stored key, once as page N of the render.
+  const keys = new Set([
+    ...(book.artifacts ?? []).map((artifact) => artifact.storageKey),
+    book.conversion?.sourceKey,
+    // Not artifacts, but under the book's prefix and outliving the row
+    // exactly as they would (`domain/cover.ts`). Every rendered
+    // candidate goes, not only the one the book wears: they are all
+    // real objects, and the stored `key` names just the chosen one.
+    book.generatedCover?.key,
+    ...coverCandidatePages(book.generatedCover ?? {}).map((page) => coverKey(book.id, page)),
+  ].filter((key): key is string => typeof key === 'string' && key.length > 0))
+
+  try {
+    await payload.delete({ collection: 'books', id: bookId, overrideAccess: true })
+  } catch (error) {
+    logError('admin.library.deleteBook', error)
+    return { error: 'That book could not be deleted.' }
+  }
+
+  await deleteObjects([...keys])
+
+  revalidateLibrary()
+  revalidatePath(`/books/${book.slug}`)
+  // Back to the library with nothing selected: the panel's `?book=`
+  // now names a book that does not exist, and leaving it there would
+  // reopen a panel over an empty read.
+  redirect('/admin/library')
 }
