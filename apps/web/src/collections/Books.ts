@@ -203,7 +203,6 @@ export const Books: CollectionConfig = {
     { name: 'subtitle', type: 'text' },
     { name: 'originalTitle', type: 'text', admin: { description: 'Title in the original script, e.g. 道德經.' } },
     { name: 'author', type: 'text', index: true },
-    { name: 'translator', type: 'text' },
     {
       name: 'language',
       type: 'select',

@@ -161,7 +161,6 @@ export default async function BookDetailsPage({
           title: book.title,
           originalTitle: book.originalTitle ?? '',
           author: book.author ?? '',
-          translator: book.translator ?? '',
           language: book.language ?? '',
           // The counted length once there is one, the estimate read
           // from the file before that. Both are shown the same way and

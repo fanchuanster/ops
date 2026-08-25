@@ -153,19 +153,20 @@ export async function saveBookDetails(
       data: {
         title,
         author: String(formData.get('author') || '').trim() || null,
-        // Original title and translator joined the form on 2026-08-21.
-        // They were left off it on the argument that they are
-        // curatorial rather than something an uploader confirming their
-        // own scan can answer — which does not survive how extraction
-        // actually works: for a Chinese classic the file's own metadata
-        // usually *is* the original title, so the field arrives filled
-        // in and the reader is confirming rather than composing.
+        // Original title joined the form on 2026-08-21. It was left
+        // off on the argument that it is curatorial rather than
+        // something an uploader confirming their own scan can answer —
+        // which does not survive how extraction actually works: for a
+        // Chinese classic the file's own metadata usually *is* the
+        // original title, so the field arrives filled in and the reader
+        // is confirming rather than composing. Translator came with it
+        // and left on 2026-08-25: nothing extracts one, so it was
+        // always an empty box asking for prose.
         //
         // Description is still not here, and that one does hold: it is
         // written, not read off anything, and an empty box asking for
         // prose is the field that stops a form being finished.
         originalTitle: String(formData.get('originalTitle') || '').trim() || null,
-        translator: String(formData.get('translator') || '').trim() || null,
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collection: collectionId,

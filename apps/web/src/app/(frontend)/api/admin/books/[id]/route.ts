@@ -175,7 +175,6 @@ function serialize(book: {
   subtitle?: string | null
   originalTitle?: string | null
   author?: string | null
-  translator?: string | null
   language?: string | null
   description?: string | null
   level: number
@@ -191,7 +190,6 @@ function serialize(book: {
     subtitle: book.subtitle ?? null,
     originalTitle: book.originalTitle ?? null,
     author: book.author ?? null,
-    translator: book.translator ?? null,
     language: book.language ?? null,
     description: book.description ?? null,
     // The name, not the stored id — the same vocabulary the PATCH takes.

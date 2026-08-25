@@ -27,7 +27,6 @@ interface SeedBook {
   title: string
   originalTitle: string
   author: string
-  translator: string
   language: 'zh-Hant' | 'zh-Hans' | 'en' | 'zh-en'
   description: string
   /** The one shelf it sits on. A parent shows it too, by containing that shelf. */
@@ -94,7 +93,6 @@ const BOOKS: SeedBook[] = [
     title: 'Tao Te Ching',
     originalTitle: '道德經',
     author: 'Laozi (老子)',
-    translator: 'James Legge (1891)',
     language: 'zh-en',
     description:
       'One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge’s 1891 translation, which is in the public domain, alongside the original Chinese text.',
@@ -111,7 +109,6 @@ const BOOKS: SeedBook[] = [
     title: 'The Analects',
     originalTitle: '論語',
     author: 'Confucius (孔子)',
-    translator: 'James Legge (1893)',
     language: 'zh-en',
     description:
       'The recorded sayings of Confucius and his disciples, compiled by later followers — among the most influential works in Chinese thought on learning, character, and how to live well. This edition presents James Legge’s 1893 translation, which is in the public domain, alongside the original Chinese.',
@@ -172,7 +169,6 @@ async function seed() {
       slug: spec.slug,
       originalTitle: spec.originalTitle,
       author: spec.author,
-      translator: spec.translator,
       language: spec.language,
       description: spec.description,
       // Both seed titles are pre-1928 translations of pre-modern texts.

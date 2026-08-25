@@ -27,15 +27,20 @@ import {
  * asks for the book to be published, and asking it here made a private
  * upload feel like a submission (`SubmitForReview`).
  *
- * Original title and translator were also deliberately absent until
- * 2026-08-21, on the argument that they are curatorial rather than
- * something an uploader confirming their own scan can answer. The Figma
- * revision put them back, and the argument does not survive the way
- * extraction actually works: for a Chinese classic the file's own
- * metadata usually *is* the original title — 道德經 — so the field
- * arrives pre-filled and the uploader is confirming, not composing. A
- * field they can leave alone is cheap; a wrong 道德經 nobody was shown
- * is not.
+ * Original title was also deliberately absent until 2026-08-21, on the
+ * argument that it is curatorial rather than something an uploader
+ * confirming their own scan can answer. The Figma revision put it back,
+ * and the argument does not survive the way extraction actually works:
+ * for a Chinese classic the file's own metadata usually *is* the
+ * original title — 道德經 — so the field arrives pre-filled and the
+ * uploader is confirming, not composing. A field they can leave alone
+ * is cheap; a wrong 道德經 nobody was shown is not.
+ *
+ * Translator returned with it on that date and is gone again since
+ * 2026-08-25, along with the book field behind it. Nothing extracts a
+ * translator, so it was the one box on this form that was always empty
+ * and always prose — and the credit it carried reads better inside the
+ * description, where the seed books already put it.
  *
  * The one decision that does belong here is what to *do* with the file,
  * and only a PDF has one to make: a scan has to be read before it can
@@ -70,7 +75,6 @@ export interface EditableBook {
   title: string
   originalTitle: string
   author: string
-  translator: string
   language: string
   /** Exact once converted, estimated before; null when neither is known. */
   pageCount: number | null
@@ -178,11 +182,6 @@ export function BookDetailsForm({
           <ReadFromFile show={draft && Boolean(book.author)} />
         </span>
         <input type="text" name="author" defaultValue={book.author} maxLength={200} />
-      </label>
-
-      <label>
-        <span className="field-label">Translator</span>
-        <input type="text" name="translator" defaultValue={book.translator} maxLength={200} />
       </label>
 
       <label>

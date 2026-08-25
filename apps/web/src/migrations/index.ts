@@ -18,6 +18,7 @@ import * as migration_20260823_120000_generated_cover from './20260823_120000_ge
 import * as migration_20260824_060000_unique_title from './20260824_060000_unique_title';
 import * as migration_20260824_090000_user_api_keys from './20260824_090000_user_api_keys';
 import * as migration_20260824_100000_single_collection from './20260824_100000_single_collection';
+import * as migration_20260825_120000_drop_translator from './20260825_120000_drop_translator';
 
 export const migrations = [
   {
@@ -119,5 +120,10 @@ export const migrations = [
     up: migration_20260824_100000_single_collection.up,
     down: migration_20260824_100000_single_collection.down,
     name: '20260824_100000_single_collection'
+  },
+  {
+    up: migration_20260825_120000_drop_translator.up,
+    down: migration_20260825_120000_drop_translator.down,
+    name: '20260825_120000_drop_translator'
   },
 ];

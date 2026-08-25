@@ -667,7 +667,6 @@ A Book should include concepts such as:
 - title
 - subtitle
 - author
-- translator
 - language
 - description
 - cover
@@ -676,6 +675,17 @@ A Book should include concepts such as:
 - status
 - created_at
 - updated_at
+
+`translator` was on that list and on the book until 2026-08-25. It is
+gone, column included (`20260825_120000_drop_translator`). Nothing ever
+filled it in: extraction reads a title, an author, a language and a
+length out of a file (`domain/metadata.ts`) and no source carries a
+translator, so on the upload form it was the one box that was always
+empty and always prose — asking an uploader confirming their own scan to
+compose something, which is the argument that had kept it off that form
+until 2026-08-21. The credit reads better in the description, which is
+where both seed books already carried it, so the byline on a book page
+lost nothing a reader was relying on.
 
 A book is whole. It was split into Parts until 2026-08-14, each
 separately released and separately downloadable; that is gone, and the

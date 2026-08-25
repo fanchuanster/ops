@@ -115,11 +115,7 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
                 {book.originalTitle}
               </p>
             ) : null}
-            <p className="byline">
-              {[book.author, book.translator ? `trans. ${book.translator}` : null]
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
+            <p className="byline">{book.author}</p>
             {book.description ? <p className="description">{book.description}</p> : null}
 
             <div className="meta">
