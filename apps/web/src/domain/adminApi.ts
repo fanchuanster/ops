@@ -39,6 +39,7 @@
 
 import { BOOK_LEVELS, isBookLevel, levelId } from './levels'
 import { RIGHTS_STATUSES, type RightsStatus } from './rights'
+import { UNPLACED_ORDER_ID, orderIdFrom } from './shelfOrder'
 
 /** The languages a book may be filed under, mirroring the select. */
 export const BOOK_LANGUAGES = ['zh-Hans', 'zh-Hant', 'en', 'zh-en'] as const
@@ -95,10 +96,11 @@ export function parseBookUpdate(body: unknown): Parsed {
     description: nullable(text),
     level: parseLevel,
     collection: nullableId,
-    // Null is a real instruction here too — "take the number off" —
-    // though a book on a shelf is given a fresh one immediately by the
-    // collection hook, so it is mostly of use when unshelving.
-    collectionOrder: nullableInteger,
+    // A place on the shelf, clamped to something storable. Null is a
+    // real instruction — "unplace it" — and lands the book at the back
+    // of its shelf with everything else nobody has curated, reading
+    // alphabetically (`domain/shelfOrder.ts`).
+    collectionOrder: shelfPlace,
     rightsStatus: oneOf('rightsStatus', RIGHTS_STATUSES as readonly RightsStatus[]),
     visibility: oneOf('visibility', BOOK_VISIBILITIES),
   })
@@ -111,8 +113,26 @@ export function parseCollectionUpdate(body: unknown): Parsed {
     // Null is a real instruction — "make this a root shelf" — and not a
     // missing value, so it clears rather than being ignored.
     parent: nullableId,
-    sortOrder: nullableInteger,
+    sortOrder: shelfPlace,
   })
+}
+
+/**
+ * A place among siblings: a whole number in range, or the back.
+ *
+ * Null means "unplaced" and is stored as `UNPLACED_ORDER_ID` rather
+ * than as null, because null is what a book on *no shelf* carries and
+ * because SQLite would sort a null ahead of every placed item — see
+ * `domain/shelfOrder.ts`. A number out of range is clamped rather than
+ * refused: it is a slip, and a position is not the kind of field worth
+ * failing a whole PATCH over.
+ */
+const shelfPlace: Reader = (value, field) => {
+  if (value === null) return { ok: true, value: UNPLACED_ORDER_ID }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return { ok: false, message: `${field} must be a number or null.` }
+  }
+  return { ok: true, value: orderIdFrom(value) }
 }
 
 // ── the machinery ────────────────────────────────────────────────────

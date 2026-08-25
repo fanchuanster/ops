@@ -6,11 +6,11 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { coverCandidatePages, coverKey } from '../../../domain/cover'
+import { UNPLACED_ORDER_ID, orderIdFrom } from '../../../domain/shelfOrder'
 import { isBookLevel, levelId } from '../../../domain/levels'
 import { ADMIN_DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
 import { currentAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
-import { placeBookOnShelf } from '../../../lib/shelfPlacement'
 import { deleteObjects } from '../../../lib/storage'
 
 /**
@@ -128,21 +128,27 @@ export async function saveBookDetails(
         description: optional('description'),
         level: levelId(level),
         collection: collectionId,
+        // Written with the shelf rather than after it, since 2026-08-25.
+        // It used to be a second pass because the number had to be made
+        // unique — whatever stood at it was shifted along — and that
+        // shift had to happen against the shelf the book was on *now*.
+        // Numbers may repeat now, so a place is one field on one row
+        // and there is nothing to sequence.
+        //
+        // Null means the editor cleared the box: back of the shelf,
+        // where everything nobody has placed reads alphabetically
+        // (`domain/shelfOrder.ts`). The hook only fills in a number for
+        // a book that has just arrived, so it would leave a cleared one
+        // alone.
+        collectionOrder:
+          collectionId === null
+            ? null
+            : collectionOrder === null
+              ? UNPLACED_ORDER_ID
+              : orderIdFrom(collectionOrder),
       },
       overrideAccess: true,
     })
-
-    // After the shelf is written, not with it: the number is a place
-    // among the books on the shelf the book is on *now*, and whatever
-    // already holds that number is shifted along so no two books on one
-    // shelf share it (`lib/shelfPlacement.ts`).
-    if (collectionOrder !== null) {
-      await placeBookOnShelf(payload, {
-        bookId,
-        shelfId: collectionId,
-        desired: collectionOrder,
-      })
-    }
   } catch (error) {
     logError('admin.library.saveBook', error)
     return { error: 'Those changes could not be saved.' }

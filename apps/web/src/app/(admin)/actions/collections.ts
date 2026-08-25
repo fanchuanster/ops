@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
 import { canNest, parentIdOf, subtreeIds } from '../../../domain/collectionTree'
-import { resequence } from '../../../domain/shelfOrder'
+import { UNPLACED_ORDER_ID, orderIdFrom, resequence } from '../../../domain/shelfOrder'
 import {
   isBookLevel,
   isLevelApplyMode,
@@ -16,7 +16,6 @@ import {
 import type { BookCollection } from '../../../payload-types'
 import { currentAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
-import { placeCollectionAmongSiblings } from '../../../lib/shelfPlacement'
 
 /**
  * The shelves: naming them, describing them, filing them under one
@@ -169,21 +168,19 @@ export async function saveCollection(
     await payload.update({
       collection: 'book-collections',
       id,
-      data: { title, description: description || null, parent },
+      data: {
+        title,
+        description: description || null,
+        parent,
+        // One field on one row: numbers may repeat since 2026-08-25, so
+        // nothing has to be shifted out of the way and this no longer
+        // needs a second pass after the move. A cleared box means the
+        // back of the shelf, where unplaced siblings read alphabetically
+        // (`domain/shelfOrder.ts`).
+        sortOrder: order === null ? UNPLACED_ORDER_ID : orderIdFrom(order),
+      },
       overrideAccess: true,
     })
-
-    // After the move, not with it: the number is a place among the
-    // shelves on the *new* parent, and whatever is already standing at
-    // that number has to be shifted along to keep the numbers unique
-    // (`lib/shelfPlacement.ts`).
-    if (order !== null) {
-      await placeCollectionAmongSiblings(payload, {
-        collectionId: id,
-        parentId: parent,
-        desired: order,
-      })
-    }
   } catch (error) {
     logError('admin.collections.save', error)
     return { error: 'That change could not be saved.' }

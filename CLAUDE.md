@@ -989,25 +989,37 @@ ordering of the library is a view somebody would send to somebody else,
 so it stays in the URL and the page still renders on the server.
 
 The sequence is **a number the item carries**, not a position in a list.
-A book is given one when it is filed onto a shelf — one past the highest
-already there — it is unique among that shelf's own books, and an editor
-can change it. Collections carry the same number among their own
+An editor types it; nobody is given one automatically. Two rules about
+that number changed on 2026-08-25 and both loosened it:
+
+- **It need not be unique.** Two books on a shelf may both be 3 and
+  then read alphabetically between themselves. Setting a number writes
+  one row and moves nothing else. It used to *shift* the run of
+  occupants along to keep the numbers unique, so one edit rewrote half
+  a shelf and books nobody touched moved.
+- **A shelf is alphabetical until somebody curates it.** An arrival is
+  no longer given the next free number; it takes `UNPLACED_ORDER_ID`,
+  which everything unplaced shares, so they all tie and fall to the
+  title comparison. A shelf nobody has ordered reads A–Z, and a book
+  given a real number rises out of that run to where it was put. Collections carry the same number among their own
 siblings; `sortOrder` has been exactly this idea for shelves since
 2026-08-21, and this makes it a number an editor types rather than only
 something the reorder arrows move.
 
-Two consequences of it being a carried number, both deliberate
-(`domain/shelfOrder.ts`):
+The numbers need not be contiguous either. Nothing renumbers a shelf
+because a book left it, so 1, 2, 5 is a normal state and the gap is not
+a bug to tidy: an order id an editor typed is a fact they stated, and
+closing a gap under them would move books nobody touched.
 
-- **The numbers need not be contiguous.** Nothing renumbers a shelf
-  because a book left it, so 1, 2, 5 is a normal state and the gap is
-  not a bug to tidy. An order id an editor typed is a fact they stated,
-  and closing a gap under them would move books nobody touched.
-- **Typing a number another book holds shifts, it does not swap.**
-  `placeInOrder` inserts at the number asked for and pushes the run of
-  occupants along, stopping at the first free number. That is what "put
-  this book third" means to the person typing 3, and it is what keeps
-  the ids unique per shelf.
+**"Unplaced" is a stored number and not null**, which reads worse and is
+required. The catalog sorts in the database because `limit` truncates —
+browsing in the curated order has to take the first forty-eight *by that
+order*. SQLite sorts NULLs **first** in an ascending sort and the
+adapter emits no `NULLS LAST`, so a null would put every uncurated book
+ahead of the ones an editor deliberately numbered: exactly backwards. A
+large shared number sorts last by ordinary arithmetic, in the database
+and in `compareSequence` alike. Null still means something different —
+a book on no shelf at all, which has no position to hold.
 
 **Choosing a number is an administrator's.** Filing is not: an uploader
 picks their book's collection on their own book page, and the arrival
@@ -1023,16 +1035,15 @@ PATCH the field and walk their own upload to the front of a shelf.
 `ADMIN_ONLY_BOOK_FIELDS` in `domain/moderation.ts` is the list, and it
 is now wired into the collection rather than only asserted in tests.
 
-Where the shifting happens matters. It is `lib/shelfPlacement.ts`,
-called by every writer that offers the editing — the admin screen and
-the admin JSON API — and never by the collection hook that *assigns* a
-number to an arrival. A shift arrives as several updates to several
-rows, and a hook sees one row at a time: it would meet each of those
-writes on its own and try to shift it out of the way of the shift.
+`lib/shelfPlacement.ts` is gone with the shifting. A place is one field
+on one row now, written with the rest of the edit rather than in a
+second pass against the shelf the book ended up on, so the admin screen
+and the admin JSON API both just set the field.
 
 The hooks (`assignCollectionOrder`, `assignSiblingOrder`) therefore do
-one thing: give a number to something that has just arrived, or has just
-moved to another shelf. There is a trap in them worth knowing about,
+one thing: send something that has just arrived, or has just moved to
+another shelf, to the back of it — `UNPLACED_ORDER_ID`, no sibling query
+at all, so filing a book reads nothing. There is a trap in them worth knowing about,
 because it bit once already — Payload hands a `beforeChange` hook the
 whole document with the update merged into it, so the order field is
 *always* present on an update. "The caller stated a number" has to mean

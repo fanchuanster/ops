@@ -8,30 +8,41 @@
  *   sequence      the order somebody put them in, ascending
  *   alphabetical  by title
  *
- * The sequence is not a position in a list, it is a **number the item
- * carries**: a book is given one when it is filed onto a shelf, it is
- * unique among that shelf's own books, and an editor can change it.
- * Collections carry the same number among their own siblings
- * (`sortOrder`, which predates this module and is exactly this idea for
- * shelves rather than books).
+ * The sequence is a **number the item carries**, and since 2026-08-25
+ * two things about that number are deliberately loose:
  *
- * Two consequences of it being a carried number rather than a position,
- * both deliberate:
+ *   - **It need not be unique.** Two books on a shelf may both be 3,
+ *     and they then read alphabetically between themselves. Setting a
+ *     number therefore writes one row and never touches another book,
+ *     which is what an editor typing 3 actually asked for. It used to
+ *     *shift* the run of occupants along to keep the numbers unique —
+ *     one edit rewriting half a shelf, and books nobody touched moving.
+ *   - **A shelf is alphabetical until somebody says otherwise.** An
+ *     arrival is not given the next free number any more; it takes
+ *     `UNPLACED_ORDER_ID`, which every unplaced item shares, so they
+ *     all tie and fall to the title comparison. A shelf nobody has
+ *     curated reads A–Z, and a book given a real number rises out of
+ *     that run to the place it was given.
  *
- *   - The numbers need not be contiguous. Nothing renumbers a shelf
- *     because one book left it, so 1, 2, 5 is a normal state and the
- *     gap is not a bug to tidy. An order id an editor typed is a fact
- *     they stated, and rewriting the whole shelf under them to close a
- *     gap would move books nobody touched.
- *   - Setting one to a number already taken **shifts**, it does not
- *     swap. `placeInOrder` inserts at the number asked for and pushes
- *     the run of occupants along, which is what "put this book third"
- *     means to the person typing 3.
+ * The numbers need not be contiguous either. Nothing renumbers a shelf
+ * because a book left it, so 1, 2, 5 is a normal state — an order id an
+ * editor typed is a fact they stated, and closing a gap under them
+ * would move books nobody touched.
  *
- * An item with no number at all sorts last, under the alphabetical
- * fallback — the same rule `sortOrder` has always had on collections,
- * so a library nobody has ordered still reads in a sensible order
- * rather than in whatever order the rows came back in.
+ * ## Why "unplaced" is a number and not null
+ *
+ * It would read better as null, and it cannot be. The catalog sorts in
+ * the database because `limit` truncates — browsing in the curated
+ * order has to take the first forty-eight *by that order*. SQLite sorts
+ * NULLs **first** in an ascending sort and the adapter emits no
+ * `NULLS LAST`, so a null would put every uncurated book ahead of the
+ * ones an editor deliberately numbered: exactly backwards. A large
+ * shared number sorts last by ordinary arithmetic, in the database and
+ * in `compareSequence` alike.
+ *
+ * Null still means something, and something different: a book on no
+ * shelf at all. An order id is a position among a collection's own
+ * books, so off the shelf there is nothing for it to be a position in.
  *
  * Framework-independent, like everything in `src/domain`.
  */
@@ -104,12 +115,18 @@ export function orderIdOf(item: OrderedItem): number | null {
 }
 
 /**
- * Ascending by order id, unnumbered last, ties broken by title.
+ * Ascending by order id, ties broken by title, null last.
  *
- * The tie-break matters more than it looks: order ids are unique per
- * shelf by construction, but this comparator also runs over a *mixed*
- * list — one catalog query covers every shelf at once — where two books
- * on different shelves legitimately share the number 1.
+ * The tie-break is not a corner case any more, it is the common one:
+ * order ids need not be unique, and everything nobody has placed shares
+ * `UNPLACED_ORDER_ID`, so an uncurated shelf reaches the title
+ * comparison for every pair. It also runs over a *mixed* list — one
+ * catalog query covers every shelf at once — where two books on
+ * different shelves legitimately share the number 1.
+ *
+ * Null is last rather than treated as unplaced: a null order id means a
+ * book on no shelf, which has no business being interleaved with one
+ * that is on this one.
  */
 export function compareSequence(a: OrderedItem, b: OrderedItem): number {
   const left = orderIdOf(a)
@@ -129,69 +146,52 @@ export function sortShelfItems<T extends OrderedItem>(
   return [...items].sort(sort === 'alphabetical' ? compareTitles : compareSequence)
 }
 
-/** The first order id on an empty shelf. One, not zero — editors count from one. */
+/** Editors count from one, so the lowest place on a shelf is 1. */
 export const FIRST_ORDER_ID = 1
 
 /**
- * The order id a new arrival gets: one past the highest already there.
+ * The highest number an editor may type.
  *
- * Past the highest rather than into the first gap. A shelf's numbers
- * are a sequence somebody is reading down, and dropping a new book into
- * the hole left by a deleted one puts it in the middle of a list it has
- * no business being in the middle of.
+ * Not a storage limit — it is the gap that keeps a typed number and
+ * `UNPLACED_ORDER_ID` from ever colliding. Four digits is already far
+ * more than a shelf holds; anything larger is a typo, and clamping is
+ * kinder than refusing.
  */
-export function nextOrderId(siblings: readonly OrderedItem[]): number {
-  let highest = FIRST_ORDER_ID - 1
-  for (const sibling of siblings) {
-    const order = orderIdOf(sibling)
-    if (order !== null && order > highest) highest = order
-  }
-  return highest + 1
-}
+export const MAX_ORDER_ID = 9999
 
-/** One write `placeInOrder` or `resequence` is asking for. */
-export interface OrderWrite {
-  id: number | string
-  order: number
+/**
+ * The number everything unplaced carries: the back of the shelf.
+ *
+ * Shared rather than unique, which is the whole point — every item
+ * nobody has curated ties with every other, so they read alphabetically
+ * among themselves and after anything an editor placed. Out of reach of
+ * `MAX_ORDER_ID`, so it can never be typed by accident.
+ */
+export const UNPLACED_ORDER_ID = 1_000_000
+
+/** Whether this item is where an editor put it, rather than at the back. */
+export function isPlaced(item: OrderedItem): boolean {
+  const order = orderIdOf(item)
+  return order !== null && order < UNPLACED_ORDER_ID
 }
 
 /**
- * Put one item at a given order id, shifting whatever is in the way.
+ * A number an editor typed, made storable.
  *
- * Returns only the writes that actually change something — the item
- * itself, and the contiguous run of occupants starting at the number
- * asked for, each pushed up by one. The run stops at the first free
- * number, so a shelf numbered 1, 2, 7 with something inserted at 1
- * rewrites two rows and leaves 7 where it is.
- *
- * `desired` is clamped to a whole number no lower than the first order
- * id: an editor typing 0 or -3 means "first", and a fractional order id
- * would break the uniqueness this exists to keep.
+ * Floored and clamped: a fractional place is meaningless, 0 or -3 means
+ * "first", and anything past `MAX_ORDER_ID` is a slip rather than a
+ * position. Nothing here consults the other books — duplicates are
+ * allowed now, so there is nothing to resolve.
  */
-export function placeInOrder(
-  siblings: readonly OrderedItem[],
-  { id, desired }: { id: number | string; desired: number },
-): OrderWrite[] {
-  const target = Math.max(FIRST_ORDER_ID, Math.floor(desired))
-  const key = String(id)
+export function orderIdFrom(desired: number): number {
+  if (!Number.isFinite(desired)) return UNPLACED_ORDER_ID
+  return Math.min(MAX_ORDER_ID, Math.max(FIRST_ORDER_ID, Math.floor(desired)))
+}
 
-  // The moved item is not in its own way. Taken from the others only,
-  // so re-stating a book's own number is a no-op rather than a shove.
-  const occupied = new Map<number, OrderedItem>()
-  for (const sibling of siblings) {
-    if (String(sibling.id) === key) continue
-    const order = orderIdOf(sibling)
-    if (order !== null) occupied.set(order, sibling)
-  }
-
-  const writes: OrderWrite[] = []
-  const current = siblings.find((sibling) => String(sibling.id) === key)
-  if (!current || orderIdOf(current) !== target) writes.push({ id, order: target })
-
-  for (let slot = target; occupied.has(slot); slot += 1) {
-    writes.push({ id: occupied.get(slot)!.id, order: slot + 1 })
-  }
-  return writes
+/** One write `resequence` is asking for. */
+export interface OrderWrite {
+  id: number | string
+  order: number
 }
 
 /**
@@ -201,7 +201,8 @@ export function placeInOrder(
  * which hand over the sibling group in its new order. Every row is
  * written, including the ones whose number does not change, because the
  * caller's job here is to make the stored numbers say what the list on
- * screen says.
+ * screen says — and after an arrow the whole group is placed, so none
+ * of them is at the back of the shelf any more.
  */
 export function resequence(siblings: readonly OrderedItem[]): OrderWrite[] {
   return siblings.map((sibling, index) => ({

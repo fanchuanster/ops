@@ -9,7 +9,7 @@ import {
   canPublishToLibrary,
 } from '../domain/moderation'
 import { priceInCredits } from '../domain/credits'
-import { nextOrderId } from '../domain/shelfOrder'
+import { UNPLACED_ORDER_ID } from '../domain/shelfOrder'
 import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 
 /**
@@ -133,25 +133,23 @@ function shelfIdOf(value: unknown): number | null {
 }
 
 /**
- * A book filed onto a shelf is given its order id on that shelf.
+ * A book's place among the books on its shelf.
  *
- * The number a reader browsing in the curated order is sorted by
- * (`domain/shelfOrder.ts`). Assigned here rather than in the upload
- * flow because there is more than one way a book arrives on a shelf —
- * the portal, the editorial panel, the seed script, the REST API — and
- * a book with no number would sort to the end of its shelf whichever
- * door it came through.
+ * A hook and not something the upload flow does, because there is more
+ * than one way a book arrives on a shelf — the portal, the editorial
+ * panel, the seed script, the REST API — and a book with no number at
+ * all would sort ahead of every placed one (`domain/shelfOrder.ts`
+ * explains why null cannot mean "unplaced" here).
  *
- * Three cases, and what is *not* here matters as much as what is:
+ * Three cases:
  *
  *   - No shelf: no order id. An order id is a position among a
  *     collection's own books, so a book on no shelf has none rather
  *     than a stale number from the shelf it left.
- *   - A stated number is obeyed exactly. Collisions are resolved by the
- *     writer that offers the editing (`placeInOrder`, which shifts the
- *     run out of the way) — never here, because a shift arrives as
- *     several updates and a hook that second-guessed each one in
- *     isolation would fight the very move it was handed.
+ *   - A stated number is obeyed exactly, and nothing else moves.
+ *     Duplicates are allowed since 2026-08-25 — two books at 3 read
+ *     alphabetically between themselves — so there is no collision left
+ *     for anyone to resolve.
  *
  *     "Stated" means *different from what is stored*, and that is not
  *     pedantry. Payload hands a `beforeChange` hook the whole document
@@ -161,17 +159,20 @@ function shelfIdOf(value: unknown): number | null {
  *     made every move to another shelf keep the number it had on the
  *     shelf it left, which is exactly the bug this rule exists to
  *     prevent.
- *   - Otherwise, a book that has just landed on this shelf goes to the
- *     end of it. A book already on it keeps the number it has.
+ *   - Otherwise the book is unplaced: it takes `UNPLACED_ORDER_ID`
+ *     along with everything else nobody has curated, and the shelf
+ *     reads alphabetically until an editor says otherwise. This used to
+ *     be "one past the highest", which quietly made every shelf a
+ *     first-come queue that no one had chosen.
  *
- * The rule is `nextOrderId`; this hook only fetches what it needs
- * (CLAUDE.md section 2.1).
+ * No sibling query any more, which is the nice part: the number an
+ * arrival gets no longer depends on the other books, so filing a book
+ * is one write and reads nothing.
  */
 const assignCollectionOrder: CollectionBeforeChangeHook = async ({
   data,
   operation,
   originalDoc,
-  req,
 }) => {
   if (!data) return data
 
@@ -187,25 +188,7 @@ const assignCollectionOrder: CollectionBeforeChangeHook = async ({
   const moved = operation === 'create' || shelf !== was
   if (!moved && typeof originalDoc?.collectionOrder === 'number') return data
 
-  const siblings = await req.payload.find({
-    collection: 'books',
-    where: { collection: { equals: shelf } },
-    limit: 1000,
-    depth: 0,
-    pagination: false,
-    overrideAccess: true,
-  })
-
-  return {
-    ...data,
-    collectionOrder: nextOrderId(
-      siblings.docs
-        // Itself excluded: a book being re-saved on the shelf it is
-        // already on must not be pushed past its own number.
-        .filter((book) => book.id !== originalDoc?.id)
-        .map((book) => ({ id: book.id, title: book.title, order: book.collectionOrder })),
-    ),
-  }
+  return { ...data, collectionOrder: UNPLACED_ORDER_ID }
 }
 
 const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {

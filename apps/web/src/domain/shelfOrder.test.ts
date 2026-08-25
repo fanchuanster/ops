@@ -1,24 +1,27 @@
 /**
  * Shelf ordering.
  *
- * Two things carry weight. `compareSequence` is what a reader actually
- * sees, and its unnumbered-last rule is the only reason a library
- * nobody has ordered still reads sensibly. `placeInOrder` is what keeps
- * order ids unique per shelf while still letting an editor type any
- * number they like — the shifting is the whole of that guarantee, so it
- * is tested against gaps, no-ops and the first slot.
+ * `compareSequence` is what a reader actually sees, and since order ids
+ * need not be unique its title tie-break is the common path rather than
+ * a corner: everything nobody has placed shares `UNPLACED_ORDER_ID`, so
+ * an uncurated shelf reaches the title comparison for every pair and
+ * reads A-Z. The tests below are mostly about that — a shelf nobody
+ * curated, one book lifted out of it, and two books at the same
+ * number.
  */
 
 import { describe, expect, it } from 'vitest'
 
 import {
   DEFAULT_SHELF_SORT,
-  FIRST_ORDER_ID,
   compareSequence,
   compareTitles,
-  nextOrderId,
+  FIRST_ORDER_ID,
+  MAX_ORDER_ID,
+  UNPLACED_ORDER_ID,
+  isPlaced,
+  orderIdFrom,
   parseShelfSort,
-  placeInOrder,
   resequence,
   sortShelfItems,
 } from './shelfOrder'
@@ -82,72 +85,69 @@ describe('sorting a shelf', () => {
   })
 })
 
-describe('nextOrderId', () => {
-  it('starts at one on an empty shelf', () => {
-    expect(nextOrderId([])).toBe(FIRST_ORDER_ID)
-    expect(FIRST_ORDER_ID).toBe(1)
+describe('a place on the shelf', () => {
+  it('clamps a typed number to something storable', () => {
+    expect(orderIdFrom(3)).toBe(3)
+    expect(orderIdFrom(3.7)).toBe(3)
+    // 0 and negatives mean "first" rather than being refused.
+    expect(orderIdFrom(0)).toBe(FIRST_ORDER_ID)
+    expect(orderIdFrom(-3)).toBe(FIRST_ORDER_ID)
+    // A slip, not a position — and it must never reach the sentinel.
+    expect(orderIdFrom(50_000)).toBe(MAX_ORDER_ID)
+    expect(orderIdFrom(UNPLACED_ORDER_ID)).toBe(MAX_ORDER_ID)
   })
 
-  it('goes past the highest, not into the gap', () => {
-    // 2 was deleted. A new book belongs at the end of the sequence, not
-    // in the middle of a list it was never part of.
-    expect(nextOrderId([item(1, 'A', 1), item(3, 'C', 3)])).toBe(4)
+  it('keeps what an editor may type clear of the back of the shelf', () => {
+    expect(MAX_ORDER_ID).toBeLessThan(UNPLACED_ORDER_ID)
   })
 
-  it('ignores siblings nobody numbered', () => {
-    expect(nextOrderId([item(1, 'A'), item(2, 'B', 2)])).toBe(3)
+  it('calls a placed item placed and an unplaced one not', () => {
+    expect(isPlaced({ id: 1, title: 'a', order: 2 })).toBe(true)
+    expect(isPlaced({ id: 2, title: 'b', order: UNPLACED_ORDER_ID })).toBe(false)
+    expect(isPlaced({ id: 3, title: 'c', order: null })).toBe(false)
   })
 })
 
-describe('placeInOrder', () => {
-  const shelf = [item(1, 'A', 1), item(2, 'B', 2), item(3, 'C', 3)]
+describe('a shelf nobody has curated', () => {
+  const shelf = [
+    { id: 1, title: 'Zhuangzi', order: UNPLACED_ORDER_ID },
+    { id: 2, title: 'Analects', order: UNPLACED_ORDER_ID },
+    { id: 3, title: 'Mencius', order: UNPLACED_ORDER_ID },
+  ]
 
-  it('shifts the run it lands in, so no two share a number', () => {
-    const writes = placeInOrder(shelf, { id: 3, desired: 1 })
-    expect(writes).toEqual([
-      { id: 3, order: 1 },
-      { id: 1, order: 2 },
-      { id: 2, order: 3 },
+  it('reads alphabetically', () => {
+    // The whole point of a shared sentinel: everything ties, so the
+    // title comparison decides, and a shelf nobody ordered is A-Z.
+    expect(sortShelfItems(shelf, 'sequence').map((item) => item.title)).toEqual([
+      'Analects',
+      'Mencius',
+      'Zhuangzi',
     ])
   })
 
-  it('stops shifting at the first free number', () => {
-    const gapped = [item(1, 'A', 1), item(2, 'B', 2), item(3, 'C', 7)]
-    expect(placeInOrder(gapped, { id: 3, desired: 1 })).toEqual([
-      { id: 3, order: 1 },
-      { id: 1, order: 2 },
-      { id: 2, order: 3 },
+  it('lifts one placed book out of that run, leaving the rest alone', () => {
+    const withOne = [...shelf, { id: 4, title: 'Zuo Zhuan', order: 1 }]
+    expect(sortShelfItems(withOne, 'sequence').map((item) => item.title)).toEqual([
+      'Zuo Zhuan',
+      'Analects',
+      'Mencius',
+      'Zhuangzi',
     ])
   })
 
-  it('does not treat the moved item as being in its own way', () => {
-    expect(placeInOrder(shelf, { id: 2, desired: 2 })).toEqual([])
-  })
-
-  it('writes only the arrival when the number is free', () => {
-    expect(placeInOrder(shelf, { id: 3, desired: 9 })).toEqual([{ id: 3, order: 9 }])
-  })
-
-  it('numbers a book that is not on the shelf yet', () => {
-    expect(placeInOrder(shelf, { id: 4, desired: 2 })).toEqual([
-      { id: 4, order: 2 },
-      { id: 2, order: 3 },
-      { id: 3, order: 4 },
+  it('reads two books at the same number alphabetically between them', () => {
+    // Order ids need not be unique since 2026-08-25 — setting one
+    // writes one row and moves nobody else.
+    const tied = [
+      { id: 1, title: 'Mencius', order: 3 },
+      { id: 2, title: 'Analects', order: 3 },
+      { id: 3, title: 'Zhuangzi', order: 1 },
+    ]
+    expect(sortShelfItems(tied, 'sequence').map((item) => item.title)).toEqual([
+      'Zhuangzi',
+      'Analects',
+      'Mencius',
     ])
-  })
-
-  it('clamps a number below the first slot rather than refusing it', () => {
-    expect(placeInOrder(shelf, { id: 3, desired: 0 })[0]).toEqual({ id: 3, order: 1 })
-    expect(placeInOrder(shelf, { id: 3, desired: -7 })[0]).toEqual({ id: 3, order: 1 })
-  })
-
-  it('never stores a fractional order id', () => {
-    expect(placeInOrder(shelf, { id: 3, desired: 2.6 })[0]).toEqual({ id: 3, order: 2 })
-  })
-
-  it('matches ids across the number/string boundary', () => {
-    // Payload hands ids back as numbers; a form posts them as strings.
-    expect(placeInOrder(shelf, { id: '2', desired: 2 })).toEqual([])
   })
 })
 

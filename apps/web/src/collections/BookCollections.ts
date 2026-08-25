@@ -7,7 +7,7 @@ import {
   canNest,
   parentIdOf,
 } from '../domain/collectionTree'
-import { nextOrderId } from '../domain/shelfOrder'
+import { UNPLACED_ORDER_ID } from '../domain/shelfOrder'
 
 const NESTING_ERRORS: Record<NestingRefusal, string> = {
   self: 'A collection cannot be filed under itself.',
@@ -61,25 +61,18 @@ const enforceNesting: CollectionBeforeChangeHook = async ({ data, originalDoc, r
 }
 
 /**
- * A shelf gets its number among the shelves it stands beside.
+ * A shelf's place among its own siblings.
  *
- * The same rule the books on it follow (`assignCollectionOrder` in
- * `collections/Books.ts`), for the same reason: order is per-parent, so
- * a shelf arriving on a new parent joins the end of *that* group rather
- * than keeping a number that meant something among its old siblings.
+ * The same rule books get in `collections/Books.ts`, for the same
+ * reasons, and it changed on the same day: a shelf nobody has placed
+ * takes `UNPLACED_ORDER_ID` rather than the next free number, so a
+ * parent's children read alphabetically until an editor orders them.
+ * It was "one past the highest", which made every new shelf land at the
+ * end of a queue nobody had chosen.
  *
- * Order was nullable and mostly null before 2026-08-25 — the catalog
- * sorted `sortOrder` then `title` precisely so unnumbered shelves still
- * landed somewhere sensible. That fallback stays as a safety net, but
- * every shelf now gets a number, because a number an editor types into
- * the box on `/admin/collections` needs the others to have one for it
- * to be relative to.
- *
- * A stated number is obeyed exactly, collisions included. Resolving
- * them is `placeCollectionAmongSiblings` in `lib/shelfPlacement.ts`,
- * which shifts the run out of the way — it cannot happen here, because
- * a shift arrives as several updates and this hook sees one row at a
- * time.
+ * A stated number is obeyed exactly, collisions included — two shelves
+ * may share a number and then read alphabetically between themselves.
+ * Nothing shifts out of the way any more.
  *
  * "Stated" means *different from what is stored*: Payload hands this
  * hook the whole document with the update merged into it, so
@@ -92,7 +85,6 @@ const assignSiblingOrder: CollectionBeforeChangeHook = async ({
   data,
   operation,
   originalDoc,
-  req,
 }) => {
   if (!data) return data
 
@@ -109,29 +101,7 @@ const assignSiblingOrder: CollectionBeforeChangeHook = async ({
   const moved = operation === 'create' || parent !== was
   if (!moved && typeof originalDoc?.sortOrder === 'number') return data
 
-  const all = await req.payload.find({
-    collection: 'book-collections',
-    limit: 500,
-    depth: 0,
-    pagination: false,
-    overrideAccess: true,
-  })
-
-  return {
-    ...data,
-    sortOrder: nextOrderId(
-      all.docs
-        .filter(
-          (collection) =>
-            collection.id !== originalDoc?.id && parentIdOf(collection) === parent,
-        )
-        .map((collection) => ({
-          id: collection.id,
-          title: collection.title,
-          order: collection.sortOrder,
-        })),
-    ),
-  }
+  return { ...data, sortOrder: UNPLACED_ORDER_ID }
 }
 
 /**

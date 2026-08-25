@@ -7,6 +7,7 @@ import {
   parseCollectionUpdate,
 } from './adminApi'
 import { LEVEL_IDS } from './levels'
+import { FIRST_ORDER_ID, MAX_ORDER_ID, UNPLACED_ORDER_ID } from './shelfOrder'
 
 /**
  * What the admin API will and will not accept.
@@ -82,13 +83,17 @@ describe('the admin API, on a book', () => {
     expect(fields(parseBookUpdate({ collections: [3] }))).toEqual(['collections'])
   })
 
-  it('takes a place on the shelf, and null to take it off', () => {
+  it('takes a place on the shelf, and null for the back of it', () => {
     expect(ok(parseBookUpdate({ collectionOrder: 3 })).collectionOrder).toBe(3)
-    expect(ok(parseBookUpdate({ collectionOrder: null })).collectionOrder).toBe(null)
-    // Uniqueness is not this function's business: the route shifts
-    // whatever is standing at that number (`lib/shelfPlacement.ts`), so
-    // a number another book holds parses fine and is resolved on write.
-    expect(fields(parseBookUpdate({ collectionOrder: 2.5 }))).toEqual(['collectionOrder'])
+    // Null is "unplace it", which is a stored number and not a null —
+    // see `domain/shelfOrder.ts` on why the back of the shelf cannot
+    // be null here.
+    expect(ok(parseBookUpdate({ collectionOrder: null })).collectionOrder).toBe(UNPLACED_ORDER_ID)
+    // Uniqueness is nobody's business now: two books may share a
+    // number and read alphabetically between themselves.
+    expect(ok(parseBookUpdate({ collectionOrder: 2.5 })).collectionOrder).toBe(2)
+    expect(ok(parseBookUpdate({ collectionOrder: 0 })).collectionOrder).toBe(FIRST_ORDER_ID)
+    expect(ok(parseBookUpdate({ collectionOrder: 50_000 })).collectionOrder).toBe(MAX_ORDER_ID)
     expect(fields(parseBookUpdate({ collectionOrder: '3' }))).toEqual(['collectionOrder'])
   })
 
@@ -134,9 +139,9 @@ describe('the admin API, on a collection', () => {
   it('takes a sort order, including zero and null', () => {
     // Zero is first, not absent — a falsy check here would silently
     // refuse the one value that means "put it at the front".
-    expect(ok(parseCollectionUpdate({ sortOrder: 0 })).sortOrder).toBe(0)
-    expect(ok(parseCollectionUpdate({ sortOrder: null })).sortOrder).toBe(null)
-    expect(fields(parseCollectionUpdate({ sortOrder: 1.5 }))).toEqual(['sortOrder'])
+    expect(ok(parseCollectionUpdate({ sortOrder: 0 })).sortOrder).toBe(FIRST_ORDER_ID)
+    expect(ok(parseCollectionUpdate({ sortOrder: null })).sortOrder).toBe(UNPLACED_ORDER_ID)
+    expect(ok(parseCollectionUpdate({ sortOrder: 1.5 })).sortOrder).toBe(1)
   })
 
   it('does not decide nesting — that is the collection hook, for every door', () => {
