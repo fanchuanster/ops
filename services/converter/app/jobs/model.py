@@ -46,6 +46,13 @@ class JobKind(str, Enum):
 
     MASTER = "master"
     FORMATS = "formats"
+    # Correction, which is neither half of production and deliberately
+    # sits beside both. CORRECT reads the master and proposes; APPLY
+    # rewrites it from what a person adopted. Nothing is ever applied
+    # without that person (CLAUDE.md section 7), which is why these are
+    # two jobs with a decision between them rather than one.
+    CORRECT = "correct"
+    APPLY = "apply"
     # Both, in one run. What the CLI and the job API do: they are driven
     # by an editor at a terminal rather than by the web application's
     # handoff, and there is no reason to make someone converting a book
@@ -94,6 +101,15 @@ class Job:
     # a reader's private upload must not go to xAI (CLAUDE.md section
     # 6.1). Only public-domain library material sets this.
     allow_third_party_ai: bool = False
+    # Where CORRECT wrote its proposals, and where APPLY reads the
+    # reader's answers from. The second is the first with `approved`
+    # filled in, so both are read by `serialize.read_suggestions` and
+    # there is only one format to keep in step.
+    suggestions_key: str | None = None
+    decisions_key: str | None = None
+    # How many proposals CORRECT made, so the book page can say so
+    # without fetching the file.
+    suggestion_count: int | None = None
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     state: JobState = JobState.QUEUED
@@ -118,6 +134,7 @@ class Job:
             "error": self.error,
             "artifacts": self.artifacts,
             "page_count": self.page_count,
+            "suggestions_key": self.suggestions_key,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }

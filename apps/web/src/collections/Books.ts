@@ -696,6 +696,76 @@ export const Books: CollectionConfig = {
           },
         },
         {
+          // Correction runs beside the pipeline rather than inside it,
+          // on its own state. A book waiting for a person to read
+          // suggestions is not converting, and blocking phase 2 behind
+          // that decision would deny the reader an EPUB that is already
+          // buildable. See domain/correction.ts.
+          name: 'correction',
+          type: 'group',
+          admin: {
+            description:
+              'AI-assisted correction: proposed, decided by the owner, then applied to the master.',
+          },
+          fields: [
+            {
+              name: 'state',
+              type: 'select',
+              defaultValue: 'none',
+              index: true,
+              options: [
+                { label: 'Not asked for', value: 'none' },
+                { label: 'Master ready, suggestions to propose', value: 'pending' },
+                { label: 'Proposing corrections', value: 'running' },
+                { label: 'Suggestions awaiting the owner', value: 'ready' },
+                { label: 'Decided, awaiting the converter', value: 'decided' },
+                { label: 'Rewriting the master', value: 'applying' },
+                { label: 'Applied to the master', value: 'applied' },
+                { label: 'Failed', value: 'failed' },
+              ],
+              admin: { readOnly: true },
+            },
+            {
+              name: 'suggestionsKey',
+              type: 'text',
+              admin: {
+                readOnly: true,
+                description:
+                  'Where the converter wrote the proposals. Not an artifact: it is never served to a reader and never delivered to a device.',
+              },
+            },
+            {
+              name: 'decisionsKey',
+              type: 'text',
+              admin: {
+                readOnly: true,
+                description: 'What the owner adopted and declined, as the converter reads it.',
+              },
+            },
+            {
+              name: 'count',
+              type: 'number',
+              admin: {
+                readOnly: true,
+                description: 'How many suggestions are waiting, so the book page can say so without fetching the file.',
+              },
+            },
+            {
+              name: 'adopted',
+              type: 'number',
+              admin: {
+                readOnly: true,
+                description: 'How many the owner adopted on the last pass.',
+              },
+            },
+            {
+              name: 'message',
+              type: 'text',
+              admin: { readOnly: true },
+            },
+          ],
+        },
+        {
           name: 'sourceKind',
           type: 'select',
           options: [

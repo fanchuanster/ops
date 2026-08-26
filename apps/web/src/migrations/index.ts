@@ -23,6 +23,7 @@ import * as migration_20260825_140000_cover_page_choice from './20260825_140000_
 import * as migration_20260825_160000_shelf_order from './20260825_160000_shelf_order';
 import * as migration_20260825_180000_child_order from './20260825_180000_child_order';
 import * as migration_20260826_090000_ai_correction from './20260826_090000_ai_correction';
+import * as migration_20260826_140000_correction_review from './20260826_140000_correction_review';
 
 export const migrations = [
   {
@@ -149,5 +150,10 @@ export const migrations = [
     up: migration_20260826_090000_ai_correction.up,
     down: migration_20260826_090000_ai_correction.down,
     name: '20260826_090000_ai_correction'
+  },
+  {
+    up: migration_20260826_140000_correction_review.up,
+    down: migration_20260826_140000_correction_review.down,
+    name: '20260826_140000_correction_review'
   },
 ];

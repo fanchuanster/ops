@@ -132,6 +132,12 @@ class Poller:
             # Taken from the server's answer, never assumed here. The
             # safe value is false and the server is the one that knows.
             allow_third_party_ai=bool(job.get("allow_third_party_ai", False)),
+            # Correction's two jobs. CORRECT is told where to put its
+            # proposals only by convention — it derives the key itself —
+            # but APPLY cannot guess where the reader's answers were
+            # written, so the server says.
+            suggestions_key=job.get("suggestions_key"),
+            decisions_key=job.get("decisions_key"),
         )
 
     def report(self, job: Job) -> None:
@@ -141,11 +147,18 @@ class Poller:
         # publish a book with no EPUB or rebuild it forever.
         body: dict = {"book_id": job.book_id, "kind": job.kind.value}
 
-        if job.state.value == "completed":
+        if job.state.value in ("completed", "human_review"):
+            # `human_review` is how a CORRECT job finishes: the work is
+            # done and the *stage* is waiting on a person. Reported as a
+            # completion because that is what it is for the server —
+            # which state the book lands in is the server's decision,
+            # taken from the job kind it asked for.
             body |= {
                 "state": "completed",
                 "artifacts": job.artifacts,
                 "page_count": job.page_count,
+                "suggestions_key": job.suggestions_key,
+                "suggestion_count": job.suggestion_count,
             }
         else:
             body |= {"state": "failed", "message": job.error or "The conversion failed."}

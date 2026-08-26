@@ -693,6 +693,13 @@ IMPORTANT:
 - Correction is **advisory whatever the answer**. The stage writes
   suggestions and a human approves them (section 7); consenting to the
   send is not consenting to an edit.
+- **The person who approves them is the book's owner**, on their own
+  book page, since 2026-08-26. Until then `allow_third_party_ai` reached
+  the converter and nothing read it but a progress label: the correction
+  stage existed only in `app/cli.py`, so the checkbox proposed nothing,
+  sent no text anywhere, and there was no screen on which anyone could
+  have adopted a suggestion. `domain/correction.ts` is the state it now
+  drives.
 
 ---
 
@@ -1661,10 +1668,27 @@ The endpoint authenticates with `CONVERTER_SECRET` and **fails closed**:
 with no secret configured it 404s as though it does not exist, so
 deploying ahead of the secret exposes nothing.
 
-A job carries a `kind`, and there are two of them:
+A job carries a `kind`, and there are four of them:
 
     kind: "master"    source_key   → DOCX master
     kind: "formats"   master_key   → EPUB, PDF…
+    kind: "correct"   master_key   → suggestions, for a person to read
+    kind: "apply"     decisions_key → a master rewritten from what they adopted
+
+The last two are correction, and they are **not a third phase**. They
+queue off `conversion.correction.state`, a field of their own, and never
+touch `conversion.state` — because a book waiting on somebody's
+judgement is not converting, and putting it in the pipeline's state
+machine would both mislabel it and block phase 2 behind a decision that
+may never be made. `apply` finishing is an ordinary master edit: the
+book returns to `master_ready` and the reading edition is rebuilt from
+the corrected text by the path any corrected master takes.
+
+Correction is two jobs rather than one because section 7 says it must
+be. A single job that read a master and wrote a better one is precisely
+the silent rewrite that is forbidden; the human decision is what goes
+between them, and `correct` deliberately finishes in `human_review`
+rather than `completed` to say so.
 
 There was a third, `cover`, from 2026-08-23 until 2026-08-25. It is
 gone and the endpoint now refuses one: covers are rendered in the

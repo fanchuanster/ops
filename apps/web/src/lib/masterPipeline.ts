@@ -47,7 +47,8 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { Payload } from 'payload'
 
 import { exportHasExpired, exportLocaleFor, masterKey, withinSizeLimit } from '../domain/adobe'
-import { needsMasterRun, stateWithoutExport } from '../domain/pipeline'
+import { type CorrectionState, correctionStateForMaster } from '../domain/correction'
+import { type ConversionState, needsMasterRun, stateWithoutExport } from '../domain/pipeline'
 import {
   type SourceKind,
   needsExport,
@@ -186,6 +187,32 @@ async function fail(
  * arriving here has no formats yet, but merging is what keeps this
  * correct if it ever does.
  */
+/**
+ * The correction field for a book that has just settled without export.
+ *
+ * `master_ready` here means one thing only — a DOCX upload, which *is*
+ * its own master (`stateWithoutExport`). That is the one settle path
+ * with something for correction to read: a text upload has not been
+ * mastered yet, and an EPUB or an as-is PDF never will be.
+ *
+ * Returns nothing at all in every other case, so the field is left
+ * exactly as it stands rather than being reset to `none` under a book
+ * that is mid-correction.
+ */
+function correctionFor(
+  conversion: Record<string, unknown>,
+  state: ConversionState,
+): { correction?: { state: CorrectionState } } {
+  if (state !== 'master_ready') return {}
+  return {
+    correction: {
+      ...((conversion.correction as object) ?? {}),
+      state: correctionStateForMaster(conversion.aiCorrection),
+    },
+  }
+}
+
+
 async function attachMaster(
   payload: Payload,
   book: { id: string | number; conversion?: unknown; artifacts?: Book['artifacts'] },
@@ -230,6 +257,15 @@ async function attachMaster(
         exportJob: null,
         exportAsset: null,
         message: null,
+        // There is now something for correction to read. Queued only if
+        // the uploader asked for it — `correctionStateForMaster` reads
+        // an unanswered question as no (domain/correction.ts).
+        correction: {
+          ...((conversion as { correction?: object }).correction ?? {}),
+          state: correctionStateForMaster(
+            (conversion as { aiCorrection?: unknown }).aiCorrection,
+          ),
+        },
       },
       ...(pageCount ? { pageCount } : {}),
     },
@@ -370,7 +406,7 @@ export async function startNextMaster(
       collection: 'books',
       id: book.id,
       data: {
-        conversion: { ...conversion, state, message: null },
+        conversion: { ...conversion, state, message: null, ...correctionFor(conversion, state) },
         // Nothing downstream will ever set this for a book no converter
         // touches, so it is set here. `published` is about the book
         // being finished, not about who may see it — an unsubmitted
@@ -623,7 +659,7 @@ export async function settleQueuedBook(
       collection: 'books',
       id: book.id,
       data: {
-        conversion: { ...conversion, state, message: null },
+        conversion: { ...conversion, state, message: null, ...correctionFor(conversion, state) },
         ...(state === 'ready' ? { status: 'published' as const } : {}),
       },
       overrideAccess: true,

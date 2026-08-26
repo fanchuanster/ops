@@ -27,6 +27,8 @@
  * accidentally cleared disables the handoff rather than opening it.
  */
 
+import type { Book } from '../../../../payload-types'
+
 import config from '@payload-config'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { NextResponse } from 'next/server'
@@ -39,6 +41,14 @@ import {
   completedState,
   inProgressState,
 } from '../../../../domain/pipeline'
+import {
+  type CorrectionJobKind,
+  correctionClaimableAs,
+  correctionCompletedState,
+  correctionInProgressState,
+  correctionStateForMaster,
+  readCorrectionState,
+} from '../../../../domain/correction'
 import { readSourceKind } from '../../../../domain/publication'
 import { advanceMasterPipeline } from '../../../../lib/masterPipeline'
 import { logError } from '../../../../lib/logError'
@@ -203,6 +213,72 @@ export async function GET(request: Request) {
     }
   }
 
+  // Correction, which is not a phase and deliberately queues separately.
+  // Offered last: a book waiting on formats is one step from being
+  // readable, while correction is an improvement to a book that already
+  // is. See domain/correction.ts for why this is not a conversion state.
+  for (const state of ['decided', 'pending'] as const) {
+    const waiting = await payload.find({
+      collection: 'books',
+      where: { 'conversion.correction.state': { equals: state } },
+      sort: 'createdAt',
+      limit: 10,
+      depth: 0,
+      overrideAccess: true,
+    })
+
+    for (const book of waiting.docs) {
+      const correction = (book.conversion?.correction ?? {}) as Record<string, unknown>
+      const kind = correctionClaimableAs(readCorrectionState(correction.state))
+      if (!kind) continue
+
+      const masterKey = (book.artifacts ?? []).find((a) => a.format === 'docx')?.storageKey
+      // No master, nothing to read. Can happen if the master was
+      // detached between the state being set and this poll.
+      if (!masterKey) continue
+
+      // Consent is re-read here rather than trusted from when the state
+      // was set. An uploader who has since unticked the box must not
+      // have their book sent because a job was already queued.
+      if (book.conversion?.aiCorrection !== true) continue
+
+      const claimed = await payload.update({
+        collection: 'books',
+        where: {
+          and: [
+            { id: { equals: book.id } },
+            { 'conversion.correction.state': { equals: state } },
+          ],
+        },
+        data: {
+          conversion: {
+            ...book.conversion,
+            correction: { ...correction, state: correctionInProgressState(kind) },
+          },
+        },
+        overrideAccess: true,
+      })
+      if (claimed.docs.length === 0) continue
+
+      return NextResponse.json({
+        job: {
+          job_id: book.conversion?.jobId ?? String(book.id),
+          book_id: String(book.id),
+          kind,
+          formats: [],
+          master_key: masterKey,
+          // Only an `apply` job has these; a `correct` job derives where
+          // to write from the book id.
+          decisions_key: correction.decisionsKey ?? null,
+          suggestions_key: correction.suggestionsKey ?? null,
+          title: book.title,
+          author: book.author ?? null,
+          allow_third_party_ai: true,
+        },
+      })
+    }
+  }
+
   // Nothing to build. Covers are deliberately absent from this queue
   // since 2026-08-25: they are rendered in the browser that has the
   // file open (`lib/client/coverImages.ts`), which is what a picture of
@@ -219,7 +295,137 @@ interface CompletionBody {
   page_count?: unknown
   message?: unknown
   artifacts?: unknown
+  suggestions_key?: unknown
+  suggestion_count?: unknown
 }
+
+/**
+ * Where the converter is allowed to say it put the suggestions.
+ *
+ * Under this book's own prefix and nowhere else — the same containment
+ * rule `acceptArtifacts` applies to artifacts, for the same reason. The
+ * key is handed straight to R2 by a route that has already decided the
+ * caller may read this book, so an unchecked key would read any object
+ * in the bucket.
+ */
+function acceptSuggestionsKey(bookId: number, value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const prefix = `books/${bookId}/book/`
+  if (!value.startsWith(prefix) || value.includes('..')) return null
+  return value
+}
+
+/**
+ * Report a correction job finished, or failed.
+ *
+ * Kept apart from the conversion report above because the two mean
+ * different things about the book. A conversion completing can publish
+ * it; a correction completing never can — the most it does is attach a
+ * corrected master, which puts the book back through phase 2 by the
+ * ordinary master-edit path rather than by anything special here.
+ */
+async function reportCorrection(
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  book: Book,
+  bookId: number,
+  body: CompletionBody,
+  kind: CorrectionJobKind,
+) {
+  const conversion = (book.conversion ?? {}) as Record<string, unknown>
+  const correction = (conversion.correction ?? {}) as Record<string, unknown>
+
+  if (body.state === 'failed') {
+    await payload.update({
+      collection: 'books',
+      id: bookId,
+      data: {
+        conversion: {
+          ...conversion,
+          correction: {
+            ...correction,
+            state: 'failed',
+            message:
+              typeof body.message === 'string'
+                ? body.message.slice(0, 500)
+                : 'The correction did not complete.',
+          },
+        },
+      },
+      overrideAccess: true,
+    })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (kind === 'correct') {
+    const key = acceptSuggestionsKey(bookId, body.suggestions_key)
+    if (!key) {
+      return NextResponse.json({ error: 'No usable suggestions key.' }, { status: 400 })
+    }
+    await payload.update({
+      collection: 'books',
+      id: bookId,
+      data: {
+        conversion: {
+          ...conversion,
+          correction: {
+            ...correction,
+            state: correctionCompletedState('correct'),
+            suggestionsKey: key,
+            count:
+              typeof body.suggestion_count === 'number' &&
+              Number.isInteger(body.suggestion_count)
+                ? body.suggestion_count
+                : null,
+            // Cleared: these belong to the pass that has just been
+            // superseded, and leaving them would have the book page
+            // offer decisions about suggestions nobody made.
+            decisionsKey: null,
+            adopted: null,
+            message: null,
+          },
+        },
+      },
+      overrideAccess: true,
+    })
+    return NextResponse.json({ ok: true })
+  }
+
+  // `apply`. The corrected master arrives as an ordinary artifact, and
+  // is attached by exactly the path a re-uploaded master takes: the book
+  // returns to `master_ready` and phase 2 rebuilds the reading edition
+  // from the corrected text.
+  const artifacts = acceptArtifacts({ bookId, artifacts: body.artifacts })
+  const master = artifacts.find((artifact) => artifact.format === 'docx')
+
+  // No master reported is a real outcome rather than a failure: nothing
+  // was adopted, or every adopted line had drifted. The master is
+  // already what it should be, so only the correction state moves.
+  const existing = book.artifacts ?? []
+  const merged = master ? [...existing.filter((old) => old.format !== 'docx'), master] : existing
+
+  await payload.update({
+    collection: 'books',
+    id: bookId,
+    data: {
+      ...(master ? { artifacts: merged } : {}),
+      conversion: {
+        ...conversion,
+        // Only when there is something to rebuild from. Sending a book
+        // back to `master_ready` over an empty apply would rebuild an
+        // EPUB that is already correct.
+        ...(master ? { state: 'master_ready' as const } : {}),
+        correction: {
+          ...correction,
+          state: correctionCompletedState('apply'),
+          message: null,
+        },
+      },
+    },
+    overrideAccess: true,
+  })
+  return NextResponse.json({ ok: true })
+}
+
 
 /** Report a conversion finished, or failed. */
 export async function POST(request: Request) {
@@ -246,6 +452,14 @@ export async function POST(request: Request) {
     .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
     .catch(() => null)
   if (!book) return NextResponse.json({ error: 'No such book.' }, { status: 404 })
+
+  // Correction is not a phase and does not touch `conversion.state` at
+  // all — it reports against its own field and returns. Handled before
+  // the phase logic so a correction report can never be mistaken for a
+  // conversion one, which would publish or fail a book over a proposal.
+  if (body.kind === 'correct' || body.kind === 'apply') {
+    return await reportCorrection(payload, book, bookId, body, body.kind)
+  }
 
   // Which phase finished. Defaulted to 'formats' so a converter that
   // predates the two-phase split still lands a book on 'ready' rather
@@ -319,6 +533,18 @@ export async function POST(request: Request) {
         ...book.conversion,
         state: completedState(kind),
         message: null,
+        // Phase 1 finishing is the moment a converter-built master
+        // exists, so it is the moment correction has something to read.
+        // Phase 2 leaves the field alone: it rebuilds the EPUB and does
+        // not touch the master.
+        ...(kind === 'master'
+          ? {
+              correction: {
+                ...((book.conversion?.correction ?? {}) as object),
+                state: correctionStateForMaster(book.conversion?.aiCorrection),
+              },
+            }
+          : {}),
         // Whatever was asked for has now been built. Cleared on phase 2
         // only: a phase 1 completion has not touched the formats, and
         // clearing here would silently drop a request made while the

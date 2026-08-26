@@ -3807,3 +3807,124 @@ h3 {
   font-size: 0.8125rem;
   white-space: pre;
 }
+
+/* --- AI correction review ------------------------------------------
+   The screen where a person decides what the model may change. Laid out
+   so the two versions of a line sit directly above one another: the
+   whole judgement is "did the OCR misread this?", and that is answered
+   by comparing two strings of Chinese, often differing by one glyph. */
+
+.correction {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.suggestion-list {
+  list-style: none;
+  margin: 1.25rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.suggestion {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: 0.75rem;
+  background: var(--paper-raised);
+}
+
+.suggestion__adopt {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.suggestion__body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.suggestion__line {
+  margin: 0;
+  /* The lines are printed lines of a book and may be long; they wrap
+     rather than scrolling, because a horizontal scrollbar inside a
+     comparison defeats the comparison. */
+  overflow-wrap: anywhere;
+  line-height: 1.9;
+}
+
+.suggestion__tag {
+  display: inline-block;
+  min-width: 5rem;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.suggestion__line--was {
+  color: var(--ink-faint);
+}
+
+.suggestion__line--now {
+  color: var(--ink);
+}
+
+.suggestion__why {
+  margin: 0.5rem 0 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-faint);
+}
+
+.suggestion__badge {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.suggestion__reason {
+  min-width: 0;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 1rem 0 0.5rem;
+}
+
+@media (max-width: 40rem) {
+  .suggestion {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .suggestion__tag {
+    min-width: 0;
+    margin-right: 0.5rem;
+  }
+}

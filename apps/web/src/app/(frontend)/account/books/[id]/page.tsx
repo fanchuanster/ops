@@ -10,6 +10,7 @@ import { MakeCoverButton } from '../../../../../components/MakeCoverButton'
 import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
 import { BookActions } from '../../../../../components/BookActions'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
+import { CorrectionReview } from '../../../../../components/CorrectionReview'
 import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { Stepper } from '../../../../../components/Stepper'
@@ -23,11 +24,16 @@ import {
   hasRenderedPages,
   uploadedCoverId,
 } from '../../../../../domain/cover'
+import {
+  canRequestCorrection,
+  readCorrectionState,
+} from '../../../../../domain/correction'
 import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
 import { uploadStep } from '../../../../../domain/pipeline'
 import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
 import { shareDescription } from '../../../../../domain/uploaderShare'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
+import { loadSuggestions } from '../../../actions/correction'
 import { getCurrentUser } from '../../../../../lib/auth'
 import { getCollections } from '../../../../../lib/catalog'
 import { usageThisMonth } from '../../../../../lib/uploadQuota'
@@ -69,6 +75,12 @@ export default async function BookDetailsPage({
   // the page its owner opens it from (`domain/publication.ts`).
   const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
   const hasMaster = (book.artifacts ?? []).some((a) => a.format === 'docx')
+
+  // Read only when there is something to decide on. The file is a
+  // fetch from R2 and the page renders on every visit to a book.
+  const correctionState = readCorrectionState(book.conversion?.correction?.state)
+  const suggestions =
+    correctionState === 'ready' ? await loadSuggestions(Number(book.id)) : []
   const isAdmin = Boolean(user.roles?.includes('admin'))
   const usage = isAdmin ? null : await usageThisMonth(payload, user.id)
   const state = book.conversion?.state ?? 'none'
@@ -302,6 +314,28 @@ export default async function BookDetailsPage({
           </section>
 
           <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />
+
+          {/* Only for a book whose uploader asked for it. Correction is
+              a third party reading their text, so a book that never
+              consented shows nothing here at all rather than an offer
+              to consent after the fact — that question belongs on the
+              upload screen, beside the disclosure of who receives the
+              file (CLAUDE.md section 6.1). */}
+          {book.conversion?.aiCorrection === true ? (
+            <CorrectionReview
+              bookId={Number(book.id)}
+              state={correctionState}
+              suggestions={suggestions}
+              count={book.conversion?.correction?.count}
+              adopted={book.conversion?.correction?.adopted}
+              message={book.conversion?.correction?.message}
+              canRequest={canRequestCorrection({
+                aiCorrection: book.conversion?.aiCorrection,
+                hasMaster,
+                state: correctionState,
+              })}
+            />
+          ) : null}
           <SubmitForReview
             bookId={Number(book.id)}
             reviewState={book.review?.state ?? 'unsubmitted'}
