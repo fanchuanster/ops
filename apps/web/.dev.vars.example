@@ -59,3 +59,24 @@ ADOBE_CLIENT_SECRET=
 # Unset it and the playground answers 404, which is the right state for
 # anything deployed. The Swagger UI at /api/docs needs none of this.
 PAYLOAD_GRAPHQL_PLAYGROUND=1
+
+# The conversion pipeline, which runs in this Worker (CLAUDE.md section
+# 13) and is driven by a cron trigger once a minute.
+#
+# CONVERTER_SECRET authenticates the tick route the cron calls. The name
+# is historical — the converter container it belonged to was deleted on
+# 2026-08-26 — and is kept deliberately: renaming it means a secret that
+# has to land before the deploy, and if it does not, the route fails
+# closed and conversions stop silently.
+#
+# Unset, the route 404s and nothing converts. At least 16 characters.
+#
+# Locally, `wrangler dev --test-scheduled` exposes /__scheduled so a tick
+# can be fired by hand instead of waiting for the minute.
+CONVERTER_SECRET=
+
+# xAI, for the AI correction stage — the same key as the repo-root .env.
+# It was the container's until the pipeline moved here; without it a
+# correction job fails with a clear message and nothing else is
+# affected. See CLAUDE.md section 4.
+XAI_API_KEY=

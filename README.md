@@ -167,11 +167,14 @@ pip install python-docx ebooklib weasyprint pillow
 python3 tools/generate-seed-content.py
 ```
 
-Writes DOCX, EPUB and one PDF into `content/seed/`. This stands in for
-the OCR/AI conversion pipeline, which reaches a proofread DOCX master but does
-not yet generate EPUB or PDF — see `services/converter/README.md`. The seed
-content is generated rather than committed so it is reproducible instead of a
-pile of binaries nobody can regenerate.
+Writes DOCX, EPUB and one PDF into `content/seed/`. The seed content is
+generated rather than committed so it is reproducible instead of a pile of
+binaries nobody can regenerate.
+
+This used to stand in for a conversion pipeline that did not yet generate
+EPUB. It no longer stands in for anything — the pipeline runs in the Worker
+and builds real editions (CLAUDE.md section 13) — but the seed is still how
+the catalog gets books without uploading any.
 
 ## Layout
 
@@ -188,7 +191,8 @@ apps/web/                    the application — public site, API and admin
   scripts/create-admin.ts    bootstraps an admin once the first-user screen is gone
   wrangler.jsonc             Worker bindings — mirrors `terraform output`
   wrangler.remote.jsonc      the same bindings, pointed at live D1/R2 (opt-in only)
-services/converter/          scan → OCR → proofread → DOCX master (its own README)
+  worker-entry.ts            OpenNext's handler plus the conversion cron
+  src/lib/conversion/        the pipeline: DOCX, EPUB, the LLM client, the runner
 content/seed/                generated book artifacts (DOCX/EPUB/PDF)
 infra/                       Terraform: R2, D1, DNS, the www redirect
 tools/                       smoke test, seed-content generator, R2 mirror

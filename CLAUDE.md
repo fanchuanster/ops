@@ -276,8 +276,18 @@ The following must remain server-side application functionality
 - Kindle delivery
 - AI functionality and API integrations
 
-Do NOT turn the web application into the conversion pipeline. That stays
-a separate FastAPI service (`services/converter`).
+This said "Do NOT turn the web application into the conversion pipeline.
+That stays a separate FastAPI service (`services/converter`)" until
+2026-08-26. The service is deleted and the pipeline is in the Worker
+(section 13), so the rule as written is inverted.
+
+What it was protecting is still right, and is now stated as itself: **do
+not put long computation in the Worker.** A Worker is billed and limited
+by CPU time. Anything that wants an OCR model, a font stack, a headless
+office suite or any native library belongs behind an HTTP call to
+something that has them — the way Adobe PDF Services and xAI already
+are. The old rule was a proxy for this one, and it stopped tracking it
+the moment the pipeline's last native dependency was deleted.
 
 ## 2.2 Open source and third-party integration are welcome
 
@@ -291,7 +301,7 @@ The conditions on that are the ordinary ones, not obstacles:
 
 - honour the licence of anything borrowed, and keep attribution intact;
 - keep the dependency behind an interface where it is plausibly
-  replaceable (`domain/adobe.ts` and `app/llm/client.py` are the
+  replaceable (`domain/adobe.ts` and `lib/conversion/llm.ts` are the
   pattern);
 - credentials come from the environment, never from source;
 - when user-owned content goes to a third-party service, say so on the
@@ -312,48 +322,55 @@ Target architecture:
         catalog, book pages, reader, blog,
         accounts, rights, credits,
         delivery, admin/editorial
-        UI, JSON API
+        UI, JSON API, **the conversion pipeline**
                            |
-        +------------------+------------------+
-        |                  |                  |
-     bindings           bindings           HTTP API
-        |                  |                  |
-        v                  v                  v
-  Cloudflare D1     Cloudflare R2          Stripe
-   (SQLite)               |                Resend
-        |           Book artifacts        (Kindle)
-        |           DOCX/EPUB/PDF
-        |                  ^
-        |                  |
-        v                  |
- Cloudflare Queues         |
-        |                  |
-        v                  |
-   Converter  [container] -+
-        |
-        +---------+---------+
-        |         |         |
-       OCR       LLM     Rendering
-                  |
-                xAI API
-                  |
-              Grok 4.6
+        +----------+-------+--------+-----------+
+        |          |                |           |
+     bindings   bindings         HTTP API    cron
+        |          |                |           |
+        v          v                v           v
+  Cloudflare  Cloudflare        Adobe PDF    every minute:
+      D1          R2            Services     advance one book
+   (SQLite)        |            xAI API
+                   |            Stripe
+            Book artifacts      Resend (Kindle)
+            DOCX/EPUB
 
 The dividing line is CPU shape, not importance: a Worker is billed and
 limited by CPU time, so I/O-shaped request handling belongs on it and
-long *computation* — OCR, LLM correction, DOCX/EPUB/PDF rendering — does
-not. `docs/CLOUDFLARE_ARCHITECTURE.md` has the full table.
+long *computation* does not. `docs/CLOUDFLARE_ARCHITECTURE.md` has the
+full table.
 
-The Worker never waits for a conversion. It enqueues a job and returns
-an id; the converter consumes the queue and writes results back to R2.
-The converter therefore needs no inbound port, which is what makes it
-deployable behind this host's filtered egress.
+**There is no converter service.** There was one — a Python container
+running OCR, LLM correction and format rendering — until 2026-08-26.
+What retired it was not a decision to consolidate but the fact that
+every reason it existed had already been removed one at a time:
+
+- **PaddleOCR went** on 2026-08-26 (section 8). Reading a scan is an
+  Adobe HTTP call now, made from the Worker.
+- **WeasyPrint and LibreOffice went** with the generated PDF on the same
+  day (section 11), taking the last apt layer and the CJK font set.
+- **The LLM was always an HTTP call.** Nothing about it needed a
+  machine.
+
+What was left — parse a DOCX, write an EPUB, talk HTTP — links against
+no native library at all, which section 11 had already noticed made it
+"a plausible candidate for the Worker itself". So the pipeline is
+`apps/web/src/lib/conversion/` and `apps/web/src/domain/`, and the
+container is deleted.
+
+That rule still governs what may come *back*. Anything wanting a model,
+a font stack or a native library does not belong in the Worker; it
+belongs behind an HTTP call to something that has them, the way Adobe
+already is.
+
+The Worker never waits for a conversion on a reader's request. Work is
+claimed and run by a **cron trigger**, once a minute, one book per tick.
 
 Separate services:
 
 - NobleSee Web (Next.js + Payload on D1/R2) — one Worker serving the
-  public site, the API and the admin
-- NobleSee Converter — container; OCR, LLM correction, format generation
+  public site, the API, the admin *and the conversion pipeline*
 - NobleSee X Worker
 - Kindle delivery — built, and *not* a separate service: Workers cannot
   speak SMTP, so it goes over Resend's HTTP API from the Worker itself
@@ -361,14 +378,15 @@ Separate services:
 Deployment:
 
 `wrangler deploy` for the Worker; Terraform in `infra/` for R2, D1, DNS
-and the redirect. There is no Docker Compose stack — it was retired on
-2026-08-13 when the last container left production. Development still
+and the redirect. There is no Docker Compose stack and **no container in
+production at all** — the last one left on 2026-08-26. Development still
 uses a container for the toolchain, for an unrelated glibc reason
 documented in `README.md`.
 
-Where the converter container runs is deliberately still open. The queue
-boundary means it can be answered later without touching application
-code.
+"Where the converter container runs" was an open question here from the
+day it was written. It is closed by there being no container: nothing to
+host, nothing to push to a registry, and no second place for the job
+list to disagree with the Book row.
 
 Kubernetes / AWS EKS remains a possible future target. Do not
 prematurely introduce Kubernetes-specific complexity into the MVP.
@@ -661,13 +679,33 @@ JavaScript is justified.
 The LLM provider is **xAI**, over its OpenAI-compatible HTTP API.
 
     XAI_BASE_URL=https://api.x.ai/v1     (default; need not be set)
-    XAI_MODEL=grok-4.6                   (default; need not be set)
-    XAI_API_KEY=...                      (required, from .env)
+    XAI_MODEL=grok-4.20-0309-non-reasoning
+                                         (default; need not be set)
+    XAI_API_KEY=...                      (required)
+
+This block said `grok-4.6` until 2026-08-26 and the code never agreed:
+the default has been the cheap non-reasoning variant since it was
+measured against grok-4.6 and found to give the same corrections on
+sample lines at 2.4x cheaper output. Correction is a narrow,
+well-specified task over short inputs, and reasoning tokens are billed
+as output at twice the input rate — which over a whole book is the real
+cost of the stage. The document is now what the code does.
+
+**`XAI_API_KEY` is a Worker secret**, since 2026-08-26:
+
+    wrangler secret put XAI_API_KEY
+
+Before that it was only ever set on the converter container, because the
+container was the only thing that talked to xAI. The container is gone
+(section 13) and the correction stage runs in the Worker, so the key has
+to be where the code is. With it unset, correction jobs fail with a
+clear message and nothing else in the pipeline is affected — a book
+still converts, it just gets no suggestions.
 
 This section specified a self-hosted vLLM endpoint at
 `http://10.211.51.231:8000/v1` running `google/gemma-4-31B-it-qat-w4a16-ct`
 until 2026-08-13. Both are interchangeable as far as the code is
-concerned — the client in `services/converter/app/llm/client.py` speaks
+concerned — the client in `apps/web/src/lib/conversion/llm.ts` speaks
 the OpenAI chat-completions shape and takes base URL, model and key from
 the environment, so pointing it back at vLLM is a matter of setting
 `XAI_BASE_URL` and `XAI_MODEL`. Nothing in the pipeline knows which is
@@ -676,18 +714,25 @@ answering.
 IMPORTANT:
 
 - Do not expose the endpoint or the key directly to public browsers.
-- The web application should not directly depend on the LLM endpoint.
-  Only the conversion service talks to it.
+- This said "the web application should not directly depend on the LLM
+  endpoint; only the conversion service talks to it". There is no
+  conversion service (section 13), so the web application is now the
+  only thing that talks to it. The requirement underneath is unchanged
+  and is the line above: the endpoint and the key are server-side, and a
+  browser never sees either.
 - Make endpoint, model and key configurable through environment
   variables; never hard-code any of them in application source.
-- The key is read from the environment, falling back to the repo-root
-  `.env` for local CLI runs. `.env` is gitignored and stays that way.
+- The key is read from the Worker's environment — a `wrangler secret` in
+  production, `.dev.vars` locally. Both are gitignored and stay that
+  way. The repo-root `.env` fallback went with the CLI that needed it.
 - The provider is a third party, which the self-hosted endpoint was not.
   **Whether a reader's upload goes to it is the reader's decision**, made
   on the upload screen and stored as `conversion.aiCorrection`
-  (migration `20260826_090000_ai_correction`). The web application passes
-  that answer through as `allow_third_party_ai`; it was a hard-coded
+  (migration `20260826_090000_ai_correction`). It was a hard-coded
   `false` until 2026-08-26, under a rule that forbade the send outright.
+  The runner re-reads it at the moment of sending rather than trusting
+  the state it was queued in, so a reader who changes their mind between
+  the two does not have their book sent.
   Unanswered means no — an absent or null column reads as `false`, so
   every book uploaded before the question existed stays where it was.
 - Correction is **advisory whatever the answer**. The stage writes
@@ -696,7 +741,7 @@ IMPORTANT:
 - **The person who approves them is the book's owner**, on their own
   book page, since 2026-08-26. Until then `allow_third_party_ai` reached
   the converter and nothing read it but a progress label: the correction
-  stage existed only in `app/cli.py`, so the checkbox proposed nothing,
+  stage existed only in the converter's CLI, so the checkbox proposed nothing,
   sent no text anywhere, and there was no screen on which anyone could
   have adopted a suggestion. `domain/correction.ts` is the state it now
   drives.
@@ -1463,9 +1508,11 @@ that is not an HTTP call, and `apps/web/src/lib/adobe/client.ts`, which
 is the HTTP call. Replacing Adobe means writing a new pair; nothing
 downstream of the master would know.
 
-**PaddleOCR and `app/ocr/` are gone**, on 2026-08-26 — the engine, the
-`OcrEngine` protocol, the per-page OCR cache and the rasterizer that fed
-it. It had been kept as a self-hosted alternative to Adobe, and the
+**PaddleOCR is gone**, on 2026-08-26 — the engine, the `OcrEngine`
+protocol, the per-page OCR cache and the rasterizer that fed it. The
+service that held it went the same day (section 13), and not by
+coincidence: PaddleOCR was the last thing in the pipeline that needed a
+machine, so deleting it is what made a container optional. It had been kept as a self-hosted alternative to Adobe, and the
 question that retired it is the one worth recording: *what was it for?*
 Nothing called it. Every scan in production goes to Adobe, because a
 Worker cannot run a model and a container running one is a container to
@@ -1479,13 +1526,20 @@ What it cost to keep was a gigabyte of models, a native toolchain, and a
 second answer to "how is a scan read" that could silently disagree with
 the first.
 
-So the converter reads a PDF only when the PDF can read itself — a text
-layer, extracted exactly by PyMuPDF, page by page. A book with any page
-that has no text layer is **refused**, by name and by count, and told
-where scans go (`app/sources/pdf_in.py`). Refusing is the honest answer:
-the alternative is the failure that classification was written to
-prevent, where a scan with one born-digital title page was read through
-the text path and converted "successfully" into a one-page book.
+**Nothing reads a PDF at all any more.** Between 2026-08-26 and the
+service's deletion later the same day, the converter read a PDF only
+when the PDF could read itself — a text layer extracted by PyMuPDF, with
+any page lacking one refusing the whole book. That path is gone with
+PyMuPDF, and nothing lost a capability production used: **every** PDF
+goes to Adobe, whether or not it has a text layer, because that is the
+one call that produces a master. A PDF therefore never reaches a
+`master` job (section 13).
+
+The judgement that path encoded is worth keeping even though the code
+is not. Reading a scan through a text-layer extractor "succeeds" — it
+returns a one-page book from the one born-digital title page and drops
+the other four hundred. Refusing was the honest answer then; sending
+every PDF to an engine that reads pixels is the honest answer now.
 
 ---
 
@@ -1575,7 +1629,8 @@ line needs no renderer.
 What deleting it bought is out of proportion to what it cost, and is the
 real point:
 
-- `services/converter/app/pdf/` is gone, both renderers with it.
+- The converter's `app/pdf/` was gone, both renderers with it — and on
+  2026-08-26 the whole service followed (section 13).
 - The converter image has **no apt layer at all** any more. WeasyPrint
   needed Pango, Cairo, libffi and a CJK font set — a PDF rendered
   without a CJK face is a document of empty boxes — and the DOCX path
@@ -1614,66 +1669,109 @@ generate_mobi()
 
 ---
 
-# 13. CONVERSION SERVICE
+# 13. THE CONVERSION PIPELINE
 
-Create a standalone service.
+**It runs in the Worker. There is no conversion service and no
+container.**
 
-Suggested stack:
+This section specified a standalone Python/FastAPI service from the
+beginning, and one existed — `services/converter`, ~4,200 lines — until
+2026-08-26. Section 3 has why it went; the short version is that it had
+already lost every part that needed a machine, and what remained parsed
+a DOCX and wrote an EPUB.
 
-Python
-FastAPI
-Cloudflare Queues for the handoff from the Worker
-S3-compatible object storage (R2, over the S3 API — the converter is not
-a Worker and so has no binding; it is the one component that legitimately
-holds R2 credentials)
+The code is now:
 
-Celery + Redis were specified here until 2026-08-13. Cloudflare Queues
-replaced them for the *web → converter* handoff, because the enqueuing
-side is a Worker and a native queue keeps that to one bounded write with
-no Redis to run. An in-process queue inside the converter is still fine
-for its own pipeline stages.
+    domain/document.ts        Block, Document, Suggestion
+    domain/textSource.ts      plain text → Document
+    domain/bookHtml.ts        Document → HTML
+    domain/proofread.ts       the AI guardrails
+    domain/applySuggestions.ts what a reader adopted
+    domain/textDiff.ts        Python's difflib, ported exactly
+    lib/conversion/docxRead   DOCX → Document
+    lib/conversion/docxWrite  Document → DOCX
+    lib/conversion/epubWrite  Document → EPUB 3
+    lib/conversion/llm.ts     the OpenAI-compatible client
+    lib/conversion/runner.ts  claim one book, run it, report
 
-Built so far: PyMuPDF text extraction and page classification,
-normalization/structure, python-docx master generation, and the AI
-correction stage — driven by a CLI (`app/cli.py`) as well as the API.
-The CLI's `convert` command went with PaddleOCR on 2026-08-26; `import`
-covers every file that can be read without an OCR engine, which is now
-every file this service accepts at all.
+The split is the ordinary one: rules in `domain`, I/O in `lib`. The
+guardrails, the diff and the structure decisions are pure functions and
+are tested as such, which is what they were in Python too.
 
-The correction stage is two commands, `correct` and `apply`, with a
-human review file between them, because section 7's requirement is not
-satisfiable by a prompt. `correct` writes suggestions and changes
-nothing; deterministic guardrails in `app/llm/correct.py` refuse
-anything that reads as a rewrite rather than an OCR repair, and record
-why. `services/converter/README.md` has the detail.
+`textDiff.ts` deserves its own note. The guardrails compare a similarity
+ratio and an edit count against constants tuned on real OCR output, so
+`difflib.SequenceMatcher` had to be ported exactly rather than
+approximated — a "close enough" diff silently moves where the line
+between an OCR repair and a rewrite falls. It is checked against CPython
+by a fixture generated from CPython. Everything works on **code points**,
+because Python strings are code points and classical Chinese genuinely
+reaches past the BMP, where JavaScript's `.length` would count one
+character as two.
 
-Also built since: EPUB 3 (`app/epub`, from the HTML rendering in
-`app/render`), R2 over the S3 API (`app/storage`), the asynchronous job
-API (`app/api`), and the handoff (`app/handoff`). `app/pdf` is gone with
-the generated PDF (section 11), and `app/render` now has one consumer
-rather than two — kept as its own module because an EPUB's chapter split
-and a document's HTML are still two different questions.
+## What replaced the poll
 
-The handoff is a **pull**, not Cloudflare Queues. The converter has no
-inbound port — the thing that makes it deployable behind a filtered
-egress — so it polls `GET /api/conversion` on the Worker, which hands
-out one queued book at a time with a compare-and-swap, and reports back
-to `POST /api/conversion`. A pull consumer against Queues would be the
-same shape with a queue to provision, a second place for the job list to
-disagree with the Book row, and no atomic claim. The Book row is already
-the durable record. Swapping in Queues later replaces one route and one
-poller; nothing else knows.
+The converter had no inbound port, so it *pulled*: it polled
+`GET /api/conversion` for work and reported back to `POST`. That poll
+was also the pipeline's clock — each one advanced at most one book's
+Adobe export before answering.
 
-The endpoint authenticates with `CONVERTER_SECRET` and **fails closed**:
-with no secret configured it 404s as though it does not exist, so
-deploying ahead of the secret exposes nothing.
+Both are gone. Work is driven by a **Cloudflare cron trigger**, every
+minute, declared in `wrangler.jsonc`. Each tick advances the Adobe
+export stages and then claims and runs **at most one job**.
 
-A job carries a `kind`, and there are four of them:
+One job per tick is deliberate. A cron invocation has a bounded CPU
+budget, and a loop that kept claiming would spend it all on whichever
+book happened to be first and then be killed mid-write. It is also
+faster than the container was in practice, because for most of any given
+day nothing was polling at all.
 
-    kind: "master"    source_key   → DOCX master
-    kind: "formats"   master_key   → EPUB, PDF…
-    kind: "correct"   master_key   → suggestions, for a person to read
-    kind: "apply"     decisions_key → a master rewritten from what they adopted
+Nothing about the *claim* changed: it is still a compare-and-swap on the
+book's own `conversion.state`, conditional on the state we found it in.
+D1 has no row locking, and cron invocations do overlap — a slow tick is
+not cancelled when the next one fires — so a plain read-then-write would
+run the same job twice. For a `correct` job that means paying a third
+party twice for the same book.
+
+Cloudflare Queues is still not used, and the reasons are the ones this
+section always gave: it is a second durable record beside the Book row
+that can disagree with it, and the Book row is already the durable
+record of a conversion. What has changed is that the *pull* it was being
+compared against is gone too. Cron polls the database; nothing polls a
+queue.
+
+## The route the cron calls
+
+`POST /api/conversion/tick`, authenticated with `CONVERTER_SECRET` and
+**failing closed** — with no secret configured it 404s as though it does
+not exist, so a Worker deployed ahead of the secret converts nothing
+rather than converting for anyone who asks.
+
+It is a route rather than the scheduled handler doing the work directly,
+and the reason is bundle size. `worker-entry.ts` wraps the OpenNext
+bundle and is compiled separately from it; importing the runner there
+would pull Payload, every collection config and the D1 adapter into a
+*second* bundle, in a Worker already at 6.9 MB of a 10 MB limit. So the
+scheduled handler makes a request to its own fetch handler, which runs
+inside the Next bundle where all of that already lives. The request
+never leaves the Worker.
+
+`CONVERTER_SECRET` is a historical name — there is no converter — and is
+deliberately not renamed. Renaming means a `wrangler secret put` that
+has to land before the deploy, and if it does not, the route fails
+closed and conversions stop silently. The name is the smaller problem.
+
+## The four jobs
+
+    kind: "master"    source  → DOCX master
+    kind: "formats"   master  → EPUB
+    kind: "correct"   master  → suggestions, for a person to read
+    kind: "apply"     decisions → a master rewritten from what they adopted
+
+A **PDF never reaches a `master` job**: Adobe returns the master already
+built and `lib/masterPipeline.ts` attaches it, so the book goes straight
+to `master_ready`. Only a DOCX or a plain text upload needs a master
+built. That is why nothing in the pipeline reads a PDF, and why deleting
+PyMuPDF with the converter cost nothing.
 
 The last two are correction, and they are **not a third phase**. They
 queue off `conversion.correction.state`, a field of their own, and never
@@ -1687,101 +1785,44 @@ the corrected text by the path any corrected master takes.
 Correction is two jobs rather than one because section 7 says it must
 be. A single job that read a master and wrote a better one is precisely
 the silent rewrite that is forbidden; the human decision is what goes
-between them, and `correct` deliberately finishes in `human_review`
-rather than `completed` to say so.
+between them.
 
-There was a third, `cover`, from 2026-08-23 until 2026-08-25. It is
-gone and the endpoint now refuses one: covers are rendered in the
-browser (section 5), and a `cover` completion read as `formats` would
-publish or fail a whole book over a picture.
+The decisions file is the suggestions file with `approved` filled in,
+and it is read by `readDecisions`, **not** by `readSuggestions`. The two
+differ in exactly that field and the distinction is load-bearing:
+`readSuggestions` renders proposals nobody has judged yet and drops
+`approved` on purpose, so using it to read a decisions file makes every
+decision read as undecided. The port did that at first, and the apply
+job reported success having adopted nothing — a green tick over an
+unchanged book, which is the worst shape a bug can take.
 
-A `formats` job also carries a **`formats` list** saying which editions
-to build. Absent means "all of them", which is what the CLI and the job
-API want; the web application always says explicitly, because what a
-book needs depends on what it already has and what a reader asked for,
-and only that side knows either. An empty list is a real instruction and
-is not read as "all".
+## What was lost
 
-A `master` job now carries only `source_key`, and only for a source that
-needed no export — a DOCX or a plain text upload. A PDF never reaches
-one: Adobe returns the master already built, so the web application
-attaches it and the book goes straight to `master_ready`.
+Worth stating rather than discovering later:
 
-`ocr_key` was a JSON document in R2 (`books/{id}/ocr/pages.json`) that
-crossed this boundary until 2026-08-19, carrying pages as paragraphs
-with a `role` decided from the type size and position Document AI
-reported. Nothing writes it now. The converter still reads one if given
-it — `app/sources/ocr_json.py`, reachable from the CLI — because the
-files already in R2 were paid for once and deleting the reader would
-make them unusable.
+- **The CLI is gone.** `app/cli.py` ran a conversion from a local file
+  without touching the web application at all, which was genuinely
+  useful for one-off imports and for debugging a book in isolation.
+- **`pdf_in.py` is gone**, so nothing can read a born-digital PDF's text
+  layer locally any more. Production never used it — every PDF goes to
+  Adobe — but it was the tool for checking what a PDF actually contained.
+- **`ocr_json.py` is gone**, the reader for the Document AI handoff
+  documents still sitting in R2 from before 2026-08-19. Those files were
+  paid for once and are now unreadable.
+- **1,970 lines of Python tests** went with it. The ones that guarded
+  behaviour the Worker still has were ported case for case — the
+  guardrails, the round trip — and are in `domain/proofread.test.ts` and
+  `lib/conversion/docx.test.ts`. The ones covering OCR geometry and PDF
+  classification are gone with the code they covered.
 
-The completion `POST` carries the same `kind`, and phase 1 finishing
-does **not** publish a book: a DOCX master is not a readable edition.
-
-Phase 2 is claimable on its own, which is what makes a corrected master
-cheap to act on.
-
-Both job kinds are built on the converter side (`app/jobs/runner.py`,
-claimed by `app/handoff/poller.py`), and heading levels survive the
-master round trip — `Heading 1` and `Heading 2` map to CHAPTER and
-SECTION in `app/sources/docx_in.py`, whichever wrote them. That is what
-makes a corrected master come back as the same book, and it is also why
-Adobe's output needed no new reader: it speaks Word's own heading styles,
-which the round trip already had to understand. The EPUB's table of
-contents nests sections under their chapter accordingly.
-
-Not yet built: where the converter container runs, which is still
-deliberately open.
-
-Example:
-
-services/
-  converter/
-    app/
-      api/
-      pipeline/
-      ocr/
-      llm/
-      docx/
-      epub/
-      pdf/
-      storage/
-      jobs/
-      models/
-    Dockerfile
-    requirements.txt
-
-The API should be asynchronous.
-
-Example:
-
-POST /api/v1/jobs
-
-returns:
-
-{
-  "job_id": "...",
-  "status": "queued"
-}
-
-Then:
-
-GET /api/v1/jobs/{job_id}
-
-Possible states:
-
-queued
-ocr
-normalizing
-ai_processing
-docx_generation
-human_review
-format_generation
-completed
-failed
-cancelled
-
-Do not make the HTTP request wait for a long-running OCR/LLM conversion.
+One fixture survives deliberately:
+`lib/conversion/fixtures/python-docx-master.docx`, generated by the
+retired builder before it was deleted. Every master already in R2 was
+written by that code and the reader has to keep reading them; the
+implementation that produced those bytes no longer exists, so the
+fixture is the only remaining evidence of what it produced. It must not
+be regenerated from the current builder — that would make the test agree
+with itself and prove nothing.
 
 ---
 
@@ -1794,11 +1835,16 @@ Production:
 Cloudflare R2. Chosen over AWS S3 because the domain and DNS already
 live on Cloudflare and R2 has no egress fees.
 
-The web application reaches it through a Worker **binding**, not the S3
-API — so there is no access key in its environment. The converter, which
-is not a Worker, uses the S3 API with credentials. R2 being
-S3-compatible keeps a later move to S3 a configuration change on that
-side rather than a rewrite.
+Everything reaches it through a Worker **binding**, not the S3 API — so
+there is no access key anywhere in the environment.
+
+The converter used to be the exception, and was described here as "the
+one component that legitimately holds R2 credentials". It is gone
+(section 13), and with it the only long-lived S3 access key the system
+had. Nothing now holds one.
+
+R2 being S3-compatible still keeps a later move to S3 cheap, but it is
+no longer load-bearing for anything: the binding is the interface.
 
 Development:
 
@@ -1830,13 +1876,22 @@ books/
       master.docx
       book.epub
       book.pdf
-      original.pdf     a PDF upload, kept as uploaded
-      source.txt       a text upload, kept as uploaded
+      original.pdf       a PDF upload, kept as uploaded
+      source.txt         a text upload, kept as uploaded
+      suggestions.json   what the model proposed, awaiting a decision
+      decisions.json     the same file with `approved` filled in
 
 conversion/
   {job_id}/
-    input/
-    intermediate/
-    output/
+    input/               where an upload lands before it is filed
 
-covers/
+`suggestions.json` and `decisions.json` are the correction pair
+(section 13) and sit under `book/` with everything else the pipeline
+writes. `intermediate/` and `output/` under `conversion/` were the
+container's scratch space and are no longer written to at all — the
+pipeline runs in the Worker and holds a book in memory for the seconds
+it takes to build, so there is nothing to stage.
+
+An object under `conversion/` is swept by the R2 lifecycle rule after 30
+days, which is why every source is also filed under its own book
+(section 5) rather than left where it was uploaded.

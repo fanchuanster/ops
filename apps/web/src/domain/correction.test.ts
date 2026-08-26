@@ -14,6 +14,7 @@ import {
   readSuggestions,
   suggestionId,
   type Suggestion,
+  readDecisions,
 } from './correction'
 
 const suggestion = (over: Partial<Suggestion> = {}): Suggestion => ({
@@ -242,5 +243,48 @@ describe('the file the converter actually writes', () => {
     const adopted = decisions.find((d) => d.approved)!
     expect(adopted.original).toBe(real.suggestions[1]!.original)
     expect(adopted.suggested).toBe(real.suggestions[1]!.suggested)
+  })
+})
+
+describe('readDecisions', () => {
+  const file = (approved: unknown) => ({
+    suggestions: [
+      {
+        block: 1,
+        line: 0,
+        original: '不亦說乎',
+        suggested: '不亦説乎',
+        reason: 'r',
+        confidence: 0.9,
+        category: 'characters',
+        approved,
+      },
+    ],
+  })
+
+  it('keeps an adopted decision adopted', () => {
+    // `readSuggestions` drops this field on purpose; reading a decisions
+    // file with it would make every decision read as undecided, and the
+    // apply step would report success having changed nothing.
+    expect(readDecisions(file(true))[0].approved).toBe(true)
+  })
+
+  it('keeps a declined decision declined', () => {
+    expect(readDecisions(file(false))[0].approved).toBe(false)
+  })
+
+  it('leaves an absent decision undecided rather than declining it', () => {
+    // "Nobody looked" and "somebody declined" are different facts, and
+    // applySuggestions counts them separately.
+    expect(readDecisions(file(undefined))[0].approved).toBeNull()
+  })
+
+  it('does not trust a non-boolean', () => {
+    expect(readDecisions(file('yes'))[0].approved).toBeNull()
+  })
+
+  it('still drops what readSuggestions drops', () => {
+    expect(readDecisions({ suggestions: [{ block: 1, line: 0, original: 'a', suggested: 'a' }] }))
+      .toHaveLength(0)
   })
 })

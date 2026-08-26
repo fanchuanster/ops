@@ -29,9 +29,26 @@ assembly and PDF rendering are exactly that.
 | **Send-to-Kindle delivery**              | SMTP, retries  | Container |
 
 Nothing in the top half is new work to move — the reading path was already
-built as bounded request handling. Nothing in the bottom half is a regression —
-`services/converter` was always specified as a standalone service that talks to
-the application over HTTP and knows nothing about the frontend.
+built as bounded request handling. Nothing in the bottom half was a regression
+at the time — `services/converter` was always specified as a standalone service
+that talks to the application over HTTP and knows nothing about the frontend.
+
+**The bottom half is now empty.** On 2026-08-26 the container was deleted and
+the whole pipeline moved into the Worker (`CLAUDE.md` section 13). Every row
+that put it there had already changed shape or gone:
+
+| Row | What happened |
+|---|---|
+| OCR | PaddleOCR deleted; reading a scan is an Adobe HTTP call |
+| PDF rendering | deleted outright — nothing renders a PDF (section 11) |
+| LLM correction | always an HTTP call; "long" is wall clock, not CPU |
+| DOCX master, text sources | parse a zip, write a zip — milliseconds |
+| EPUB generation | the same |
+| Send-to-Kindle | already moved, over Resend's HTTP API |
+
+The test the table applies is unchanged and still the right one. What the
+table got wrong was calling zip-and-XML work "heavy CPU" when the heavy part
+was always the OCR model sitting next to it in the same process.
 
 The one row that changed sides did so by changing shape, which is the test
 this table applies. Reading a scan and building its master was heavy CPU while
@@ -39,8 +56,9 @@ we did it ourselves; on Adobe PDF Services it is one HTTP request and a poll,
 so it is I/O and belongs on the Worker (`apps/web/src/lib/masterPipeline.ts`).
 It moved once before for the same reason, to Google Document AI on 2026-08-14,
 and that only carried the OCR half — Adobe returns the master too, which is
-why the DOCX row now qualifies "text sources": a DOCX or plain text upload
-still has its master built by the converter, because that is still compute.
+why the DOCX row qualified "text sources": a DOCX or plain text upload still
+had its master built by the converter. That was true until the converter was
+deleted; it is now built by the Worker, and the measurement above is why.
 
 ## What this actually changes
 

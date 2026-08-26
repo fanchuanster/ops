@@ -17,7 +17,18 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "noblesee",
-  "main": ".open-next/worker.js",
+  // Not `.open-next/worker.js` directly: that bundle has no `scheduled`
+  // handler and a Worker has only one entry point. `worker-entry.ts`
+  // re-exports OpenNext's `fetch` untouched and adds the cron tick.
+  "main": "worker-entry.ts",
+
+  // The other half of the `open-next-worker` indirection. tsconfig maps
+  // the same specifier to `types/openNextWorker.ts`, which is types
+  // only — importing the generated bundle directly makes `tsc` parse
+  // several megabytes of JavaScript and run out of heap.
+  "alias": {
+    "open-next-worker": "./.open-next/worker.js"
+  },
 
   // Recent enough for the Node compatibility surface Payload and the
   // Next server rely on.
@@ -27,6 +38,22 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+
+  // The conversion clock.
+  //
+  // Until 2026-08-26 there was no clock. The converter container polled
+  // `GET /api/conversion` every few seconds and that poll was the tick —
+  // which meant nothing advanced while nothing was polling, and for most
+  // of the day nothing was. The container is gone and the pipeline runs
+  // in this Worker (CLAUDE.md section 13), so the tick is a cron.
+  //
+  // Every minute, and one job per tick. A tick claims a book with a
+  // compare-and-swap before touching it, so an overrun — a slow tick is
+  // not cancelled when the next one fires — costs a wasted query rather
+  // than a book converted twice.
+  "triggers": {
+    "crons": ["* * * * *"]
   },
 
   "observability": {

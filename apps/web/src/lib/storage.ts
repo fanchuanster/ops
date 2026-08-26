@@ -142,6 +142,29 @@ export async function artifactBytes(storageKey: string): Promise<Uint8Array | nu
 }
 
 /**
+ * Write an artifact the conversion pipeline has just built.
+ *
+ * The counterpart to `artifactBytes`, and used by the same caller for
+ * the same reason: a generated DOCX or EPUB is assembled in memory, so
+ * there is nothing to stream from. The size guard is the builder's —
+ * what these produce is text, and a book's text is orders of magnitude
+ * smaller than the scan it came from.
+ *
+ * Returns false when there is no bucket, so a caller running without
+ * Cloudflare fails the job rather than reporting a key nothing wrote.
+ */
+export async function putObject(
+  storageKey: string,
+  bytes: Uint8Array,
+  contentType: string,
+): Promise<boolean> {
+  const bucket = await artifactBucket()
+  if (!bucket) return false
+  await bucket.put(storageKey, bytes, { httpMetadata: { contentType } })
+  return true
+}
+
+/**
  * A slice of an object, without fetching the object.
  *
  * What metadata extraction reads an upload through. The file is in R2

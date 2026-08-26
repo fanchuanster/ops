@@ -170,15 +170,15 @@ export function canRequestCorrection({
  * are what the converter matches on when applying. They are opaque to
  * the reader and are carried through the decision round trip unchanged.
  */
-export interface Suggestion {
-  block: number
-  line: number
-  original: string
-  suggested: string
-  reason: string
-  confidence: number
-  category: string
-}
+/**
+ * Re-exported rather than redefined. `domain/document.ts` owns the book
+ * model, and this module is the review state machine around it — two
+ * definitions of the same record is how the parser and the producer
+ * drift apart.
+ */
+export type { Suggestion } from './document'
+
+import type { Suggestion } from './document'
 
 /**
  * One suggestion with the reader's answer on it.
@@ -235,6 +235,43 @@ export function readSuggestions(payload: unknown): Suggestion[] {
     })
   }
   return out
+}
+
+/**
+ * Read the decisions file, which is the suggestions file with `approved`
+ * filled in.
+ *
+ * Separate from `readSuggestions` because the two are read at different
+ * moments and one field decides everything. `readSuggestions` renders a
+ * page of proposals nobody has judged yet, so it deliberately drops
+ * `approved` — there is none. This reads the file *after* a reader has
+ * judged them, where dropping it means every decision reads as
+ * undecided and the apply step silently changes nothing.
+ *
+ * That is not a hypothetical: the port used `readSuggestions` here at
+ * first, and the apply job completed successfully having adopted
+ * nothing, which is the worst shape a bug can take — a green tick over
+ * an unchanged book.
+ *
+ * An absent or non-boolean `approved` stays undecided rather than
+ * becoming `false`, because "nobody looked" and "somebody declined" are
+ * different facts and `applySuggestions` counts them separately.
+ */
+export function readDecisions(payload: unknown): Suggestion[] {
+  const list = (payload as { suggestions?: unknown })?.suggestions
+  if (!Array.isArray(list)) return []
+
+  return readSuggestions(payload).map((suggestion) => {
+    const raw = (list as Array<Record<string, unknown>>).find(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        item.block === suggestion.block &&
+        item.line === suggestion.line,
+    )
+    const approved = raw?.approved
+    return { ...suggestion, approved: typeof approved === 'boolean' ? approved : null }
+  })
 }
 
 /**

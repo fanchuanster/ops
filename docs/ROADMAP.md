@@ -149,8 +149,12 @@ oversight.
   review file, `apply` edits. Never silent rewriting, per `CLAUDE.md` section 7,
   and enforced by deterministic guardrails rather than by the prompt: a proposal
   that changes more than two substantive characters is refused as a rewrite, and
-  the refusal is recorded. The provider is xAI by default and the self-hosted
-  vLLM endpoint by configuration (`services/converter/README.md`).
+  the refusal is recorded. The provider is xAI by default and a self-hosted
+  vLLM endpoint by configuration (`CLAUDE.md` section 4).
+- **The conversion pipeline runs in the Worker** (2026-08-26) — the Python
+  container is deleted. Driven by a cron trigger once a minute, one book per
+  tick, claimed with the same compare-and-swap the poll used. `CLAUDE.md`
+  section 13.
 
 ## Not built
 
@@ -161,19 +165,17 @@ oversight.
 
 ### Content production
 
-- **Where the converter runs** — the service is complete and the wire to the
-  Worker is built, but nothing hosts the container yet. Deliberately open
-  (`CLAUDE.md` section 3); the pull handoff means it can be answered later
-  without touching application code. `CONVERTER_SECRET` must be set on the
-  Worker before the handoff does anything — it fails closed until then.
-
 - **EPUB validation** — generated EPUBs are well-formed and open, but nothing
   runs epubcheck over them (NR-1 … NR-8).
 
-- **The portal's remaining screens** — per-user upload quotas. One thing to
-  settle first: whether a private upload may be sent to a third-party LLM at
-  all (`CLAUDE.md` section 6.1). `allow_third_party_ai` is false everywhere
-  today, so the question is not yet load-bearing.
+- **The portal's remaining screens** — per-user upload quotas.
+
+  The question that used to sit here — whether a private upload may be sent
+  to a third-party LLM at all — was settled on 2026-08-26 and is no longer
+  open. It is the uploader's decision, disclosed on the screen that makes it,
+  stored as `conversion.aiCorrection`, and re-read at the moment of sending
+  (`CLAUDE.md` sections 4 and 6.1). `allow_third_party_ai` is no longer false
+  everywhere.
 
   `tools/generate-seed-content.py` still writes the seed library's own
   reproducible artifacts into `content/seed/`.

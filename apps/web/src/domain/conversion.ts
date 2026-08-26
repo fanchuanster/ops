@@ -56,6 +56,21 @@ export function artifactPrefix(bookId: string | number): string {
 }
 
 /**
+ * Where a finished artifact lives.
+ *
+ * One level below `artifactPrefix`, and the difference matters. The
+ * prefix is the *containment* boundary — broad enough to admit the cover
+ * sitting directly under `books/{id}/` — while the artifacts themselves
+ * go in `book/`, which is where every book already in R2 has them and
+ * what CLAUDE.md section 14 draws. `originalKey` in `publication.ts`
+ * arrives at the same layout from the other direction, and for a DOCX
+ * upload the two name the same object: the upload is the master.
+ */
+export function artifactKey(bookId: string | number, filename: string): string {
+  return `${artifactPrefix(bookId)}book/${filename}`
+}
+
+/**
  * Filter a converter's reported artifacts down to what may be stored.
  *
  * Silently dropping bad entries rather than rejecting the whole payload
