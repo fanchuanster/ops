@@ -75,10 +75,9 @@ export function claimableAs(state: ConversionState): JobKind | null {
  * There is no on-demand set any more, and no release set distinct from
  * it. Both existed to ration WeasyPrint: three PDF sizes were slow to
  * render and mostly unopened, so the EPUB was built on release and a PDF
- * only when a reader asked. With one PDF that mirrors the original —
- * and, for a PDF upload, *is* the original — there is nothing left to
- * ration. A book gets everything its source can give it, on the first
- * run, and `requestFormat` and its button are gone.
+ * only when a reader asked. Nothing renders a PDF at all now, so there
+ * is nothing left to ration — a book gets everything its source can
+ * give it, which is the EPUB, on the first run.
  *
  * What a book's source can give it is `formatsToGenerate` in
  * `domain/publication.ts`; this narrows that by what already exists.
@@ -199,8 +198,13 @@ export function completedState(kind: JobKind): ConversionState {
  * spot rather than leaving it for a converter that has nothing to do.
  */
 export function stateWithoutExport(kind: SourceKind, plan: PublicationPlan): ConversionState {
-  if (kind === 'text') return 'ocr_ready'
-  return needsConverter(kind, plan) ? 'master_ready' : 'ready'
+  // Nothing left to do: an EPUB upload, a PDF published as it stands, or
+  // a text file published as it stands. All three are finished the
+  // moment the original is filed under the book.
+  if (!needsConverter(kind, plan)) return 'ready'
+  // Text is the one source that still needs a master built for it, so it
+  // enters phase 1 rather than phase 2. A DOCX *is* the master.
+  return kind === 'text' ? 'ocr_ready' : 'master_ready'
 }
 
 export function hasMaster(state: ConversionState): boolean {
@@ -255,6 +259,39 @@ export const QUOTA_COUNTED_STATES: ConversionState[] = CONVERSION_STATES.filter(
  */
 export function retryStateFor({ hasMasterArtifact }: { hasMasterArtifact: boolean }): ConversionState {
   return hasMasterArtifact ? 'master_ready' : 'queued'
+}
+
+/**
+ * Is this book stuck in a failure that nothing is ever going to retry?
+ *
+ * A conversion failure is a fact about a *conversion*. When the book's
+ * plan no longer asks for one — it is published as it stands — the
+ * failure is about work nobody wants any more, and leaving the book in
+ * it is leaving it unreadable and unsubmittable over a decision that has
+ * since been reversed.
+ *
+ * That is not hypothetical. A text upload was converted by default until
+ * 2026-08-26; a converter refused one, the book went to `failed`, and
+ * when its owner switched it to "publish as it stands" nothing moved it:
+ * `settleQueuedBook` only ever rescued a `queued` book, so the details
+ * form recorded the new plan against a book that stayed broken and went
+ * on saying "there is nothing to review yet" about a file sitting in
+ * storage.
+ *
+ * Deliberately only `failed`. A *finished* book flipped back to `as_is`
+ * is a metadata change and must not be re-settled — its EPUB may already
+ * be on somebody's device (CLAUDE.md section 3).
+ */
+export function recoversFromFailure({
+  state,
+  sourceKind,
+  plan,
+}: {
+  state: ConversionState
+  sourceKind: SourceKind
+  plan: PublicationPlan
+}): boolean {
+  return state === 'failed' && !needsConverter(sourceKind, plan)
 }
 
 /**

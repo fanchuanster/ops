@@ -188,11 +188,16 @@ export async function GET(request: Request) {
             null,
           title: book.title,
           author: book.author ?? null,
-          // Never true for a reader's upload. Every book that reaches this
-          // endpoint is one, so this is a constant rather than a field —
-          // making it configurable here would be making it possible to get
-          // wrong (CLAUDE.md section 6.1).
-          allow_third_party_ai: false,
+          // The uploader's own answer, and nobody else's. It was a
+          // hard-coded `false` until 2026-08-26, under a rule that
+          // forbade sending a reader's upload to a third party at all;
+          // that rule is gone and this is what replaced it — a question
+          // asked on the details form, disclosed in the same breath
+          // (CLAUDE.md section 6.1).
+          //
+          // `=== true` rather than a cast: an absent or null column on a
+          // book uploaded before the question existed must read as no.
+          allow_third_party_ai: book.conversion?.aiCorrection === true,
         },
       })
     }

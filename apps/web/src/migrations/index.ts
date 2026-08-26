@@ -22,6 +22,7 @@ import * as migration_20260825_120000_drop_translator from './20260825_120000_dr
 import * as migration_20260825_140000_cover_page_choice from './20260825_140000_cover_page_choice';
 import * as migration_20260825_160000_shelf_order from './20260825_160000_shelf_order';
 import * as migration_20260825_180000_child_order from './20260825_180000_child_order';
+import * as migration_20260826_090000_ai_correction from './20260826_090000_ai_correction';
 
 export const migrations = [
   {
@@ -143,5 +144,10 @@ export const migrations = [
     up: migration_20260825_180000_child_order.up,
     down: migration_20260825_180000_child_order.down,
     name: '20260825_180000_child_order'
+  },
+  {
+    up: migration_20260826_090000_ai_correction.up,
+    down: migration_20260826_090000_ai_correction.down,
+    name: '20260826_090000_ai_correction'
   },
 ];

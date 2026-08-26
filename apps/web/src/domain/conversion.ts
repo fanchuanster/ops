@@ -25,8 +25,15 @@
  * device decide. What replaced them is a single PDF that mirrors the
  * original's own layout, and for a PDF upload that *is* the uploaded
  * file (`domain/publication.ts`).
+ *
+ * `txt` joined them on 2026-08-26, and is never *generated* — nothing
+ * builds a text file. It is only ever a plain text upload kept as
+ * itself, which is what lets such a book be published as it stands the
+ * way a PDF can be. It reflows, so unlike the PDF it is a perfectly good
+ * thing to read and to send to a device; it simply carries no structure,
+ * which is what converting it to an EPUB adds.
  */
-export const ARTIFACT_FORMATS = ['docx', 'epub', 'pdf'] as const
+export const ARTIFACT_FORMATS = ['docx', 'epub', 'pdf', 'txt'] as const
 
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number]
 

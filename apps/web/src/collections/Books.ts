@@ -117,9 +117,28 @@ const enforcePublicationReview: CollectionBeforeChangeHook = ({ data, originalDo
  * was charged is a recorded fact rather than a re-derivation that could
  * change under them when the rule changes. The rule itself is in
  * `domain/credits.ts`.
+ *
+ * **The estimate is the fallback, and since 2026-08-26 it is usually the
+ * answer.** `pageCount` used to be filled in by the converter, which got
+ * it by laying the whole book out in WeasyPrint and counting the pages
+ * that came out. Nothing renders a PDF from a master any more, so
+ * nothing counts pages that way, and a page is a rendering artifact
+ * rather than a property of a book.
+ *
+ * `estimatedPages` is what remains, and it is not a poor substitute: for
+ * a PDF upload it is the page tree's own count — the *original's* pages,
+ * which is a truer answer than counting our typesetting ever was — and
+ * for a DOCX or text file it is characters over a printed-page constant
+ * (`domain/uploadQuota.ts`). Without this fallback, dropping the
+ * renderer would have quietly priced every converted book at the
+ * one-credit minimum.
  */
 const priceFromPageCount: CollectionBeforeChangeHook = ({ data, originalDoc }) => {
-  const pages = data?.pageCount ?? originalDoc?.pageCount
+  const pages =
+    data?.pageCount ??
+    originalDoc?.pageCount ??
+    data?.estimatedPages ??
+    originalDoc?.estimatedPages
   return { ...data, priceCredits: priceInCredits(pages) }
 }
 
@@ -581,6 +600,7 @@ export const Books: CollectionConfig = {
             { label: 'DOCX (editable master, owner only)', value: 'docx' },
             { label: 'EPUB 3', value: 'epub' },
             { label: 'PDF (the original’s layout)', value: 'pdf' },
+            { label: 'Plain text (the upload itself)', value: 'txt' },
           ],
         },
         { name: 'storageKey', type: 'text', required: true },
@@ -662,7 +682,17 @@ export const Books: CollectionConfig = {
           admin: {
             readOnly: true,
             description:
-              'What the uploader chose. Only a PDF gets the choice — a DOCX is already a master, an EPUB is already an edition, and neither has anything to decide. Set on the details form; see domain/publication.ts.',
+              'What the uploader chose. A PDF and a plain text file get the choice; a DOCX is already a master and an EPUB is already an edition, so neither has anything to decide. Set on the details form; see domain/publication.ts.',
+          },
+        },
+        {
+          name: 'aiCorrection',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            readOnly: true,
+            description:
+              'Whether the uploader asked for AI-assisted correction, which sends their text to a third-party model (CLAUDE.md sections 4 and 6.1). Theirs to decide, on the details form; false unless they said otherwise, so a book nobody answered for is never sent.',
           },
         },
         {

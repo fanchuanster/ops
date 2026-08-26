@@ -88,8 +88,14 @@ export const KINDLE_SENDER_ADDRESS = 'kindle@noblesee.com'
  * stays reflowable; the PDF is accepted but arrives fixed-layout, which
  * is the thing this project exists to move away from. It is also, for a
  * book published as it stands, the only thing there is to send.
+ *
+ * Plain text is deliverable too, and is the one place the ordering above
+ * does not read as a ranking: Amazon has accepted `.txt` for as long as
+ * it has accepted anything, and a text file on a Kindle reflows exactly
+ * as an EPUB does. It arrives without chapters or a contents list, which
+ * is what converting it would add — not without the reading experience.
  */
-export const KINDLE_DELIVERABLE_FORMATS = ['epub', 'pdf'] as const
+export const KINDLE_DELIVERABLE_FORMATS = ['epub', 'pdf', 'txt'] as const
 
 export type KindleDeliverableFormat = (typeof KINDLE_DELIVERABLE_FORMATS)[number]
 

@@ -12,6 +12,7 @@ a zip should be refused rather than handed to PyMuPDF.
 
 from __future__ import annotations
 
+import codecs
 from enum import Enum
 from pathlib import Path
 
@@ -102,18 +103,26 @@ def _is_probably_text(path: Path, sample_bytes: int = 8192) -> bool:
     that would flow all the way into a published book. Refusing it here
     tells the uploader to convert it, which is recoverable; silently
     mangling it is not.
+
+    The sample almost always ends in the middle of a character, and that
+    is not evidence of anything. An *incremental* decoder is the whole
+    fix: it buffers an incomplete trailing sequence instead of raising,
+    so only a genuinely invalid byte fails.
+
+    This used to retry the decode against `sample[:-3]`, which is wrong
+    in a way that bit real books. Dropping exactly three bytes does not
+    land on a character boundary — it lands three bytes earlier, which
+    for 3-byte CJK characters is just as likely to be mid-character. A
+    perfectly good UTF-8 Chinese book was refused as "not a plain text
+    file" whenever its 8192nd byte fell inside a character, which is
+    most of the time.
     """
     with path.open("rb") as handle:
         sample = handle.read(sample_bytes)
     if b"\x00" in sample:
         return False
     try:
-        sample.decode("utf-8")
+        codecs.getincrementaldecoder("utf-8")().decode(sample)
     except UnicodeDecodeError:
-        # A multi-byte character may straddle the sample boundary; that
-        # alone is not evidence the file is binary.
-        try:
-            sample[:-3].decode("utf-8")
-        except UnicodeDecodeError:
-            return False
+        return False
     return True

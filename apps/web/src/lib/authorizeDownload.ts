@@ -56,6 +56,7 @@ const EXTENSION: Record<string, string> = {
   docx: 'docx',
   epub: 'epub',
   pdf: 'pdf',
+  txt: 'txt',
 }
 
 /** Filesystem-safe, readable, and stable across a book's re-editing. */
@@ -86,7 +87,7 @@ export async function authorizeReading({
   bookId: string | number
   userId: string | number | null
 }): Promise<
-  | { allowed: true; storageKey: string; format: 'epub' | 'pdf' }
+  | { allowed: true; storageKey: string; format: 'epub' | 'pdf' | 'txt' }
   | { allowed: false; refusal: DownloadRefusal }
 > {
   const book = await loadBook(payload, bookId)
@@ -107,7 +108,7 @@ export async function authorizeReading({
   return {
     allowed: true,
     storageKey: artifacts.find((a) => a.format === format)!.storageKey!,
-    // Which of the two it found. The reader page renders a different
+    // Which of the three it found. The reader page renders a different
     // thing for each, and the stream needs a different content type, so
     // guessing from the key would be one more place for them to
     // disagree.

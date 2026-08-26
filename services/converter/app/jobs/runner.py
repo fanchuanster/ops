@@ -24,7 +24,6 @@ from pathlib import Path
 from ..docx.builder import build_docx
 from ..epub import build_epub
 from ..models import Document
-from ..pdf import LibreOfficeUnavailable, build_pdf, docx_to_pdf, page_count
 from ..sources.load import load_source
 from ..sources.ocr_json import page_count_of, read_ocr_json
 from ..storage.r2 import CONTENT_TYPES, ObjectStore, artifact_key
@@ -33,16 +32,21 @@ from .model import Job, JobKind, JobState
 log = logging.getLogger(__name__)
 
 # Filenames inside `books/{id}/book/`, matching what the catalog seeds.
+#
+# No `pdf`. Nothing here renders one: a PDF's job in this library is to
+# be a faithful picture of the *original*, so it exists only when the
+# original is a PDF, in which case it is that file and needs no
+# rendering (CLAUDE.md section 11).
 ARTIFACT_FILENAMES = {
     "docx": "master.docx",
     "epub": "book.epub",
-    "pdf": "book.pdf",
 }
 
-# What phase 2 builds when the caller does not say. Everything — which
-# is what the CLI and the job API want, since an editor converting a
-# book locally asked for the whole set by running the command at all.
-ALL_READER_FORMATS = ("epub", "pdf")
+# What phase 2 builds when the caller does not say. One format, which
+# makes this list look redundant — it is kept because the *shape* of the
+# job protocol has a format list in it, and a second reader format is a
+# plausible future (section 12) rather than an impossible one.
+ALL_READER_FORMATS = ("epub",)
 
 
 def _wanted_formats(job: Job) -> set[str]:
@@ -94,22 +98,6 @@ def _load_input(job: Job, store: ObjectStore, work: Path) -> Document:
     source = work / Path(job.source_key).name
     store.download(job.source_key, source)
     return load_source(source, title=job.title, author=job.author, cache_dir=work / "cache")
-
-
-def _render_pdf(document: Document, master: Path, path: Path) -> Path:
-    """The book's one PDF, by whichever route preserves the most.
-
-    LibreOffice first, because it renders the DOCX's own layout. Falling
-    back rather than failing when it is absent: a developer without
-    LibreOffice installed should still get a book out of the CLI, and a
-    PDF in our typography is a far better outcome than no PDF and a
-    failed job.
-    """
-    try:
-        return docx_to_pdf(master, path)
-    except LibreOfficeUnavailable:
-        log.warning("LibreOffice not available; rendering the PDF from the parsed document")
-        return build_pdf(document, path)
 
 
 def run_master_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) -> Job:
@@ -190,24 +178,13 @@ def run_formats_job(job: Job, store: ObjectStore | None, *, on_change=lambda job
             if "epub" in wanted:
                 produced["epub"] = build_epub(document, work / "book.epub", identifier=job.id)
 
-            # One PDF, and which renderer produces it is the whole
-            # point. The book's PDF has to mirror the original's own
-            # layout; when the original *is* this master — a DOCX
-            # upload — that means letting LibreOffice lay out the Word
-            # document rather than re-typesetting its text in ours.
-            #
-            # A master built by this pipeline from a scan or from plain
-            # text has no such layout to preserve, so it is rendered
-            # through our own typography instead. The web application
-            # never asks for a PDF for a book uploaded *as* a PDF: that
-            # book's PDF is the file the reader uploaded.
-            if "pdf" in wanted:
-                produced["pdf"] = _render_pdf(document, master, work / "book.pdf")
-
-            # Always, even when no PDF was built: the count is the book's
-            # length and prices it, and it must not depend on which
-            # formats happened to be requested.
-            job.page_count = page_count(document)
+            # No page count is reported any more. It used to be the
+            # number of pages WeasyPrint produced laying this document
+            # out, which is gone with the renderer — and a page was
+            # always a fact about *our* typesetting rather than about the
+            # book. The web application prices from its own estimate
+            # instead: the PDF page tree for a scan, characters for
+            # everything else (`domain/uploadQuota.ts`).
 
             for fmt, path in produced.items():
                 key = artifact_key(job.book_id or job.id, ARTIFACT_FILENAMES[fmt])
@@ -268,10 +245,8 @@ def run_job(job: Job, store: ObjectStore | None, *, on_change=lambda job: None) 
             job.advance(JobState.FORMAT_GENERATION)
             on_change(job)
             epub_path = build_epub(document, work / "book.epub", identifier=job.id)
-            pdf_path = _render_pdf(document, master, work / "book.pdf")
-            job.page_count = page_count(document)
 
-            produced = {"docx": master, "epub": epub_path, "pdf": pdf_path}
+            produced = {"docx": master, "epub": epub_path}
             for fmt, path in produced.items():
                 key = artifact_key(job.book_id or job.id, ARTIFACT_FILENAMES[fmt])
                 store.upload(path, key, content_type=CONTENT_TYPES.get(path.suffix))

@@ -2609,6 +2609,40 @@ h3 {
   background: var(--paper-raised);
 }
 
+/*
+ * A plain text book, set as prose.
+ *
+ * The reader for a text upload published as it stands. Unlike the PDF
+ * above it there is nothing here to hand to a viewer — the file is
+ * words and nothing else — so this is the one reader whose typography
+ * is entirely ours, and it is the site's reading face at a measure
+ * chosen to be read rather than to fill the window.
+ *
+ * `pre-line` on the paragraph keeps the line breaks the file has inside
+ * a paragraph: verse whose lines were joined into a sentence is no
+ * longer verse (`components/TextReader.tsx`).
+ */
+.reader__stage--text {
+  display: block;
+  overflow-y: auto;
+  background: var(--paper);
+}
+
+.reader__text {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 6rem;
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.9;
+  color: var(--ink);
+}
+
+.reader__text p {
+  margin: 0 0 1.4em;
+  white-space: pre-line;
+}
+
 .reader__aside {
   margin-left: auto;
   color: var(--ink-soft);
@@ -3233,6 +3267,63 @@ h3 {
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   margin-bottom: 0.25rem;
+}
+
+/*
+ * The AI correction opt-in.
+ *
+ * A checkbox rather than a plan card, because it is not an alternative
+ * to anything — it is a second question about the same conversion, and
+ * the answer that costs nothing is the unchecked one. Set apart from the
+ * cards above it so it does not read as a third option.
+ */
+.ai-consent {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: 0.75rem;
+  background: var(--paper-raised);
+  cursor: pointer;
+}
+
+.ai-consent input {
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+
+.ai-consent > span {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+
+.ai-consent strong {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.2rem;
+}
+
+/*
+ * Who else sees the file, on the option that sends it to them.
+ *
+ * Quieter than the body copy and set apart from it, because it is a
+ * different kind of statement: the copy above sells the option, this
+ * one discloses its cost in privacy. It must be legible rather than
+ * loud — small print that hides is worse than no small print, and
+ * scaring someone off a conversion they wanted is not the goal either.
+ */
+.plan-card__sends,
+.notice--sends {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule-soft);
+  color: var(--ink-faint);
 }
 
 /* The card's body copy. Excluding the tag, which is a `span` too and

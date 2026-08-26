@@ -206,6 +206,7 @@ export default async function BookDetailsPage({
                 : null,
           sourceKind,
           plan,
+          aiCorrection: book.conversion?.aiCorrection === true,
         }}
         // Flattened in tree order so a sub-shelf appears directly under
         // the shelf it stands on, indented (`domain/collectionTree.ts`).

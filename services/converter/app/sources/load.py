@@ -6,13 +6,11 @@ the same DOCX master with no second-class path. This module is where
 that convergence actually happens: it picks the right reader and hands
 back a `Document`, so the job runner does not need a branch per format.
 
-The one real difference between them is OCR, and it is a difference of
-*cost*, not of outcome — a scanned page has to be rasterised and read
-before there is any text at all, which is why `on_stage` exists: that
-stage takes minutes to hours and a caller needs to say so.
-
-Note "page", not "file". Both PDF kinds go to the same reader, which
-decides page by page and OCRs only what it must (`pdf_in.read_pdf`).
+None of them costs anything to speak of. Reading a *scan* did, and it
+is no longer here: Adobe's Export PDF returns a finished master from the
+web application, so what reaches this module is only ever a file that
+can be parsed. `on_stage` remains because the caller still wants to name
+what it is doing, not because anything here takes minutes.
 """
 
 from __future__ import annotations
@@ -51,19 +49,12 @@ def load_source(
         return document
 
     if kind in (SourceKind.PDF_TEXT, SourceKind.PDF_SCANNED):
-        # One reader for both. The OCR cache under `cache_dir` is kept
-        # because a book takes hours to read and an editor re-running the
-        # structure stage must not pay for the OCR again — the same
-        # reason the CLI exists (services/converter/README).
+        # One reader for both, and it refuses the one it cannot read: a
+        # scan is mastered by Adobe from the web application, never here.
         from .pdf_in import read_pdf
 
         document, _report, _sources = read_pdf(
-            path,
-            title=name,
-            author=author,
-            cache_dir=cache_dir or path.parent / "cache",
-            engine="paddle",
-            on_stage=on_stage,
+            path, title=name, author=author, on_stage=on_stage
         )
         return document
 

@@ -1,20 +1,20 @@
 """Every accepted input, converging on one DOCX master.
 
-    scanned page ── OCR ────────┐
-    text-layer page  extract ───┤
+    text-layer PDF ─ extract ───┐
     DOCX ─────────── styles ────┼──> Document ──> DOCX master
     plain text ───── paragraphs ┘
+
+A scan is not on that list. It is read by Adobe's Export PDF from the
+web application, which returns the master directly.
 
 The DOCX master is the source of truth (CLAUDE.md section 5), so this is
 the only entry the rest of the pipeline needs: correction, review and —
 once they exist — EPUB and PDF generation all start from a `Document`
 and know nothing about where it came from.
 
-Only OCR costs hours, and it is charged per page rather than per book:
-one PDF can hold pages of both kinds, and only the ones with no text of
-their own are read (`pdf_in.read_pdf`). Everything else is near-instant,
-which is why `import` is a separate command from `convert`: there is no
-OCR cache to preserve and nothing to resume.
+Everything here is near-instant, which is why there is only one command
+for it now. `convert` was a separate command for the OCR path — hours of
+work, a cache to preserve, progress to report — and went with the OCR.
 """
 
 from __future__ import annotations
@@ -53,14 +53,11 @@ def load_source(
 ) -> SourceResult:
     """Read any supported input into a `Document`.
 
-    A PDF with any page needing OCR is refused here rather than silently
-    read: OCR takes hours, needs a cache directory and reports progress,
-    so it belongs to the `convert` command and not to a function that
-    otherwise returns in milliseconds. Passing no engine is what makes
-    `read_pdf` refuse — and it refuses over a single scanned page in an
-    otherwise born-digital book, because that page is the book's content
-    too and dropping it silently is the failure this whole path exists to
-    avoid.
+    A PDF with any page that has no text layer is refused, and refused
+    over a *single* such page in an otherwise born-digital book — that
+    page is the book's content too, and dropping it silently is the
+    failure this whole path exists to avoid. Such a book is mastered by
+    Adobe from the web application instead.
     """
     kind = kind or detect(path)
 

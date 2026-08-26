@@ -82,6 +82,8 @@ export interface EditableBook {
   collection: number | null
   sourceKind: SourceKind
   plan: PublicationPlan
+  /** Whether they have already asked for AI-assisted correction. */
+  aiCorrection: boolean
 }
 
 /**
@@ -97,19 +99,96 @@ export interface EditableBook {
  * what it gives is the thing this project exists for and the copy
  * should not read as a consolation.
  */
-const PLAN_COPY: Record<PublicationPlan, { tag: string; label: string; detail: string }> = {
-  convert: {
-    tag: 'Best to read',
-    label: 'Convert & Generate',
-    detail:
-      'Pages are read and text is rebuilt to reflow — adjustable size, chapter navigation, readable on any device. Produces a typeset EPUB and PDF. Takes a while, and you can start it later.',
+/**
+ * The two plans, in the uploader's own terms.
+ *
+ * Keyed by source as well as by plan, because what each one costs
+ * depends entirely on what was uploaded. Publishing a scan as it stands
+ * gives up reflow — the thing this project exists to provide — and
+ * publishing a text file as it stands gives up nothing but structure,
+ * since text reflows on its own. One sentence cannot be honest about
+ * both.
+ *
+ * ## `sends`: who else sees the file
+ *
+ * Converting means handing the book to services outside NobleSee — a
+ * scan goes to Adobe to be read, and text goes to an AI service to have
+ * OCR damage suggested away. Publishing as it stands hands it to nobody.
+ *
+ * This used to be a *prohibition*: CLAUDE.md forbade sending a private
+ * upload to a third party at all, which is a rule the uploader never
+ * saw, could not weigh, and could not consent to. It also could not
+ * survive contact with the pipeline — reading a scan *is* a third-party
+ * call now, so the rule would have banned the portal's main path.
+ *
+ * Disclosure is the honest version of the same care: say plainly who
+ * gets the file, on the screen where the choice is made, and let the
+ * person who owns the book decide. Every uploader here has a private
+ * alternative that keeps the file inside NobleSee, and it is the
+ * default (`defaultPlanFor`).
+ */
+const PLAN_COPY: Record<
+  SourceKind,
+  Partial<
+    Record<PublicationPlan, { tag: string; label: string; detail: string; sends?: string }>
+  >
+> = {
+  pdf: {
+    convert: {
+      tag: 'Best to read',
+      label: 'Convert & Generate',
+      detail:
+        'Pages are read and text is rebuilt to reflow — adjustable size, chapter navigation, readable on any device. Produces an EPUB. Takes a while, and you can start it later.',
+      sends:
+        'Your file is sent to Adobe’s PDF Services, outside NobleSee, to have its pages read. Only choose this for material you are willing to hand to them.',
+    },
+    as_is: {
+      tag: 'Recommended',
+      label: 'Submit PDF for Review',
+      detail:
+        'Publish exactly what you uploaded, ready straight away. Perfect fidelity — but text won’t reflow, so it can’t adapt to a Kindle’s screen. Convert later if you change your mind.',
+      sends: 'Nothing leaves NobleSee. Your file is stored and published as it is.',
+    },
   },
-  as_is: {
-    tag: 'Recommended',
-    label: 'Submit PDF for Review',
-    detail:
-      'Publish exactly what you uploaded, ready straight away. Perfect fidelity — but text won’t reflow, so it can’t adapt to a Kindle’s screen. Convert later if you change your mind.',
+  text: {
+    convert: {
+      tag: 'Best to read',
+      label: 'Convert & Generate',
+      detail:
+        'Your text is rebuilt into a structured book — chapters, a contents list, a proper EPUB. Takes a while, and you can start it later.',
+      sends: 'Converted here. Nothing leaves NobleSee unless you ask for AI correction below.',
+    },
+    as_is: {
+      tag: 'Recommended',
+      label: 'Submit text for Review',
+      detail:
+        'Publish the text exactly as you uploaded it, ready straight away. It already reflows, so it reads and sends to a Kindle fine — it just arrives without chapters or a contents list. Convert later if you change your mind.',
+      sends: 'Nothing leaves NobleSee. Your text is stored and published as it is.',
+    },
   },
+  docx: {
+    convert: {
+      tag: 'Best to read',
+      label: 'Convert & Generate',
+      detail:
+        'Your Word document is the editable master already, so this goes straight to building the EPUB a reader gets.',
+      sends: 'Converted here. Nothing leaves NobleSee unless you ask for AI correction below.',
+    },
+  },
+  epub: {
+    as_is: {
+      tag: 'Ready',
+      label: 'Publish as it is',
+      detail:
+        'An EPUB is already a reading edition — reflowable, navigable, exactly what a reader wants. Nothing needs converting.',
+      sends: 'Nothing leaves NobleSee. Your file is stored and published as it is.',
+    },
+  },
+}
+
+/** The copy for one plan, falling back to the PDF wording. */
+function planCopy(kind: SourceKind, plan: PublicationPlan) {
+  return PLAN_COPY[kind][plan] ?? PLAN_COPY.pdf[plan]!
 }
 
 /**
@@ -292,16 +371,53 @@ export function BookDetailsForm({
                   plan === defaultPlanFor(book.sourceKind) ? ' plan-card__tag--recommended' : ''
                 }`}
               >
-                {PLAN_COPY[plan].tag}
+                {planCopy(book.sourceKind, plan).tag}
               </span>
-              <strong>{PLAN_COPY[plan].label}</strong>
-              <span>{PLAN_COPY[plan].detail}</span>
+              <strong>{planCopy(book.sourceKind, plan).label}</strong>
+              <span>{planCopy(book.sourceKind, plan).detail}</span>
+              {/* Who else sees the file. Inside the card rather than
+                  below the group, so it is read while the choice is
+                  being made and cannot be attached to the wrong
+                  option. */}
+              {planCopy(book.sourceKind, plan).sends ? (
+                <span className="plan-card__sends">{planCopy(book.sourceKind, plan).sends}</span>
+              ) : null}
             </label>
           ))}
         </fieldset>
       ) : (
-        <p className="notice">{PLAN_COPY[plans[0]!].detail}</p>
+        <>
+          <p className="notice">{planCopy(book.sourceKind, plans[0]!).detail}</p>
+          {planCopy(book.sourceKind, plans[0]!).sends ? (
+            <p className="notice notice--sends">{planCopy(book.sourceKind, plans[0]!).sends}</p>
+          ) : null}
+        </>
       )}
+
+      {/* **The AI decision is the uploader's.**
+          Offered only where converting is possible at all, because the
+          correction stage runs inside a conversion — on a book being
+          published as it stands there is nothing for it to read, and a
+          checkbox that does nothing is worse than no checkbox.
+          Unchecked by default: a question nobody answered is answered
+          no, which is what makes the disclosure above true. */}
+      {plans.includes('convert') ? (
+        <label className="ai-consent">
+          <input
+            type="checkbox"
+            name="aiCorrection"
+            defaultChecked={book.aiCorrection}
+          />
+          <span>
+            <strong>Use AI to suggest corrections</strong>
+            <span>
+              Sends your book’s text to xAI, a service outside NobleSee, which proposes fixes for
+              scanning and typing errors. Every suggestion is reviewed by a person before anything
+              changes — nothing is rewritten on its own. Leave this off and your text stays here.
+            </span>
+          </span>
+        </label>
+      ) : null}
 
       <div className="upload-form__actions">
         <button type="submit" className="cta" disabled={pending}>

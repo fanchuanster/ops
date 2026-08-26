@@ -5,6 +5,7 @@ import React from 'react'
 
 import { PdfReader } from '../../../../components/PdfReader'
 import { Reader } from '../../../../components/Reader'
+import { TextReader } from '../../../../components/TextReader'
 import { getCurrentUser } from '../../../../lib/auth'
 import { authorizeReading, markBookStarted } from '../../../../lib/authorizeDownload'
 import { getBookBySlug } from '../../../../lib/catalog'
@@ -30,8 +31,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  *
  * Which reader opens depends on what the book actually has. Almost
  * always the EPUB one; for a book published as it stands there is no
- * EPUB to reflow, so its own pages are shown instead rather than the
- * reader failing at a book that is sitting right there in storage.
+ * EPUB to reflow, so the book itself is shown instead rather than the
+ * reader failing at a book that is sitting right there in storage — a
+ * PDF in the browser's own viewer, a text file set as prose.
  */
 export default async function ReadPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -83,6 +85,14 @@ export default async function ReadPage({ params }: { params: Promise<{ slug: str
           bookTitle={book.title}
           partTitle={book.author ?? ''}
           progressKey={`noblesee-position-${slug}`}
+        />
+      ) : decision.format === 'txt' ? (
+        <TextReader
+          url={`/read/${slug}/edition`}
+          bookTitle={book.title}
+          subtitle={book.author ?? ''}
+          progressKey={`noblesee-position-${slug}`}
+          lang={book.language ?? undefined}
         />
       ) : (
         <PdfReader

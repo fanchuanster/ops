@@ -8,8 +8,10 @@ import { getPayload } from 'payload'
 import { coverCandidatePages, coverKey } from '../../../domain/cover'
 import { DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
 import { isConversionState, retryStateFor } from '../../../domain/pipeline'
+import { needsConverter, readSourceKind, resolvePlan } from '../../../domain/publication'
 import { canAccessArtifact } from '../../../domain/rights'
 import { getCurrentUser } from '../../../lib/auth'
+import { settleQueuedBook } from '../../../lib/masterPipeline'
 import { deleteObjects } from '../../../lib/storage'
 import { logError } from '../../../lib/logError'
 
@@ -103,6 +105,11 @@ export async function deleteBook(_prev: ManageState, formData: FormData): Promis
  * this needs nothing from the reader. It does not spend another of
  * their monthly conversions: the first attempt already did, and
  * charging twice for our own failure would be wrong.
+ *
+ * For a book that needs no converter at all — published as it stands —
+ * "the queue" is this request: `settleQueuedBook` files the original and
+ * finishes the book before the action returns, so Try again does not
+ * mean waiting for a worker that has nothing to do.
  */
 export async function retryConversion(
   _prev: ManageState,
@@ -145,6 +152,14 @@ export async function retryConversion(
     },
     overrideAccess: true,
   })
+
+  // Nothing to convert means nothing to wait for. Same call the details
+  // form makes, and it never throws — a book it declines to settle is
+  // still queued for the pipeline tick.
+  const kind = readSourceKind(book.conversion ?? {})
+  if (!needsConverter(kind, resolvePlan(kind, book.conversion?.plan))) {
+    await settleQueuedBook(payload, bookId)
+  }
 
   revalidatePath(`/account/books/${bookId}`)
   revalidatePath('/account/books')

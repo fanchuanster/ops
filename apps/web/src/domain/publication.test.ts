@@ -109,8 +109,10 @@ describe('the slot the original occupies', () => {
     expect(originalArtifact('epub')).toBe('epub')
   })
 
-  it('gives text no slot, because a .txt is not an edition', () => {
-    expect(originalArtifact('text')).toBeNull()
+  it('makes a text upload its own txt', () => {
+    // Null until 2026-08-26, which meant the original was not kept at
+    // all: it stayed at the `conversion/` key the sweep clears.
+    expect(originalArtifact('text')).toBe('txt')
   })
 
   it('keeps every original under its own book, away from the sweep', () => {
@@ -124,16 +126,43 @@ describe('the slot the original occupies', () => {
   })
 })
 
+describe('what an uploader may choose', () => {
+  it('offers a text file the same choice a PDF gets', () => {
+    // Text reflows on its own, so publishing it as it stands gives up
+    // structure rather than the reading experience. Converting adds
+    // chapters and a contents list, and is worth offering rather than
+    // imposing — especially while it means waiting for a converter.
+    expect(plansFor('text')).toEqual(['as_is', 'convert'])
+    expect(defaultPlanFor('text')).toBe('as_is')
+  })
+
+  it('lets a text book be finished without a converter', () => {
+    expect(needsConverter('text', 'as_is')).toBe(false)
+    expect(needsConverter('text', 'convert')).toBe(true)
+  })
+
+  it('reopens a text book that asks to be converted after all', () => {
+    expect(reopensForConversion('text', 'as_is', 'convert')).toBe(true)
+  })
+
+  it('never sends text to Adobe, whichever plan it takes', () => {
+    expect(needsExport('text', 'as_is')).toBe(false)
+    expect(needsExport('text', 'convert')).toBe(false)
+  })
+})
+
 describe('what still has to be built', () => {
-  it('builds only the EPUB for a PDF, whose PDF is the scan itself', () => {
+  it('builds the EPUB and only the EPUB, whatever the source', () => {
+    // A PDF is never generated. It used to be, for a DOCX or text
+    // source: our own typography frozen into a fixed layout, which is
+    // strictly worse than the EPUB beside it. A PDF artifact now only
+    // ever means the uploader uploaded one.
     expect(formatsToGenerate('pdf')).toEqual(['epub'])
+    expect(formatsToGenerate('docx')).toEqual(['epub'])
+    expect(formatsToGenerate('text')).toEqual(['epub'])
   })
 
-  it('builds both for a DOCX, which has neither yet', () => {
-    expect(formatsToGenerate('docx')).toEqual(['epub', 'pdf'])
-  })
-
-  it('builds nothing for an EPUB', () => {
+  it('builds nothing for an EPUB, which is already the edition', () => {
     expect(formatsToGenerate('epub')).toEqual([])
   })
 })
@@ -219,6 +248,17 @@ describe('which edition the reader opens', () => {
     // the administrator reviewing it — looking at an error while the
     // file sat in storage.
     expect(readingFormat(['pdf'])).toBe('pdf')
+  })
+
+  it('opens the text of a text upload published as it stands', () => {
+    expect(readingFormat(['txt'])).toBe('txt')
+  })
+
+  it('prefers the built editions over the text they were built from', () => {
+    // A converted text book keeps its source as an artifact, and the
+    // EPUB is what that conversion was for.
+    expect(readingFormat(['txt', 'pdf', 'epub'])).toBe('epub')
+    expect(readingFormat(['txt', 'pdf'])).toBe('pdf')
   })
 
   it('never offers the master, whatever else is missing', () => {

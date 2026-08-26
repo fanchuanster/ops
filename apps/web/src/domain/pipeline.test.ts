@@ -22,10 +22,41 @@ import {
   isConversionState,
   isInFlight,
   needsMasterRun,
+  recoversFromFailure,
   retryStateFor,
   stateAfterMasterEdit,
   uploadStep,
 } from './pipeline'
+
+describe('a failure nothing will retry', () => {
+  it('rescues a book published as it stands', () => {
+    // The bug: a text upload was converted by default, a converter
+    // refused it, and switching it to "as it stands" left it failed —
+    // unreadable and unsubmittable over a conversion nobody wanted.
+    expect(
+      recoversFromFailure({ state: 'failed', sourceKind: 'text', plan: 'as_is' }),
+    ).toBe(true)
+    expect(recoversFromFailure({ state: 'failed', sourceKind: 'pdf', plan: 'as_is' })).toBe(true)
+    expect(recoversFromFailure({ state: 'failed', sourceKind: 'epub', plan: 'as_is' })).toBe(true)
+  })
+
+  it('leaves a failure alone while the book still wants converting', () => {
+    expect(recoversFromFailure({ state: 'failed', sourceKind: 'text', plan: 'convert' })).toBe(
+      false,
+    )
+    expect(recoversFromFailure({ state: 'failed', sourceKind: 'docx', plan: 'convert' })).toBe(
+      false,
+    )
+  })
+
+  it('never re-settles a finished book', () => {
+    // A converted book flipped back to `as_is` is a metadata change, not
+    // a request to rebuild anything — its EPUB may already have been
+    // sent to somebody's device.
+    expect(recoversFromFailure({ state: 'ready', sourceKind: 'pdf', plan: 'as_is' })).toBe(false)
+    expect(recoversFromFailure({ state: 'queued', sourceKind: 'text', plan: 'as_is' })).toBe(false)
+  })
+})
 
 describe('what a converter may claim', () => {
   it('offers phase 1 once the text is ready', () => {
@@ -212,8 +243,11 @@ describe('choosing which formats to build', () => {
     expect(formatsToBuild({ sourceKind: 'pdf', existingFormats: [] })).toEqual(['epub'])
   })
 
-  it('builds both for a DOCX upload, which has neither yet', () => {
-    expect(formatsToBuild({ sourceKind: 'docx', existingFormats: [] })).toEqual(['epub', 'pdf'])
+  it('builds only the EPUB for a DOCX upload', () => {
+    // Not a PDF as well. Nothing renders one from a master any more —
+    // that was our own typography frozen flat, strictly worse than the
+    // EPUB beside it (`domain/publication.ts`).
+    expect(formatsToBuild({ sourceKind: 'docx', existingFormats: [] })).toEqual(['epub'])
   })
 
   it('builds nothing for an EPUB upload, and so is not claimable', () => {
@@ -224,12 +258,20 @@ describe('choosing which formats to build', () => {
   })
 
   it('rebuilds everything the book already has when the master is edited', () => {
-    // The reason this matters: a PDF built from the old master still
-    // renders the errors the edit removed, and nothing would ever
+    // The reason this matters: an EPUB built from the old master still
+    // carries the errors the edit removed, and nothing would ever
     // rebuild it if only the missing formats were regenerated.
-    const formats = formatsToBuild({ sourceKind: 'docx', existingFormats: ['docx', 'epub', 'pdf'] })
+    const formats = formatsToBuild({ sourceKind: 'docx', existingFormats: ['docx', 'epub'] })
     expect(formats).toContain('epub')
-    expect(formats).toContain('pdf')
+  })
+
+  it('never rebuilds a PDF a book still carries, because none was built', () => {
+    // A `pdf` on a DOCX-sourced book could only be a rendering from
+    // before 2026-08-26. It is left exactly where it is: still
+    // downloadable, never regenerated, and not treated as work.
+    expect(
+      formatsToBuild({ sourceKind: 'docx', existingFormats: ['docx', 'epub', 'pdf'] }),
+    ).toEqual(['epub'])
   })
 
   it('never asks for the master, which is the input', () => {

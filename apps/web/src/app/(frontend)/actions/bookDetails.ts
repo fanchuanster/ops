@@ -11,7 +11,12 @@ import {
   canSubmitForReview,
 } from '../../../domain/moderation'
 import { levelId, parseProposedLevel } from '../../../domain/levels'
-import { hasMaster, isConversionState, stateAfterMasterEdit } from '../../../domain/pipeline'
+import {
+  hasMaster,
+  isConversionState,
+  recoversFromFailure,
+  stateAfterMasterEdit,
+} from '../../../domain/pipeline'
 import { isUploaderSelectableRights, type RightsStatus } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import {
@@ -120,6 +125,19 @@ export async function saveBookDetails(
   const startsConverting =
     alreadyConverting && reopensForConversion(sourceKind, previousPlan, plan)
 
+  // **The other direction: a failure nothing will retry.**
+  //
+  // A book published as it stands needs no converter, so a conversion
+  // failure on it is about work nobody wants any more — and it is what
+  // stops the book being read, reviewed or published. `recoversFromFailure`
+  // is the rule; here it means "re-queue it, and the settle below will
+  // finish it in this same request".
+  const rescuesFromFailure = recoversFromFailure({
+    state: isConversionState(book.conversion?.state) ? book.conversion.state : 'none',
+    sourceKind,
+    plan,
+  })
+
   // The quota counts conversions, so a book that will not be converted
   // does not consume one. Publishing a PDF as it stands, or filing an
   // uploaded EPUB, costs no pages read and no rendering — charging for
@@ -176,16 +194,25 @@ export async function saveBookDetails(
         // quietly move it back out of `published`, where the catalog
         // query and `authorizeDownload` both look for it, because
         // somebody corrected its title.
-        ...(alreadyConverting && !startsConverting ? {} : { status: 'in_production' as const }),
+        ...(alreadyConverting && !startsConverting && !rescuesFromFailure
+          ? {}
+          : { status: 'in_production' as const }),
         // Queued either way. A reader who is not asking for publication
         // still wants their EPUB.
         conversion: {
           ...book.conversion,
-          state: alreadyConverting && !startsConverting ? book.conversion?.state : 'queued',
+          state:
+            alreadyConverting && !startsConverting && !rescuesFromFailure
+              ? book.conversion?.state
+              : 'queued',
           // What the uploader chose, narrowed to what this source can
           // actually do. A form value is untrusted input: asking for
           // `as_is` on a DOCX would publish a Word file as a book.
           plan,
+          // Whether they asked for AI-assisted correction, which sends
+          // their text to a third-party model. An unchecked box and a
+          // missing field are the same answer, and it is no.
+          aiCorrection: formData.get('aiCorrection') === 'on',
           // Stamped when the book enters the pipeline. This is what the
           // monthly count is scoped by, which is why the flip re-stamps
           // it: the conversion is being paid for in *this* month, not

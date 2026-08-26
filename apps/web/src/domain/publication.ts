@@ -133,12 +133,20 @@ export type PublicationPlan = 'convert' | 'as_is'
  *  - An **EPUB is already the reading edition**. Converting it would
  *    mean parsing a reflowable book into a DOCX and rendering it back,
  *    which can only lose.
- *  - **Text** has no layout of its own, so publishing it as it stands
- *    would be publishing a .txt file. It is always converted.
+ *  - **Text** gets the same choice a PDF does, since 2026-08-26. It was
+ *    always converted until then, on the reasoning that a .txt has no
+ *    layout of its own so publishing it as it stands is publishing a
+ *    text file. That is true and it is not a reason to refuse: a text
+ *    file *reflows*, which is the whole property this project is trying
+ *    to give a scan. What converting adds is structure — chapters, a
+ *    contents list, an EPUB a device can navigate — and that is worth
+ *    offering rather than imposing, especially while it means waiting
+ *    for a converter to pick the book up.
  */
 export function plansFor(kind: SourceKind): PublicationPlan[] {
   switch (kind) {
     case 'pdf':
+    case 'text':
       return ['as_is', 'convert']
     case 'epub':
       return ['as_is']
@@ -193,8 +201,16 @@ export function resolvePlan(kind: SourceKind, requested: unknown): PublicationPl
  *
  * This is the rule that makes "always keep the original" cost nothing
  * extra: a PDF upload *is* the book's PDF, a DOCX upload *is* its
- * master, an EPUB upload *is* its EPUB. Only text has no slot of its
- * own, because a .txt file is not an edition of anything.
+ * master, an EPUB upload *is* its EPUB, and a text upload is its own
+ * `txt`.
+ *
+ * Text returned null until 2026-08-26, which had two consequences and
+ * only one of them was intended. The intended one was that a .txt could
+ * not be published as it stands, since there was nothing filed to read.
+ * The other was that the original was not kept at all: it stayed at the
+ * `conversion/` key the upload wrote, which the R2 lifecycle rule sweeps
+ * after 30 days. A converted text book now keeps its source like every
+ * other book, whether or not anybody reads it.
  */
 export function originalArtifact(kind: SourceKind): ArtifactFormat | null {
   switch (kind) {
@@ -204,6 +220,8 @@ export function originalArtifact(kind: SourceKind): ArtifactFormat | null {
       return 'docx'
     case 'epub':
       return 'epub'
+    case 'text':
+      return 'txt'
     default:
       return null
   }
@@ -228,24 +246,31 @@ export function originalKey(bookId: string | number, kind: SourceKind): string {
 /**
  * What phase 2 has to build for a book with this kind of source.
  *
- * The PDF is conditional and that is the whole point. A book whose
- * original is a PDF already has its PDF — rendering another from the
- * master would produce a file that looks nothing like the scan it came
- * from, which is the opposite of what a PDF is for here. A DOCX or text
- * source has no PDF yet, so one is rendered.
+ * **The EPUB, and nothing else.** Only ever asked of a book being
+ * converted — a book published as it stands never reaches phase 2 at
+ * all (`needsConverter`).
  *
- * The EPUB is unconditional except for an EPUB source, which already is
- * one.
+ * A PDF is never *generated*, since 2026-08-26. It used to be, for a
+ * DOCX or text source that had none: WeasyPrint typeset one from the
+ * master, or LibreOffice rendered the Word layout. Both are gone, and
+ * the reasoning is the same one that killed the three type sizes before
+ * them (section 11) — a PDF's job in this library is to be a faithful
+ * picture of the *original*, and a book whose original is a DOCX or a
+ * text file has no such picture to be faithful to. What that rendering
+ * produced was our own typography frozen into a fixed layout: strictly
+ * worse than the EPUB beside it, for every reader and every device.
+ *
+ * So a PDF artifact now only ever means "the uploader uploaded a PDF",
+ * which is exactly what makes it worth keeping. Everything else reads
+ * the EPUB.
+ *
+ * The consequence for deployment is the point of the change: nothing in
+ * phase 2 needs a PDF renderer any more, and a PDF renderer was the
+ * last thing in the pipeline that needed native libraries — Cairo and
+ * Pango behind WeasyPrint, a whole office suite behind LibreOffice.
  */
 export function formatsToGenerate(kind: SourceKind): ArtifactFormat[] {
-  switch (kind) {
-    case 'pdf':
-      return ['epub']
-    case 'epub':
-      return []
-    default:
-      return ['epub', 'pdf']
-  }
+  return kind === 'epub' ? [] : ['epub']
 }
 
 /**
@@ -337,12 +362,19 @@ export function readSourceKind(conversion: {
  * The DOCX never appears here whatever else is missing: the master is
  * the editorial source of truth, not an edition (CLAUDE.md section 5).
  *
+ * Plain text is last and is not a consolation prize either. It reflows,
+ * so it reads better than the PDF above it; it is below the PDF only
+ * because a book that has both was converted from text and the PDF is
+ * the typeset edition of it. For a text file published as it stands, it
+ * is the whole book and reads as well as anything here.
+ *
  * Takes formats rather than artifacts so the catalog page — which asks
  * only whether a book is readable at all — can call it with the same
  * rule the authorization uses, instead of re-deriving the order.
  */
-export function readingFormat(formats: readonly string[]): 'epub' | 'pdf' | null {
+export function readingFormat(formats: readonly string[]): 'epub' | 'pdf' | 'txt' | null {
   if (formats.includes('epub')) return 'epub'
   if (formats.includes('pdf')) return 'pdf'
+  if (formats.includes('txt')) return 'txt'
   return null
 }

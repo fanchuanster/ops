@@ -3,7 +3,6 @@ import React from 'react'
 import {
   type PublicationPlan,
   type SourceKind,
-  formatsToGenerate,
   needsConverter,
 } from '../domain/publication'
 
@@ -54,7 +53,9 @@ function stagesFor(kind: SourceKind, plan: PublicationPlan): Stage[] {
         detail:
           kind === 'epub'
             ? 'An EPUB is already a reading edition, so nothing needed converting.'
-            : 'Your PDF is the published edition, exactly as you uploaded it.',
+            : kind === 'text'
+              ? 'Your text is the published edition, exactly as you uploaded it. It reflows already; converting would add chapters and a contents list.'
+              : 'Your PDF is the published edition, exactly as you uploaded it.',
       },
     ]
   }
@@ -66,7 +67,7 @@ function stagesFor(kind: SourceKind, plan: PublicationPlan): Stage[] {
   }
   const formats: Stage = {
     key: 'formats',
-    label: 'EPUB' + (formatsToGenerate(kind).includes('pdf') ? ' and PDF' : ''),
+    label: 'EPUB',
     detail: 'Generated from the master, and rebuilt whenever you correct it.',
   }
 

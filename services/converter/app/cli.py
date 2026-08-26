@@ -1,10 +1,16 @@
 """Command-line entry point for the conversion pipeline.
 
-The service will eventually drive this from a job queue (CLAUDE.md
-section 13). A CLI exists first because a conversion has to be runnable
-and inspectable by hand: a book takes hours to OCR, and an editor needs
-to be able to re-run the structure and DOCX stages against a cached read
-without paying for the OCR again.
+A CLI exists so a conversion is runnable and inspectable by hand — most
+of all the AI correction stage, which is two commands with a human
+review file between them because that is what makes it auditable
+(CLAUDE.md section 7).
+
+`convert` used to live here too: rasterize a scan, read it with
+PaddleOCR, structure it, write a master. It went on 2026-08-26 with the
+OCR engine itself. Reading a scan is Adobe's Export PDF, called from the
+web application, which returns the master already built — so there is
+nothing left for a local command to do to a scan, and `import` covers
+every file that can be read without one.
 """
 
 from __future__ import annotations
@@ -27,7 +33,6 @@ from .serialize import (
     suggestion_to_dict,
     write_document,
 )
-from .sources.pdf_in import plan_pages, read_pdf
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
@@ -49,115 +54,8 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_convert(args: argparse.Namespace) -> int:
-    pdf = Path(args.pdf)
-    work = Path(args.work)
-    out = Path(args.out)
-
-    pages = list(range(args.limit)) if args.limit else None
-
-    # Said before anything happens, because what it says is how long this
-    # will take: OCR is charged per page, and the pages that carry their
-    # own text are free.
-    sources = plan_pages(pdf, pages, force_ocr=args.force_ocr)
-    print(f"pages:      {sources.total}")
-    print(f"  text layer  {len(sources.text)}  (extracted, no OCR)")
-    print(f"  needs ocr   {len(sources.ocr)}")
-    print(f"  blank       {len(sources.blank)}  (skipped)")
-
-    if not sources.ocr and not sources.text:
-        print(f"{pdf.name} has no readable pages.", file=sys.stderr)
-        return 2
-
-    started = time.time()
-    done = 0
-
-    def tick(page):
-        nonlocal done
-        done += 1
-        elapsed = time.time() - started
-        rate = elapsed / done
-        remaining = (len(sources.ocr) - done) * rate
-        print(
-            f"  ocr {done}/{len(sources.ocr)}  {rate:.1f}s/page  ~{remaining/60:.0f} min left",
-            end="\r",
-            flush=True,
-        )
-
-    def stage(name):
-        print(f"{name}…", flush=True)
-
-    title = args.title or pdf.stem
-    doc, report, _ = read_pdf(
-        pdf,
-        title=title,
-        author=args.author,
-        cache_dir=work,
-        # A name, not an engine: constructing one loads an OCR model
-        # into memory, and a PDF that needs no OCR must not pay for that.
-        engine=args.engine,
-        dpi=args.dpi,
-        pages=pages,
-        force_ocr=args.force_ocr,
-        on_stage=stage,
-        on_page=tick,
-    )
-    if sources.ocr:
-        print()
-
-    kinds = Counter(b.kind.value for b in doc.blocks)
-    print(f"structure:  {dict(kinds)}")
-    print(f"furniture:  {len(report.dropped_furniture)} lines dropped")
-    print(f"normalized: {len(report.normalization)} changes")
-    print(f"low conf:   {len(report.low_confidence)} lines on {len(doc.low_confidence_pages)} pages")
-
-    out.mkdir(parents=True, exist_ok=True)
-    docx_path = build_docx(doc, out / f"{title}.docx", author=args.author)
-    print(f"wrote {docx_path}")
-
-    # The structured document, so the later stages can start from the OCR
-    # read instead of paying for it again.
-    print(f"wrote {write_document(doc, out / f'{title}.document.json')}")
-
-    # The review report is not optional output. A pipeline that corrects
-    # a historical text without showing what it changed is not auditable
-    # (CLAUDE.md section 7).
-    review = out / f"{title}.review.json"
-    review.write_text(
-        json.dumps(
-            {
-                "title": title,
-                "source": str(pdf),
-                "pages": {
-                    "text_layer": list(sources.text),
-                    "ocr": list(sources.ocr),
-                    "blank": list(sources.blank),
-                },
-                "blocks": dict(kinds),
-                "dropped_furniture": report.dropped_furniture,
-                "normalizations": report.normalization.changes,
-                "low_confidence": report.low_confidence,
-                "skipped_pages": sorted(report.skipped_pages),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
-    print(f"wrote {review}")
-
-    text_path = out / f"{title}.txt"
-    text_path.write_text(
-        "\n\n".join(
-            f"[{b.kind.value}] {b.text}" + (f"\n{b.source_ref}" if b.source_ref else "")
-            for b in doc.blocks
-        )
-    )
-    print(f"wrote {text_path}")
-    return 0
-
-
 def cmd_import(args: argparse.Namespace) -> int:
-    """Any non-scanned input → the same DOCX master `convert` produces."""
+    """Any readable input → a DOCX master."""
     from .sources import UnsupportedSource, load_source
 
     source = Path(args.source)
@@ -320,20 +218,6 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("inspect", help="report a PDF's structure without converting it")
     p.add_argument("pdf")
     p.set_defaults(func=cmd_inspect)
-
-    p = sub.add_parser(
-        "convert", help="PDF → DOCX master, OCR'ing only the pages that need it"
-    )
-    p.add_argument("pdf")
-    p.add_argument("-o", "--out", default="out", help="where the DOCX and review report go")
-    p.add_argument("-w", "--work", default="work", help="render and OCR cache")
-    p.add_argument("--title", help="defaults to the PDF filename")
-    p.add_argument("--author")
-    p.add_argument("--engine", default="paddle")
-    p.add_argument("--dpi", type=int, default=300, help="only used for pages that must be rasterized")
-    p.add_argument("--limit", type=int, help="convert only the first N pages")
-    p.add_argument("--force-ocr", action="store_true", help="OCR even if a text layer exists")
-    p.set_defaults(func=cmd_convert)
 
     p = sub.add_parser(
         "import",

@@ -291,11 +291,12 @@ The conditions on that are the ordinary ones, not obstacles:
 
 - honour the licence of anything borrowed, and keep attribution intact;
 - keep the dependency behind an interface where it is plausibly
-  replaceable (`app/ocr/base.py` and `app/llm/client.py` are the pattern);
+  replaceable (`domain/adobe.ts` and `app/llm/client.py` are the
+  pattern);
 - credentials come from the environment, never from source;
-- think before sending user-owned or restricted content to a third-party
-  service — public-domain library text is not the same as a reader's
-  private upload (section 6).
+- when user-owned content goes to a third-party service, say so on the
+  screen where that is chosen (section 6.1). The rule is disclosure and
+  a private alternative, not a prohibition.
 
 ---
 
@@ -517,21 +518,51 @@ what happens next is almost entirely decided by which it is
 
     PDF    the owner chooses: read it into a master and build the EPUB,
            or publish the file exactly as it stands
+    text   the owner chooses: build a master and an EPUB from it,
+           or publish the text exactly as it stands
     DOCX   already the master — no conversion to one; build EPUB + PDF
     EPUB   already the edition — nothing is converted at all
-    text   the converter builds a master, then EPUB + PDF
 
-Only a PDF gets a choice, and it is a real one: a scan has to be read
-before it can reflow, which costs money and time and can go wrong, while
-a born-digital PDF may already be perfectly good. Nobody but the
-uploader can weigh that. Everything else has exactly one sensible path,
-so its owner is *told* what will happen rather than asked to pick from a
-list of one.
+**Two of the four get a choice**, and they are the two where converting
+buys something an uploader might reasonably decline.
 
-Publishing as it stands means the reader gets a fixed-layout book and no
-EPUB. That is a real cost against the mission — "not merely to host
-PDFs" — and it was the reason converting was the default rather than the
-choice being neutral.
+For a PDF the trade is the sharp one: a scan has to be read before it
+can reflow, which costs money and time and can go wrong, while a
+born-digital PDF may already be perfectly good. Nobody but the uploader
+can weigh that.
+
+Text joined it on 2026-08-26. Until then it was always converted, on the
+reasoning that a .txt has no layout of its own so publishing it as it
+stands is publishing a text file. True, and not a reason to refuse: a
+text file **reflows**, which is the whole property the pipeline exists
+to give a scan. What converting adds is *structure* — chapters, a
+contents list, a navigable EPUB — and that is worth offering rather than
+imposing, especially while it means waiting for a converter that may not
+be running.
+
+So a text upload can be read, reviewed, published and sent to a Kindle
+as itself. `txt` is an artifact format
+(`domain/conversion.ts`), never generated and only ever the upload kept
+as itself; `readingFormat` puts it last, behind the editions a
+conversion would produce, and `/read` sets it as prose in the site's own
+typography (`components/TextReader.tsx`) rather than handing it to a
+viewer. Amazon has accepted `.txt` for as long as it has accepted
+anything, so delivery needed nothing new.
+
+That change closed a quieter hole. `originalArtifact('text')` returned
+null, which meant a converted text book's original was never filed under
+the book at all — it stayed at the `conversion/` key, which the R2
+lifecycle rule sweeps after 30 days. "Always keep the original" now
+holds for every source.
+
+DOCX and EPUB have exactly one sensible path each, so their owners are
+*told* what will happen rather than asked to pick from a list of one.
+
+Publishing a *PDF* as it stands means the reader gets a fixed-layout
+book and no EPUB. That is a real cost against the mission — "not merely
+to host PDFs" — and it was the reason converting was the default rather
+than the choice being neutral. (For text the cost is much smaller, as
+above: the words already reflow.)
 
 **Since 2026-08-25 the default is the other one**: publish it as it
 stands, convert nothing, ready immediately. The reasoning above is still
@@ -572,9 +603,9 @@ the same poll, just without a job at the end of it.
 
 Phase 2 builds everything the source can give it, on the first run.
 `requestFormat`, `conversion.pendingFormats` and the on-demand button
-existed to ration WeasyPrint across three PDF sizes; with one PDF — and,
-for a PDF upload, no rendering at all — there is nothing left to ration,
-and all three are gone.
+existed to ration WeasyPrint across three PDF sizes; no PDF is rendered
+at all any more (section 11), so there is nothing left to ration and all
+three are gone.
 
 `formatsToBuild` still has one subtle case: when the book already has
 formats, every one of them is rebuilt. That is a master edit, and
@@ -651,9 +682,17 @@ IMPORTANT:
   variables; never hard-code any of them in application source.
 - The key is read from the environment, falling back to the repo-root
   `.env` for local CLI runs. `.env` is gitignored and stays that way.
-- The provider is now a third party, which the self-hosted endpoint was
-  not. Public-domain library text is fine to send. A reader's private
-  upload (section 6) is not — that distinction is now load-bearing.
+- The provider is a third party, which the self-hosted endpoint was not.
+  **Whether a reader's upload goes to it is the reader's decision**, made
+  on the upload screen and stored as `conversion.aiCorrection`
+  (migration `20260826_090000_ai_correction`). The web application passes
+  that answer through as `allow_third_party_ai`; it was a hard-coded
+  `false` until 2026-08-26, under a rule that forbade the send outright.
+  Unanswered means no — an absent or null column reads as `false`, so
+  every book uploaded before the question existed stays where it was.
+- Correction is **advisory whatever the answer**. The stage writes
+  suggestions and a human approves them (section 7); consenting to the
+  send is not consenting to an edit.
 
 ---
 
@@ -704,13 +743,17 @@ Book
 +-- DOCX (master)         owner only, never a reader download
 +-- EPUB                  the reading edition
 +-- PDF                   mirrors the original's own layout
++-- TXT                   a plain text upload, kept as itself
 
-Three of those four are frequently the same file. A PDF upload *is* the
+The original is **always** one of those slots, which is what makes
+"always keep the original" cost nothing extra rather than doubling every
+book (`apps/web/src/domain/publication.ts`). A PDF upload *is* the
 book's PDF; a DOCX upload *is* its master; an EPUB upload *is* its
-EPUB. That is what makes "always keep the original" cost nothing extra
-rather than doubling every book (`apps/web/src/domain/publication.ts`).
+EPUB; a text upload *is* its TXT. That last one only since 2026-08-26 —
+before it, text had no slot, so its original was left at the
+`conversion/` key and swept after 30 days.
 
-The cover is a fifth file and is not one of those four. Since
+The cover is a further file and is not one of those five. Since
 2026-08-23 a book with no uploaded cover gets **page one of itself**,
 rendered as a JPEG beside its artifacts (`apps/web/src/domain/cover.ts`).
 For a scan that page *is* the cover the publisher printed, which is why
@@ -1184,12 +1227,47 @@ Rights status, visibility and reading level are administrator fields. An
 uploader who could set their own would walk their upload straight into
 the front of the library.
 
-**Do not send private uploads to a third-party LLM.** The AI correction
-stage now talks to xAI by default (section 4), which the self-hosted
-endpoint was not. Public-domain library text is fine to send; a reader's
-private material is a different question and needs either the
-self-hosted provider, or explicit consent, before it goes anywhere. This
-is unresolved and must be decided before the portal accepts uploads.
+**Tell the uploader who else will see their file, and let them decide.**
+
+This section forbade sending a private upload to a third party at all,
+until 2026-08-26. That rule could not survive the pipeline it was
+written for: reading a scan *is* a third-party call now (Adobe, section
+3), so the prohibition banned the portal's main path. Worse, it was a
+protection the person being protected never saw, could not weigh and
+could not consent to.
+
+The disclosure is on the upload screen, in the option that does the
+sending — `PLAN_COPY` in `components/BookDetailsForm.tsx` carries a
+`sends` line per source and plan, and it says plainly which services get
+the file. It sits inside the plan card rather than under the group, so
+it is read while the choice is being made and cannot drift onto the
+wrong option.
+
+**The two sends are two decisions, because they are two services.**
+
+- **Adobe** reads a scan's pages, and there is no version of converting
+  a scan that does not involve it. So it is disclosed on the plan card
+  and chosen by choosing to convert.
+- **The AI correction stage** is separate and optional, and since
+  2026-08-26 it is its own checkbox — off unless the uploader ticks it
+  (`conversion.aiCorrection`, section 4). Converting does not imply it,
+  and a book converted without it never reaches a third-party model at
+  all.
+
+Which means a DOCX or plain text upload can be converted with **nothing
+leaving NobleSee**, and the card says exactly that.
+
+Three things make disclosure sufficient here rather than a shrug:
+
+- **There is always a private alternative, and it is the default.**
+  Publishing as it stands sends the file nowhere (`defaultPlanFor`), and
+  the card says so in the same words.
+- **The choice is the owner's.** Rights, visibility and level are the
+  administrator's (above) precisely because they are claims about the
+  library. Who may hold a copy of your own book is not.
+- **Converting stays reversible in one direction only.** A book already
+  sent cannot be un-sent, which is why the sending option is the one
+  that has to be chosen deliberately rather than arrived at.
 
 ---
 
@@ -1372,13 +1450,35 @@ it. Layout, headings and paragraphs come back as Word structure.
 Footnotes do not survive reliably and are not claimed to.
 
 The abstraction survived the replacement twice, which is the point of
-having it, but it moved. It is no longer `app/ocr/base.py` on the
-converter — that interface and its PaddleOCR implementation remain and
-are still what the CLI uses for a local run. For production it is
+having it, and then it moved and there is only one of it. It is
 `apps/web/src/domain/adobe.ts`, which holds every rule about the engine
 that is not an HTTP call, and `apps/web/src/lib/adobe/client.ts`, which
 is the HTTP call. Replacing Adobe means writing a new pair; nothing
 downstream of the master would know.
+
+**PaddleOCR and `app/ocr/` are gone**, on 2026-08-26 — the engine, the
+`OcrEngine` protocol, the per-page OCR cache and the rasterizer that fed
+it. It had been kept as a self-hosted alternative to Adobe, and the
+question that retired it is the one worth recording: *what was it for?*
+Nothing called it. Every scan in production goes to Adobe, because a
+Worker cannot run a model and a container running one is a container to
+deploy. Its remaining arguments were Adobe's 500-transaction monthly free
+tier and keeping private uploads off a third party — the first is a
+billing decision rather than an architecture, and the second is now
+answered by disclosure and a private alternative (section 6.1) rather
+than by a second engine nobody ran.
+
+What it cost to keep was a gigabyte of models, a native toolchain, and a
+second answer to "how is a scan read" that could silently disagree with
+the first.
+
+So the converter reads a PDF only when the PDF can read itself — a text
+layer, extracted exactly by PyMuPDF, page by page. A book with any page
+that has no text layer is **refused**, by name and by count, and told
+where scans go (`app/sources/pdf_in.py`). Refusing is the honest answer:
+the alternative is the failure that classification was written to
+prevent, where a scan with one born-digital title page was read through
+the text path and converted "successfully" into a one-page book.
 
 ---
 
@@ -1433,39 +1533,57 @@ Validate generated EPUB files.
 
 # 11. PDF
 
-**One PDF, and its job is fidelity to the original.**
+**Nothing renders a PDF. A book has one only when the uploader
+uploaded one.**
 
-This section specified three variants — Standard, Large and Extra Large,
+    uploaded as a PDF     the upload itself — filed, never rendered
+    uploaded as a DOCX    no PDF
+    uploaded as text      no PDF
+    uploaded as an EPUB   no PDF
+
+This section has now shed the same idea twice, and the second time it
+took the whole renderer with it.
+
+It specified three variants first — Standard, Large and Extra Large,
 rendered from the master at different type sizes so a reader could pick
-their typography — until 2026-08-20. They are gone, and the reasoning is
-worth keeping because it applies to any future proposal of the same
-shape: they were three answers to a question section 10 already answers
-better. A reflowable EPUB lets the *device* set the type size. Rendering
-three fixed alternatives was work spent badly, and two of the three were
-never opened.
+their typography — until 2026-08-20. Three answers to a question section
+10 answers better: a reflowable EPUB lets the *device* set the type size.
+Two of the three were never opened.
 
-What a PDF is actually good for is being a faithful picture of the
-original. So there is one, and where it comes from depends entirely on
-what was uploaded:
+What survived was one PDF, rendered from the master when the book had
+none: WeasyPrint for a scan-built master, LibreOffice for a DOCX so the
+Word layout survived. That went on 2026-08-26, and the argument is the
+one this section already makes. A PDF's job here is **fidelity to the
+original**. A book whose original is a DOCX or a text file has no
+original page to be faithful to, so what the renderer produced was our
+own typography frozen flat — strictly worse than the EPUB beside it, on
+every device, for every reader. It was competing with the reading edition
+rather than preserving anything.
 
-    uploaded as a PDF     the upload itself — nothing renders it
-    uploaded as a DOCX    LibreOffice, so the Word layout survives
-    built from a scan     our own typography; there is nothing to mirror
-    uploaded as an EPUB   no PDF at all
+The line that always mattered is the first one, because this library's
+material is scans: perfect fidelity, zero rendering time, and nothing
+that can drift from the original — by not trying to improve on it. That
+line needs no renderer.
 
-The first line is the one that matters most, because this library's
-material is scans. Perfect fidelity, zero rendering time, and nothing
-that can drift from the original — by not trying to improve on it.
+What deleting it bought is out of proportion to what it cost, and is the
+real point:
 
-The renderers are `services/converter/app/pdf/builder.py` (WeasyPrint,
-for a master with no layout of its own) and `app/pdf/docx_pdf.py`
-(headless LibreOffice, for a DOCX). Of the options this section asked to
-investigate, LibreOffice is the only one that reads Word's own layout
-model; Pandoc discards presentation by design, WeasyPrint never sees the
-DOCX, and Chromium has no DOCX renderer. It costs a large dependency in
-the converter image and a subprocess rather than a library call, and it
-falls back to WeasyPrint when absent so a developer without it still
-gets a book.
+- `services/converter/app/pdf/` is gone, both renderers with it.
+- The converter image has **no apt layer at all** any more. WeasyPrint
+  needed Pango, Cairo, libffi and a CJK font set — a PDF rendered
+  without a CJK face is a document of empty boxes — and the DOCX path
+  needed `libreoffice-writer`. Both are gone; the image is plain
+  `python:slim`.
+- Nothing in the pipeline links against a native library, which is what
+  makes the remaining work (parse a DOCX, write an EPUB) a plausible
+  candidate for the Worker itself.
+
+A page count went with it. `page_count` was WeasyPrint laying the book
+out and counting the pages that came out, which priced the book — and a
+page was always a fact about our typesetting rather than about the book.
+The web application prices from its own estimate instead: the PDF page
+tree for a scan, characters over a printed-page constant for everything
+else (`domain/uploadQuota.ts`, and the fallback in `collections/Books.ts`).
 
 ---
 
@@ -1508,12 +1626,12 @@ side is a Worker and a native queue keeps that to one bounded write with
 no Redis to run. An in-process queue inside the converter is still fine
 for its own pipeline stages.
 
-Built so far: PyMuPDF rendering, a PaddleOCR backend behind an
-interface, normalization/structure, python-docx master generation, and
-the AI correction stage — driven by a CLI (`app/cli.py`) rather than an
-API. The CLI came first deliberately: a book takes hours to OCR, and an
-editor needs to re-run the structure and DOCX stages against a cached
-read without paying for the OCR again.
+Built so far: PyMuPDF text extraction and page classification,
+normalization/structure, python-docx master generation, and the AI
+correction stage — driven by a CLI (`app/cli.py`) as well as the API.
+The CLI's `convert` command went with PaddleOCR on 2026-08-26; `import`
+covers every file that can be read without an OCR engine, which is now
+every file this service accepts at all.
 
 The correction stage is two commands, `correct` and `apply`, with a
 human review file between them, because section 7's requirement is not
@@ -1522,11 +1640,12 @@ nothing; deterministic guardrails in `app/llm/correct.py` refuse
 anything that reads as a rewrite rather than an OCR repair, and record
 why. `services/converter/README.md` has the detail.
 
-Also built since: EPUB 3 and the PDF (`app/epub`, `app/pdf` — the EPUB
-and the WeasyPrint PDF from one shared HTML rendering in `app/render` so
-the two cannot drift, and `app/pdf/docx_pdf.py` for a DOCX's own
-layout), R2 over the S3 API (`app/storage`), the asynchronous job API
-(`app/api`), and the handoff (`app/handoff`).
+Also built since: EPUB 3 (`app/epub`, from the HTML rendering in
+`app/render`), R2 over the S3 API (`app/storage`), the asynchronous job
+API (`app/api`), and the handoff (`app/handoff`). `app/pdf` is gone with
+the generated PDF (section 11), and `app/render` now has one consumer
+rather than two — kept as its own module because an EPUB's chapter split
+and a document's HTML are still two different questions.
 
 The handoff is a **pull**, not Cloudflare Queues. The converter has no
 inbound port — the thing that makes it deployable behind a filtered
@@ -1687,6 +1806,8 @@ books/
       master.docx
       book.epub
       book.pdf
+      original.pdf     a PDF upload, kept as uploaded
+      source.txt       a text upload, kept as uploaded
 
 conversion/
   {job_id}/

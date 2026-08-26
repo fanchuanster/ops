@@ -9,54 +9,21 @@
 # different command, for a deployment that wants to push work in rather
 # than have it pulled.
 #
-# Deliberately installs requirements-service.txt, not requirements.txt:
-# the local OCR engine is the better part of a gigabyte and this service
-# no longer runs it. Books from the portal are read by Google Document AI
-# on the web side and arrive here as text. See requirements-service.txt.
+# **Plain `python:slim`, with no apt layer at all.** It had two until
+# 2026-08-26: Pango, Cairo, libffi and a CJK font set for WeasyPrint,
+# and `libreoffice-writer` for rendering a DOCX with its own layout.
+# Both went with the generated PDF (CLAUDE.md section 11), and the OCR
+# engine that would have added a gigabyte of models went with them. What
+# is left — parse a DOCX, write an EPUB, talk HTTP — is pure Python.
 
 FROM python:3.12-slim-bookworm
 
-# WeasyPrint renders the PDF for sources with no layout of their own and
-# links against these at runtime. It needs no browser and no display, which is what keeps this
-# image small enough to run anywhere — but Pango and Cairo are not
-# optional, and their absence shows up as an import error rather than as
-# a missing-font warning.
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y \
-        libpango-1.0-0 \
-        libpangoft2-1.0-0 \
-        libharfbuzz0b \
-        libcairo2 \
-        libgdk-pixbuf-2.0-0 \
-        libffi8 \
-        fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/*
-
-# Noto CJK above is not decoration. This project's centre of gravity is
-# Chinese, and a PDF rendered without a CJK face silently produces a
-# document of empty boxes — valid, openable, and unreadable.
-
-# LibreOffice, for the one job WeasyPrint cannot do: rendering a DOCX
-# with the DOCX's own layout. A book's PDF has to mirror its original,
-# and when the original is a Word document that means laying it out the
-# way a word processor would — see app/pdf/docx_pdf.py.
-#
-# `libreoffice-writer` rather than the full suite: this converts text
-# documents and nothing else, and the meta-package would pull in Calc,
-# Impress, Draw and a Java runtime for no reason. `--no-install-recommends`
-# is doing real work here.
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y \
-        libreoffice-writer \
-        libreoffice-core \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
-# Dependencies before source, so editing a Python file does not reinstall
-# WeasyPrint.
-COPY requirements-service.txt ./
-RUN pip install --no-cache-dir -r requirements-service.txt
+# Dependencies before source, so editing a Python file does not
+# reinstall them.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 

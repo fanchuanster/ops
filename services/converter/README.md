@@ -3,10 +3,9 @@
 Turns a book into the editable DOCX master that everything reader-facing
 is generated from (`CLAUDE.md` sections 5, 7–11).
 
-Four kinds of input, one master:
+Three kinds of input, one master:
 
-    scanned PDF ─────── convert ──┐   (OCR; hours)
-    text-layer PDF ──── import ───┤   (extract; instant)
+    text-layer PDF ──── import ───┐   (extract; instant)
     DOCX ────────────── import ───┼──> DOCX master + document.json
     plain text ──────── import ───┘          │
                                              │
@@ -17,17 +16,17 @@ Four kinds of input, one master:
                                          apply ──> corrected DOCX
                                                    + document.json
 
-The split between `convert` and `import` is OCR and nothing else. OCR
-takes hours, needs a cache and reports progress; the other three paths
-return in milliseconds and have nothing to resume. Downstream, none of
-them are distinguishable — correction, review and format generation all
-start from a `Document` and do not know where it came from.
+A **scan is not on that list**, since 2026-08-26. It is read by Adobe's
+Export PDF from the web application, which returns a finished master in
+one call — so the `convert` command, the PaddleOCR engine behind it and
+the whole `app/ocr` abstraction are gone. A PDF reaching this service is
+read only where it can read itself, page by page, and refused by count
+where it cannot.
 
-It is driven by a CLI rather than an API. That is deliberate and
-temporary: a book takes hours to OCR, and an editor needs to re-run the
-later stages against a cached read without paying for the OCR again. The
-FastAPI job API and the Cloudflare Queues consumer come later
-(`docs/ROADMAP.md`).
+Everything left returns in milliseconds and has nothing to resume.
+Downstream, the three are indistinguishable — correction, review and
+format generation all start from a `Document` and do not know where it
+came from.
 
 ## Running it
 
@@ -38,79 +37,34 @@ FastAPI job API and the Cloudflare Queues consumer come later
 
     .venv/bin/python -m app.cli inspect book.pdf
 
-Reports the page count, metadata, the outline, and how many pages carry
-their own text, how many need OCR, and how many are blank. That last
-breakdown is the cost estimate: OCR is charged per page, and the pages
-with a text layer are free.
+Reports the page count, metadata, the outline, and how each page will
+have to be read: how many carry their own text, how many have none, and
+how many are blank. The middle number is the one that decides whether
+this service can read the book at all.
 
-### `convert` — PDF to master
-
-    .venv/bin/python -m app.cli convert book.pdf --title 論語別裁 --author 南懷瑾
-
-**Decides page by page how each page has to be read**, which is the only
-thing in this pipeline that costs real money and time:
-
-| the page | how it is read | cost |
-|---|---|---|
-| carries text | extracted exactly (PyMuPDF spans) | free |
-| is an image | rendered, then OCR'd (PaddleOCR, behind `app/ocr/base.py`) | seconds per page |
-| is empty | skipped | free |
-
-Books are mixed far more often than not — a scan with a born-digital
-title page or index, a digital book with plates and blank versos — so
-this is not an edge case, it is most books. A volume that is half
-born-digital costs half as much to convert and finishes in half the
-time. The plan is printed before any of it starts:
-
-    pages:      412
-      text layer  38  (extracted, no OCR)
-      needs ocr   369
-      blank       5  (skipped)
-    reading pdf text…
-    ocr…
-      ocr 41/369  2.3s/page  ~12 min left
-
-It used to be one decision for the whole file, taken from a 40-page
-sample, and getting it wrong lost books silently: a scan with a single
-digital title page was declared text-layer, and every scanned page then
-extracted to nothing and vanished. `pages` in the review report records
-exactly which pages went which way.
-
-`--force-ocr` sends every page to the engine, for when the embedded text
-is known to be bad.
-
-Both readers feed the same geometry rules and merge back into page
-order, then this reconstructs structure and writes:
-
-| file | what it is |
-|---|---|
-| `<title>.docx` | the editable master, in real named styles |
-| `<title>.document.json` | the structured document, input to every later stage |
-| `<title>.review.json` | what the pass dropped, normalized and could not read confidently |
-| `<title>.txt` | a flat read-through, for eyeballing |
-
-`--limit N` converts the first N pages, which is how to shake out a new
-book without waiting hours. Rendered pages and OCR results are cached
-under `--work`, so a re-run costs nothing until the OCR itself changes.
-
-### `import` — everything that is not a scan
+### `import` — source to master
 
     .venv/bin/python -m app.cli import book.docx --title 論語 --author 孔子
     .venv/bin/python -m app.cli import notes.txt
     .venv/bin/python -m app.cli import born-digital.pdf
 
-Produces the same `<title>.docx` and `<title>.document.json` that
-`convert` does. The input kind is detected from the file's **content**,
-not its extension — an uploaded file's name is whatever the uploader's
-browser claimed, and a `.pdf` that is really a zip is refused rather than
-handed to PyMuPDF.
+The only conversion command there is. `convert` sat beside it until
+2026-08-26 — rasterize a scan, read it with PaddleOCR, structure it —
+and went with the OCR engine itself; reading a scan is Adobe's Export
+PDF, called from the web application, which returns the master already
+built. There is nothing left for a local command to do to a scan.
+
+Writes `<title>.docx` and `<title>.document.json`. The input kind is
+detected from the file's **content**, not its extension — an uploaded
+file's name is whatever the uploader's browser claimed, and a `.pdf`
+that is really a zip is refused rather than handed to PyMuPDF.
 
 | input | how it is read |
 |---|---|
 | DOCX | paragraph styles. A NobleSee master round-trips exactly, heading *levels* included — `Heading 1`/`Title` → chapter, anything below it → section, everything else → prose. A foreign DOCX takes the same fallback |
 | text-layer PDF | PyMuPDF spans fed through the *same* geometry rules the scanned path uses, so verse, footnotes and attributions are recovered identically — with no OCR |
 | plain text | blank lines separate paragraphs; `# heading` and a lone `（十一）` marker are recognised |
-| PDF with any page needing OCR | refused, with a pointer to `convert` and a count of how many pages it would have to read |
+| PDF with any page lacking a text layer | refused by count, and told that scans are mastered by Adobe from the web application. Refusing over a *single* such page is deliberate: that page is the book's content too, and the alternative is a 400-page scan with one digital title page converting "successfully" into a one-page book |
 
 Two deliberate refusals to guess:
 
@@ -236,14 +190,14 @@ endpoint.
 
 ```
 app/
-  cli.py            the entry point: inspect, convert, import, correct, apply
+  cli.py            the entry point: inspect, import, correct, apply
   models.py         Box, OcrPage, Block, Document, Suggestion — no library types
   serialize.py      document.json and suggestions.json
   sources/          input adapters: detect, docx_in, text, pdf_in
-  ocr/              the OCR abstraction; PaddleOCR behind it
-  pipeline/         render, OCR pass, line grouping, normalization, structure
+  pipeline/         page classification, line grouping, normalization, structure
   llm/              client (provider-agnostic), correct (guardrails), apply
   docx/             the editable master
+  epub/             the reading edition, and the only format generated
 ```
 
 The round trip is the property that holds this together: a `Document`
@@ -257,8 +211,7 @@ styles rather than direct formatting.
 
 `POST /api/v1/jobs` returns a job id immediately and `GET
 /api/v1/jobs/{id}` reports where it has got to, through the states in
-CLAUDE.md section 13. The request never waits for the work: a scanned
-book takes minutes to hours to OCR.
+CLAUDE.md section 13. The request never waits for the work.
 
 ```bash
 uvicorn app.api.main:app --port 8000
@@ -271,14 +224,16 @@ curl localhost:8000/api/v1/jobs/<job_id>
 # -> {"status":"format_generation", ...}
 ```
 
-`allow_third_party_ai` defaults to **false** and that default is
-load-bearing: a reader's private upload must not be sent to xAI
-(CLAUDE.md section 6.1). Forgetting the field cannot leak someone's
-book — only a caller that deliberately sets it opts in.
+`allow_third_party_ai` defaults to **false**, and the default is
+load-bearing even though the prohibition behind it is gone. CLAUDE.md
+section 6.1 now asks for *disclosure and a private alternative* rather
+than a ban — the upload screen names the services that will see the file
+— and this flag is what makes that disclosure true: the correction stage
+runs only for a caller that deliberately opted in. Forgetting the field
+still cannot send someone's book anywhere.
 
-Work runs on a bounded thread pool, not Celery. The pipeline is
-CPU-bound and drops into native code (PyMuPDF, PaddleOCR, WeasyPrint)
-where it matters, and the durable record of a conversion is the Book row
+Work runs on a bounded thread pool, not Celery. The durable record of a
+conversion is the Book row
 in the web application — so a broker would be a second stateful service
 to operate for queueing a thread pool already does. Scaling past one
 machine means putting a queue between the web app and *several* of
@@ -287,18 +242,21 @@ inside this one.
 
 ## Formats
 
-EPUB 3 (`app/epub`) and the PDF (`app/pdf/builder.py`) are generated
-from the same HTML rendering in `app/render`, so the two cannot drift —
-a footnote that appears in one and vanishes in the other is the classic
-failure and it is invisible until a reader hits that page.
+EPUB 3 (`app/epub`) is generated from the HTML rendering in
+`app/render`. There were two consumers of that rendering until
+2026-08-26 — the EPUB and the PDF, kept on one renderer so a footnote
+could not appear in one and vanish from the other. One is left, and the
+module stays its own because an EPUB's chapter split and a document's
+HTML are still two questions.
 
-There were three PDF sizes here until 2026-08-20. One now, and its job
-changed with its number: it mirrors the *original's* layout rather than
-offering a typography. Which means `builder.py` is not always the
-renderer. A DOCX upload is its own original, so its PDF comes from
-headless LibreOffice (`app/pdf/docx_pdf.py`) to keep the Word layout;
-`builder.py` handles the sources that have no layout to keep. A book
-uploaded as a PDF never renders one at all — the upload is the PDF.
+**No PDF is rendered here at all**, since 2026-08-26. There were three
+sizes until 2026-08-20 and one after it, whose job was to mirror the
+*original's* layout — and a book whose original is a DOCX or a text file
+has no original layout to mirror, so what came out was our own
+typography frozen flat: strictly worse than the EPUB beside it. A book
+uploaded as a PDF always had its PDF already. `app/pdf/` is gone, and
+with it WeasyPrint's Pango/Cairo/CJK-font layer and `libreoffice-writer`
+— which is why the image is now plain `python:slim` with no apt layer.
 
 The EPUB deliberately sets no page size, no font size and no measure:
 the device decides, which is the whole reason EPUB is the primary format
@@ -311,19 +269,14 @@ rather than a parent with nothing under it. That nesting is why heading
 *level* has to survive the master round trip — a section read back as a
 chapter would start a new page, a new file and a new contents entry, and
 the corrected master would come back as a different book from the one
-the editor approved. The PDFs exist because a fixed layout cannot
-reflow, so serving a reader who needs larger type means rendering the
-book again — hence three variants rather than one.
+the editor approved.
 
-WeasyPrint rather than Playwright or LibreOffice: it needs no browser
-and no display, which is what keeps this service deployable somewhere
-small. Its weakness is CSS coverage, and the CSS here is a page box, a
-font stack and margins.
-
-`app/pdf.page_count()` is what the credit price is derived from. A DOCX
-carries no reliable page count — pagination is a rendering decision and
-python-docx writes no `<Pages>` property — so the standard PDF, rendered
-from the same content, is the honest answer to the same question.
+No page count is reported any more either. It was WeasyPrint laying the
+whole book out and counting the pages that came out, which is gone with
+the renderer — and a page was always a fact about our typesetting rather
+than about the book. The web application prices from its own estimate:
+the PDF page tree for a scan, characters over a printed-page constant
+for everything else.
 
 Storage is R2 over the S3 API (`app/storage`). This service is not a
 Worker and has no binding, so it is the one component that legitimately
@@ -346,7 +299,7 @@ says which one it is:
 | `kind` | reads | writes |
 | --- | --- | --- |
 | `master` | `source_key` — always a text source since 2026-08-19 | the DOCX master |
-| `formats` | `master_key` | the EPUB, and the PDF when the source needs one |
+| `formats` | `master_key` | the EPUB — the only format generated anywhere |
 | `full` | `source_key` | everything, in one pass |
 
 `full` is what the CLI and the job API do; the handoff never asks for it.
@@ -376,8 +329,13 @@ wait on one.
 
 What still reaches a `master` job is a DOCX or a plain text upload —
 sources that needed no OCR, and whose master this service builds from
-the original. The local OCR path (`app/ocr`, `pipeline/structure.py`) is
-untouched and still runs for the CLI.
+the original.
+
+`app/ocr` is gone with PaddleOCR (2026-08-26). Nothing called it: every
+scan goes to Adobe, because a Worker cannot run a model and a container
+running one is a container to deploy. `pipeline/structure.py` stays — it
+reconstructs a document from positioned text, which a born-digital PDF
+produces exactly as an OCR engine did.
 
 `ocr_key` and `app/sources/ocr_json.py` are the older door: a pages.json
 written by Google Document AI, which drove phase 1 between 2026-08-14

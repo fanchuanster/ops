@@ -1,37 +1,38 @@
-"""PDF → Document, one page at a time.
+"""PDF → Document, for the pages a PDF can answer for itself.
 
-A PDF is not one kind of thing all the way through. A scanned volume
-routinely carries a born-digital title page, a colophon or an index; a
-born-digital book carries blank versos and full-page plates. So the way a
-page's text has to be recovered is a property of the page, and this
-module reads each one the way it needs to be read:
+**There is no OCR here any more.** Reading a scan is Adobe's Export PDF
+operation, called from the web application (`domain/adobe.ts`), which
+returns a finished DOCX master rather than text to be reassembled. The
+PaddleOCR backend and the whole `app/ocr` abstraction behind it are
+gone: a second OCR engine that nothing called was a model download, a
+native toolchain and a container to run them in, kept against the
+possibility of not using Adobe.
 
-    page carries text  ──  extracted exactly, no OCR, no cost
-    page is an image   ──  rasterized and read by the OCR engine
+What remains is the case Adobe was never needed for: a PDF that already
+carries its own text. That costs nothing, needs no network and no model,
+and is exact — OCR could only degrade it.
+
+A PDF is still read **page by page**, and that matters more here than it
+did when there was a fallback:
+
+    page carries text  ──  extracted exactly, no cost
+    page is an image   ──  nothing here can read it
     page is empty      ──  skipped entirely
 
-Everything then merges back into one `list[OcrPage]` in page order and
-goes through the same structure pass, because the *layout* problem is
-identical whichever way the text arrived — positioned fragments that have
-to be grouped into lines and classified into verse, prose, footnotes and
-attributions by where they sit on the page.
+A book with any image page is refused outright, because the alternative
+is the bug this classification was written to fix: the document-level
+test it replaced sampled ~40 pages and asked whether *any* of them had
+text, so a 400-page scan with one born-digital title page was read
+through the text path and converted "successfully" into a one-page book.
+Every scanned page yielded nothing and vanished. Refusing is the honest
+answer, and the message says where such a book goes instead.
 
-Two things this buys, and the second is the one that matters:
-
-  - **Cost and time.** OCR is the only expensive stage in the pipeline —
-    seconds per page, hours per book, and money when it is a hosted
-    engine. Pages that already carry exact text are pages nobody pays to
-    read. A book that is half born-digital costs half as much.
-  - **Correctness.** The document-level test this replaces sampled ~40
-    pages and asked whether *any* of them had text. A 400-page scan with
-    one digital title page passed that test, was read through the
-    text-layer path, and converted "successfully" into a one-page book:
-    every scanned page yielded no text and silently contributed nothing.
-
-Normalization follows the page too. The punctuation rules repair what an
-OCR engine got wrong; run over exact text they would be editing the
-author, so extracted pages are marked `exact` and opt out of them
-individually (`OcrPage.exact`).
+The layout problem is identical whichever way text arrived — positioned
+fragments grouped into lines, classified into verse, prose, footnotes
+and attributions by where they sit — so this still feeds the same
+structure pass. Normalization is the one thing switched off: those rules
+repair what an OCR engine got wrong, and over exact text they would be
+editing the author (`OcrPage.exact`).
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import Box, Document, OcrPage, OcrSpan
-from ..pipeline.render import PageSources, classify_pages, read_outline, render_pages
+from ..pipeline.render import PageSources, classify_pages, read_outline
 from ..pipeline.structure import StructureReport, build_document
 from .detect import UnsupportedSource
 
@@ -100,28 +101,14 @@ def extract_pages(pdf_path: Path, pages: list[int] | None = None) -> list[OcrPag
     return out
 
 
-def plan_pages(
-    pdf_path: Path,
-    pages: list[int] | None = None,
-    *,
-    force_ocr: bool = False,
-) -> PageSources:
-    """Which pages will be extracted, read and skipped.
+def plan_pages(pdf_path: Path, pages: list[int] | None = None) -> PageSources:
+    """Which pages carry their own text, which cannot be read, which are
+    empty.
 
     Separated from `read_pdf` so a caller can say what is about to happen
-    — and how long it will take — before any of it happens. The CLI
-    prints it; the refusal below is built from it.
-
-    `force_ocr` sends every page to the engine, blank ones included. It
-    means "the embedded text is wrong", and a caller who believes that
-    has no reason to trust this classification either.
+    before any of it happens. The CLI prints it; the refusal below is
+    built from it.
     """
-    if force_ocr:
-        import pymupdf
-
-        with pymupdf.open(pdf_path) as doc:
-            every = list(pages if pages is not None else range(doc.page_count))
-        return PageSources(text=(), ocr=tuple(every), blank=())
     return classify_pages(pdf_path, pages)
 
 
@@ -130,62 +117,28 @@ def read_pdf(
     *,
     title: str | None = None,
     author: str | None = None,
-    cache_dir: Path | None = None,
-    engine: str | None = None,
-    dpi: int = 300,
     pages: list[int] | None = None,
-    force_ocr: bool = False,
     on_stage=lambda name: None,
-    on_page=None,
 ) -> tuple[Document, StructureReport, PageSources]:
-    """Structure any PDF, OCR'ing only the pages that need it.
+    """Structure a PDF that carries its own text, or refuse it.
 
-    `engine` is a name rather than an engine because constructing one
-    loads a model into memory, and a PDF that turns out to need no OCR
-    must not pay for that. `None` means the caller cannot run OCR at all;
-    a book needing it is then refused rather than half-read, which is the
-    distinction `converter import` relies on (OCR takes hours and belongs
-    to `converter convert`).
+    Refusing is not a failure of this module — it is the boundary. A
+    scanned page has to be *read*, and reading pages is Adobe's, from the
+    web application. Nothing local can do it, so nothing local pretends
+    to.
     """
-    sources = plan_pages(pdf_path, pages, force_ocr=force_ocr)
-
-    if sources.ocr and engine is None:
-        raise UnsupportedSource(
-            f"{pdf_path.name} needs OCR for {len(sources.ocr)} of its "
-            f"{sources.total} pages, which takes hours rather than milliseconds. "
-            "Use `converter convert` for that — it caches the read and reports "
-            "progress."
-        )
-
-    read: list[OcrPage] = []
-
-    if sources.text:
-        on_stage("reading pdf text")
-        read.extend(extract_pages(pdf_path, list(sources.text)))
+    sources = plan_pages(pdf_path, pages)
 
     if sources.ocr:
-        on_stage("ocr")
-        from ..ocr.base import get_engine
-        from ..pipeline.ocr_pass import ocr_pages
-
-        work = cache_dir or pdf_path.parent / "cache"
-        # Only the pages that need reading are rendered. Rasterizing a
-        # page at 300dpi is not free either, and a page whose text we
-        # already have exactly is a page there is nothing to look at.
-        images = render_pages(pdf_path, work / "pages", dpi=dpi, pages=list(sources.ocr))
-        read.extend(
-            ocr_pages(
-                images,
-                get_engine(engine),
-                work / "ocr",
-                indices=list(sources.ocr),
-                on_page=on_page,
-            )
+        raise UnsupportedSource(
+            f"{pdf_path.name} has no text layer on {len(sources.ocr)} of its "
+            f"{sources.total} pages, so those pages have to be read rather than "
+            "extracted. Scans are mastered by Adobe's Export PDF from the web "
+            "application; there is no local OCR."
         )
 
-    # Back into page order. The two readers ran in whatever order was
-    # convenient; the book has only one.
-    read.sort(key=lambda page: page.index)
+    on_stage("reading pdf text")
+    read: list[OcrPage] = extract_pages(pdf_path, list(sources.text))
 
     document, report = build_document(read, read_outline(pdf_path), title or pdf_path.stem)
     document.author = author

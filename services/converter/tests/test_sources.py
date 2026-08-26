@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.docx.builder import build_docx  # noqa: E402
-from app.models import Block, BlockKind, Document, OcrPage  # noqa: E402
+from app.models import Block, BlockKind, Document  # noqa: E402
 from app.pipeline.render import classify_pages  # noqa: E402
 from app.sources import SourceKind, UnsupportedSource, load_source  # noqa: E402
 from app.sources.detect import detect  # noqa: E402
@@ -268,6 +268,22 @@ def test_a_utf8_text_file_is_detected(tmp_path):
     assert detect(path) is SourceKind.TEXT
 
 
+def test_a_chinese_text_file_is_not_refused_over_the_sample_boundary(tmp_path):
+    """The bug this guards: a real book refused as "not a plain text file".
+
+    The sniff reads the first 8192 bytes, which for a CJK file lands in
+    the middle of a 3-byte character two times in three. The old retry
+    dropped exactly three bytes and landed mid-character just as often,
+    so a perfectly good UTF-8 book was refused outright.
+    """
+    path = tmp_path / "sunzi.txt"
+    # Every character is three bytes, so no multiple of the sample size
+    # falls on a boundary: 8192 is not divisible by 3.
+    path.write_text("孫子兵法" * 3000, encoding="utf-8")
+
+    assert detect(path) is SourceKind.TEXT
+
+
 def test_a_mis_encoded_chinese_file_is_refused_rather_than_mangled(tmp_path):
     # GB18030 decoded as UTF-8 does not fail cleanly — it produces
     # mojibake that would flow into a published book.
@@ -307,10 +323,13 @@ def test_load_source_carries_the_author_through(tmp_path):
     assert result.document.title == "書"
 
 
-def test_load_source_sends_a_scanned_pdf_to_the_right_command(tmp_path):
+def test_a_scan_is_refused_and_told_where_scans_go(tmp_path):
+    # There is no local OCR. A page with no text layer has to be *read*,
+    # and reading pages is Adobe's Export PDF, called from the web
+    # application — so this refuses rather than half-reading the book.
     pdf = write_pdf(tmp_path / "scan.pdf", ["image"])
 
-    with pytest.raises(UnsupportedSource, match="converter convert"):
+    with pytest.raises(UnsupportedSource, match="Adobe"):
         load_source(pdf)
 
 
@@ -355,31 +374,28 @@ def test_pages_are_classified_one_by_one(tmp_path):
     assert sources.total == 4
 
 
-def test_only_the_pages_that_need_reading_reach_the_engine(tmp_path, monkeypatch):
-    """The saving, stated as a test: OCR is charged per page.
+def test_a_book_is_never_half_read(tmp_path):
+    """The bug the page-by-page classification exists to prevent.
 
-    A book that is mostly born-digital must not pay to have its whole
-    length rasterized and read.
+    Detection used to sample the document and ask whether *any* page had
+    text. A 400-page scan with one born-digital title page passed, was
+    read through the text path, and converted "successfully" into a
+    one-page book — every scanned page yielded nothing and vanished.
     """
-    pdf = write_pdf(tmp_path / "book.pdf", ["text", "image", "blank", "image"])
-    seen: list[int] = []
+    pdf = write_pdf(tmp_path / "mostly-scan.pdf", ["text", "image", "image", "image"])
 
-    class CountingEngine:
-        name = "counting"
+    with pytest.raises(UnsupportedSource, match="3 of its 4 pages"):
+        read_pdf(pdf, title="Mixed")
 
-        def read(self, image_path, index):
-            seen.append(index)
-            return OcrPage(index=index, width=100, height=100, spans=[])
 
-    monkeypatch.setattr("app.ocr.base.get_engine", lambda name: CountingEngine())
+def test_blank_pages_do_not_make_a_book_unreadable(tmp_path):
+    # A chapter verso carries neither text nor image. It is skipped, not
+    # counted as a page nothing can read.
+    pdf = write_pdf(tmp_path / "versos.pdf", ["text", "blank", "text"])
 
-    document, _report, sources = read_pdf(
-        pdf, title="Mixed", cache_dir=tmp_path / "work", engine="counting"
-    )
+    document, _report, sources = read_pdf(pdf, title="Digital")
 
-    assert seen == [1, 3], "only the image pages are read"
-    assert sources.text == (0,)
-    assert sources.blank == (2,)
+    assert sources.blank == (1,)
     assert "Page 0." in "\n".join(b.text for b in document.blocks)
 
 
