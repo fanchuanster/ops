@@ -172,9 +172,12 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
               ) : kindleReady && reader ? (
                 <SendToKindleButton
                   bookId={book.id}
+                  // The size travels with the format so the button can
+                  // grey out what email cannot carry, rather than
+                  // offering a send the server will refuse.
                   formats={artifacts
-                    .map((a) => a.format)
-                    .filter((f) => isKindleDeliverableFormat(f))}
+                    .filter((a) => isKindleDeliverableFormat(a.format))
+                    .map((a) => ({ format: a.format, bytes: a.bytes }))}
                   price={isOwnUpload ? 0 : alreadyOwned ? 1 : price}
                   balance={reader.credits ?? 0}
                 />

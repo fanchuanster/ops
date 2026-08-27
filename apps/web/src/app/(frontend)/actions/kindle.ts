@@ -5,7 +5,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
-import { checkKindleAddress, checkKindleDelivery } from '../../../domain/kindle'
+import { checkKindleAddress, checkKindleDelivery, tooLargeMessage } from '../../../domain/kindle'
 import { getCurrentUser } from '../../../lib/auth'
 import { authorizeDownload, chargeForDelivery } from '../../../lib/authorizeDownload'
 import { kindleTransport } from '../../../lib/kindle/transport'
@@ -155,7 +155,13 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
     transportConfigured: true,
   })
   if (!sizeCheck.ok) {
-    return { error: 'That file is too large to email. Download it directly instead.' }
+    // Never "download it instead": there is no download. A book is read
+    // here or sent to a device, which is a product decision rather than
+    // a missing feature, so the refusal points at the reader that does
+    // exist. The two sizes are both named because "too large" without a
+    // number leaves a reader with nothing to act on — knowing the book
+    // is 41 MB against a 25 MB limit at least explains the silence.
+    return { error: tooLargeMessage(bytes.byteLength) }
   }
 
   const result = await transport!.send({

@@ -4,6 +4,12 @@ import { useActionState } from 'react'
 
 import { sendToKindle, type KindleState } from '../app/(frontend)/actions/kindle'
 import { RESEND_PRICE } from '../domain/credits'
+import {
+  MAX_ATTACHMENT_BYTES,
+  describeBytes,
+  isEmailableSize,
+  tooLargeMessage,
+} from '../domain/kindle'
 
 /**
  * Sends a book to the reader's Kindle.
@@ -24,6 +30,23 @@ import { RESEND_PRICE } from '../domain/credits'
 const FORMAT_LABEL: Record<string, string> = {
   epub: 'EPUB — reflowable',
   pdf: 'PDF',
+  txt: 'Plain text',
+}
+
+/**
+ * A format the reader has, and how big it is.
+ *
+ * `bytes` is what the book recorded when the artifact was filed. It can
+ * be missing on older records, and a missing size is treated as
+ * sendable rather than as too large: the server weighs the real file
+ * before spending anything, so the worst case is the refusal a reader
+ * would have got anyway. Greying out a format we merely failed to
+ * measure would hide a book that sends perfectly well.
+ */
+export type DeliverableFormat = { format: string; bytes?: number | null }
+
+function oversized({ bytes }: DeliverableFormat): boolean {
+  return typeof bytes === 'number' && bytes > 0 && !isEmailableSize(bytes)
 }
 
 /**
@@ -57,7 +80,7 @@ export function SendToKindleButton({
   balance,
 }: {
   bookId: string | number
-  formats: string[]
+  formats: DeliverableFormat[]
   /** What the first send costs. Zero for the reader's own upload. */
   price: number
   balance: number
@@ -65,6 +88,28 @@ export function SendToKindleButton({
   const [state, action, pending] = useActionState<KindleState, FormData>(sendToKindle, {})
 
   if (formats.length === 0) return null
+
+  // Email cannot carry every book. Saying so before the click is worth
+  // doing — the server refuses the same file for the same reason, but
+  // only after fetching it out of R2, and a reader who has chosen a
+  // format and pressed a button has already been told the book is
+  // theirs to send.
+  const sendable = formats.filter((f) => !oversized(f))
+
+  if (sendable.length === 0) {
+    // The smallest of them, not the first: it is the one that came
+    // closest to fitting, so it is the honest measure of how far over
+    // this book is. Every format here has a size — that is what
+    // `oversized` needed to be sure.
+    const smallest = Math.min(...formats.map((f) => f.bytes as number))
+
+    return (
+      <span className="send-hint" title={tooLargeMessage(smallest)}>
+        Too large to email — {describeBytes(smallest)}, over the{' '}
+        {describeBytes(MAX_ATTACHMENT_BYTES)} limit. Read it here instead.
+      </span>
+    )
+  }
 
   // The action reports the balance it left behind; before the first
   // send, the page's figure is the current one.
@@ -83,15 +128,37 @@ export function SendToKindleButton({
       <input type="hidden" name="bookId" value={String(bookId)} />
 
       {formats.length > 1 ? (
-        <select name="format" defaultValue="epub" aria-label="Format to send">
+        // The default is EPUB where EPUB can actually be sent, and
+        // otherwise the first format that can — never a disabled option,
+        // which in a select is a form that cannot be submitted.
+        <select
+          name="format"
+          defaultValue={sendable.some((f) => f.format === 'epub') ? 'epub' : sendable[0].format}
+          aria-label="Format to send"
+        >
           {formats.map((f) => (
-            <option key={f} value={f}>
-              {FORMAT_LABEL[f] ?? f}
+            <option
+              key={f.format}
+              value={f.format}
+              disabled={oversized(f)}
+              // The limit is named in the label as well as the tooltip.
+              // A `title` on an <option> is honoured by some browsers
+              // and silently dropped by others, so the tooltip is the
+              // fuller version of something already readable, never the
+              // only place the limit is stated.
+              title={oversized(f) ? tooLargeMessage(f.bytes as number) : undefined}
+            >
+              {FORMAT_LABEL[f.format] ?? f.format}
+              {oversized(f)
+                ? ` — ${describeBytes(f.bytes as number)}, over the ${describeBytes(
+                    MAX_ATTACHMENT_BYTES,
+                  )} email limit`
+                : ''}
             </option>
           ))}
         </select>
       ) : (
-        <input type="hidden" name="format" value={formats[0]} />
+        <input type="hidden" name="format" value={formats[0].format} />
       )}
 
       <button

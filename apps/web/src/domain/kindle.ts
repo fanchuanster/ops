@@ -54,17 +54,101 @@ export function checkKindleAddress(input: string): KindleAddressCheck {
 }
 
 /**
- * Whether a file is small enough to email.
+ * Resend's ceiling: 40 MB per email, measured *after* base64 encoding.
  *
- * Amazon accepts documents up to 50 MB, but the mail path in between is
- * the tighter constraint — most SMTP relays reject messages over 25 MB,
- * and base64 encoding inflates an attachment by roughly a third. The
- * limit is applied to the *encoded* size for that reason.
+ * Read as decimal rather than 40 MiB, deliberately. Their documentation
+ * says "40MB" without saying which, and being 4% under a limit costs a
+ * megabyte of book where being 4% over costs every send of a large one.
+ *
+ * Not ours to raise. It is the outermost constraint that still binds:
+ * Amazon accepts 50 MB per personal document, so a larger book needs a
+ * different provider, not a different constant.
  */
-export const MAX_ATTACHMENT_BYTES = 18 * 1024 * 1024
+export const RESEND_MAX_ENCODED_BYTES = 40_000_000
+
+/**
+ * How large a book may be and still reach a Kindle by email.
+ *
+ * **Base64 is email's, not Resend's.** An attachment travels as MIME
+ * and a MIME body must be 7-bit safe, so the 4/3 inflation applies to
+ * any provider and any protocol that could carry this. There is no
+ * "send it raw" available at any price; 30 MB of book is 40 MB on the
+ * wire wherever it goes.
+ *
+ * What that leaves is Resend's 40 MB, and this is now set from it —
+ * `28 MiB` encodes to 39.1 MB, inside the cap with room for the JSON
+ * envelope around it. The test in `domain.test.ts` asserts that
+ * relationship rather than trusting the arithmetic to stay true.
+ *
+ * The Worker used to be the tighter constraint and no longer is. The
+ * transport built the whole encoded book as a string, embedded it in an
+ * object, stringified that and let `fetch` serialise the result — four
+ * full-length copies against 128 MB of memory. It now writes one
+ * exactly-sized buffer (`lib/kindle/transport.ts`), so the peak is the
+ * book plus its encoded form: about 65 MB at this limit, which is
+ * headroom rather than a ceiling.
+ *
+ * The number is **raw bytes** — the size of the file the reader
+ * actually has. Encoding inflation is derived below rather than being
+ * charged invisibly against a constant that looks like a file size.
+ *
+ * It was 18 MB applied to the *encoded* size until 2026-08-27, which
+ * refused every book over 13.5 MB, and justified itself with a 25 MB
+ * limit on "most SMTP relays". Workers cannot open a mail socket at
+ * all; delivery has always gone over Resend's HTTP API, so that
+ * constraint never applied to a single send this system has made.
+ */
+export const MAX_ATTACHMENT_BYTES = 28 * 1024 * 1024
+
+/**
+ * Room for the JSON around the attachment — sender, recipient, subject,
+ * filename, and the short message body. A few hundred bytes in
+ * practice; 4 KB so a long CJK title escaped character by character
+ * cannot eat the margin.
+ */
+export const ENVELOPE_ALLOWANCE_BYTES = 4096
+
+/** What `n` raw bytes become once base64 encoded. */
+export function encodedSize(bytes: number): number {
+  return Math.ceil(bytes / 3) * 4
+}
 
 export function isEmailableSize(bytes: number): boolean {
-  return bytes > 0 && Math.ceil(bytes / 3) * 4 <= MAX_ATTACHMENT_BYTES
+  if (bytes <= 0) return false
+  if (bytes > MAX_ATTACHMENT_BYTES) return false
+  return encodedSize(bytes) + ENVELOPE_ALLOWANCE_BYTES <= RESEND_MAX_ENCODED_BYTES
+}
+
+/** Megabytes, one decimal place, for telling a reader what went wrong. */
+export function describeBytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/**
+ * Why a book cannot be emailed, said once.
+ *
+ * **Both numbers, always: this file against the limit.** "Too large"
+ * alone leaves a reader with nothing to act on, the limit alone does not
+ * say by how much, and the file's own size alone does not say what it is
+ * being measured against. The pair is the only version that explains
+ * itself.
+ *
+ * It lives here rather than in either caller because a reader can meet
+ * this refusal twice — greyed out in the format list before the click,
+ * and from the server after it, if the size was never recorded on the
+ * artifact. Two hand-written versions would drift, and the reader who
+ * saw both would be left reconciling them.
+ *
+ * It ends at the reader rather than at a download. There is no
+ * download: a book is read here or sent to a device, which is a product
+ * decision rather than a missing feature (CLAUDE.md section 1).
+ */
+export function tooLargeMessage(bytes: number): string {
+  return (
+    `This edition is ${describeBytes(bytes)}. Email can carry ` +
+    `${describeBytes(MAX_ATTACHMENT_BYTES)}, so it cannot be sent to a Kindle. ` +
+    `Read it here instead — the online reader has the whole book.`
+  )
 }
 
 /**

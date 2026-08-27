@@ -101,9 +101,12 @@ export default async function BookDetailsPage({
   // price is zero here without consulting the ledger. The action
   // re-derives all of it regardless; this only decides what the button
   // says.
+  // Format and size together: the button greys out anything email
+  // cannot carry (`domain/kindle.ts`), which for an uploader's own scan
+  // is a real possibility rather than a corner case.
   const deliverable = (book.artifacts ?? [])
-    .map((artifact) => artifact.format)
-    .filter((format) => isKindleDeliverableFormat(format))
+    .filter((artifact) => isKindleDeliverableFormat(artifact.format))
+    .map((artifact) => ({ format: artifact.format, bytes: artifact.bytes }))
 
   const sourceKind = readSourceKind(book.conversion ?? {})
   const plan = resolvePlan(sourceKind, book.conversion?.plan)

@@ -14,7 +14,13 @@ import {
   KINDLE_SENDER_ADDRESS,
   checkKindleAddress,
   checkKindleDelivery,
+  MAX_ATTACHMENT_BYTES,
+  ENVELOPE_ALLOWANCE_BYTES,
+  RESEND_MAX_ENCODED_BYTES,
+  describeBytes,
+  encodedSize,
   isEmailableSize,
+  tooLargeMessage,
   isKindleDeliverableFormat,
 } from './kindle'
 import {
@@ -164,11 +170,43 @@ describe('kindle delivery', () => {
     expect(isKindleDeliverableFormat('docx')).toBe(false)
   })
 
-  it('measures the encoded size, since base64 is what gets mailed', () => {
-    // 18 MB of raw bytes becomes ~24 MB encoded, over the limit.
-    expect(isEmailableSize(18 * 1024 * 1024)).toBe(false)
-    expect(isEmailableSize(10 * 1024 * 1024)).toBe(true)
+  it('limits the raw file, not the encoded one', () => {
+    const MB = 1024 * 1024
+
+    // The book that found this: refused at 17.4 MB by a limit that
+    // measured base64 output against a number that read as a file size.
+    expect(isEmailableSize(17.4 * MB)).toBe(true)
+
+    expect(isEmailableSize(MAX_ATTACHMENT_BYTES)).toBe(true)
+    expect(isEmailableSize(MAX_ATTACHMENT_BYTES + 1)).toBe(false)
     expect(isEmailableSize(0)).toBe(false)
+    expect(isEmailableSize(-1)).toBe(false)
+  })
+
+  it('stays inside what Resend will accept once encoded', () => {
+    // Ours is the tighter limit, and must stay that way: raising it past
+    // what the provider takes after base64 would turn a refusal we
+    // explain into a 4xx from Resend that a reader reads as "try again".
+    expect(encodedSize(MAX_ATTACHMENT_BYTES) + ENVELOPE_ALLOWANCE_BYTES).toBeLessThanOrEqual(
+      RESEND_MAX_ENCODED_BYTES,
+    )
+
+    // And close enough to it to be worth the reader having: a limit
+    // that drifted far under the provider's would be throwing away
+    // books it could carry.
+    expect(encodedSize(MAX_ATTACHMENT_BYTES)).toBeGreaterThan(RESEND_MAX_ENCODED_BYTES * 0.95)
+  })
+
+  it('names the file and the limit when refusing, never a download', () => {
+    // The reader meets this twice — greyed out before the click, and
+    // from the server after it — so it is one sentence, and it has to
+    // carry both numbers to be actionable.
+    const message = tooLargeMessage(41.2 * 1024 * 1024)
+
+    expect(message).toContain('41.2 MB')
+    expect(message).toContain(describeBytes(MAX_ATTACHMENT_BYTES))
+    // There is no download to send anyone to.
+    expect(message.toLowerCase()).not.toContain('download')
   })
 
   it('refuses delivery when no transport is configured', () => {
