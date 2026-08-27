@@ -47,6 +47,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { Payload } from 'payload'
 
 import { exportHasExpired, exportLocaleFor, masterKey, withinSizeLimit } from '../domain/adobe'
+import { bookStem } from '../domain/bookStorage'
 import { type CorrectionState, correctionStateForMaster } from '../domain/correction'
 import { type ConversionState, needsMasterRun, stateWithoutExport } from '../domain/pipeline'
 import {
@@ -68,6 +69,7 @@ import {
   startExport,
   uploadAsset,
 } from './adobe/client'
+import { freeStem } from './bookObjects'
 import { artifactBytes, copyObject, objectBucket } from './storage'
 import { logError } from './logError'
 
@@ -306,7 +308,15 @@ async function fileOriginal(
   if (existing.some((artifact) => artifact.format === format)) return existing
 
   const sourceKey = conversion.sourceKey as string
-  const key = originalKey(book.id, kind)
+  // The first object this book files, so this is where its stem is
+  // decided — from the name of the uploaded file, numbered if that name
+  // is already taken. Everything else the book owns is named from the
+  // key this writes (`domain/bookStorage.ts`).
+  const stem = await freeStem({
+    wanted: bookStem({ artifacts: existing, sourceFilename: conversion.sourceFilename }),
+    owned: existing.map((artifact) => artifact.storageKey),
+  })
+  const key = originalKey(stem, kind)
   const size = await copyObject(sourceKey, key, CONTENT_TYPES[kind])
   if (size === null) {
     await fail(payload, book, 'The uploaded file could not be read from storage.')

@@ -83,9 +83,9 @@ describe('the candidate pages', () => {
   it('keeps page one at the name it has always had', () => {
     // Every cover rendered before candidates existed is at this key,
     // and stays readable without a backfill.
-    expect(coverKey(7)).toBe(coverKey(7, 1))
-    expect(coverKey(7, 1).endsWith('cover.jpg')).toBe(true)
-    expect(coverKey(7, 2).endsWith('cover-2.jpg')).toBe(true)
+    expect(coverKey('a-book')).toBe(coverKey('a-book', 1))
+    expect(coverKey('a-book', 1).endsWith('cover.jpg')).toBe(true)
+    expect(coverKey('a-book', 2).endsWith('cover-2.jpg')).toBe(true)
   })
 
   it('never counts more pages than are offered', () => {

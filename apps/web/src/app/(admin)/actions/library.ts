@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import { coverCandidatePages, coverKey } from '../../../domain/cover'
+import { coverCandidateKey, coverCandidatePages } from '../../../domain/cover'
 import { orderIdFrom } from '../../../domain/shelfOrder'
 import { isBookLevel, levelId } from '../../../domain/levels'
 import { ADMIN_DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
@@ -234,7 +234,9 @@ export async function deleteLibraryBook(
     // candidate goes, not only the one the book wears: they are all
     // real objects, and the stored `key` names just the chosen one.
     book.generatedCover?.key,
-    ...coverCandidatePages(book.generatedCover ?? {}).map((page) => coverKey(book.id, page)),
+    ...coverCandidatePages(book.generatedCover ?? {}).map((page) =>
+      coverCandidateKey(book.generatedCover?.key ?? '', page),
+    ),
   ].filter((key): key is string => typeof key === 'string' && key.length > 0))
 
   try {

@@ -115,14 +115,15 @@ describe('the slot the original occupies', () => {
     expect(originalArtifact('text')).toBe('txt')
   })
 
-  it('keeps every original under its own book, away from the sweep', () => {
+  it('keeps every original under books/, away from the sweep', () => {
     // Not `conversion/`, which the R2 lifecycle rule clears after 30
     // days — a published book's original must outlive that.
     for (const kind of ['pdf', 'docx', 'epub', 'text'] as const) {
-      expect(originalKey(7, kind).startsWith('books/7/book/')).toBe(true)
+      expect(originalKey('a-book', kind).startsWith('books/a-book')).toBe(true)
     }
-    expect(originalKey(7, 'pdf')).toBe('books/7/book/original.pdf')
-    expect(originalKey(7, 'docx')).toBe('books/7/book/master.docx')
+    expect(originalKey('a-book', 'pdf')).toBe('books/a-book.pdf')
+    expect(originalKey('a-book', 'docx')).toBe('books/a-book.docx')
+    expect(originalKey('a-book', 'text')).toBe('books/a-book.txt')
   })
 })
 

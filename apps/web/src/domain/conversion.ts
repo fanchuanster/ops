@@ -43,82 +43,24 @@ export interface AcceptedArtifact {
   downloadable: boolean
 }
 
-/**
- * Every artifact lives under its own book's prefix.
+/*
+ * `artifactPrefix`, `artifactKey` and `acceptArtifacts` stood here
+ * until 2026-08-26 and are deleted.
  *
- * This is the containment boundary. A storage key is what the download
- * path streams, so a key naming another book's directory would let a
- * compromised converter serve a restricted book through a book the
- * reader is allowed to have.
- */
-export function artifactPrefix(bookId: string | number): string {
-  return `books/${bookId}/`
-}
-
-/**
- * Where a finished artifact lives.
+ * They were the containment boundary: a converter running elsewhere
+ * reported the keys it had written, and `acceptArtifacts` refused any
+ * that named a directory other than `books/{id}/` — because a key
+ * pointing into another book would serve a restricted book through one
+ * the reader is allowed to have.
  *
- * One level below `artifactPrefix`, and the difference matters. The
- * prefix is the *containment* boundary — broad enough to admit the cover
- * sitting directly under `books/{id}/` — while the artifacts themselves
- * go in `book/`, which is where every book already in R2 has them and
- * what CLAUDE.md section 14 draws. `originalKey` in `publication.ts`
- * arrives at the same layout from the other direction, and for a DOCX
- * upload the two name the same object: the upload is the master.
+ * There is no converter (section 13). Keys are minted in the Worker by
+ * `domain/bookStorage.ts` and never arrive from outside, so the check
+ * had nothing left to check and the prefix had nothing left to enforce.
+ * Deleting a boundary is worth being explicit about: what makes it safe
+ * is not that the rule became unnecessary, but that the untrusted input
+ * it guarded no longer exists.
  */
-export function artifactKey(bookId: string | number, filename: string): string {
-  return `${artifactPrefix(bookId)}book/${filename}`
-}
 
-/**
- * Filter a converter's reported artifacts down to what may be stored.
- *
- * Silently dropping bad entries rather than rejecting the whole payload
- * is deliberate: a converter that reports four good formats and one
- * malformed key has still done four fifths of a useful job, and failing
- * the book entirely would mean re-running hours of OCR to recover it.
- * The caller decides what to do when nothing survives.
- */
-export function acceptArtifacts({
-  bookId,
-  artifacts,
-}: {
-  bookId: string | number
-  artifacts: unknown
-}): AcceptedArtifact[] {
-  if (typeof artifacts !== 'object' || artifacts === null) return []
-
-  const prefix = artifactPrefix(bookId)
-  const accepted: AcceptedArtifact[] = []
-
-  for (const [format, key] of Object.entries(artifacts as Record<string, unknown>)) {
-    if (!ARTIFACT_FORMATS.includes(format as ArtifactFormat)) continue
-    if (typeof key !== 'string' || !key.startsWith(prefix)) continue
-
-    // `books/3/../4/x` starts with the right prefix and resolves
-    // somewhere else entirely. Object stores treat the key as an opaque
-    // string, but anything that later maps it onto a path would not.
-    if (key.includes('..')) continue
-
-    accepted.push({
-      format: format as ArtifactFormat,
-      storageKey: key,
-      // The DOCX master is the editorial source of truth, never a
-      // reader download (CLAUDE.md section 5).
-      downloadable: format !== 'docx',
-    })
-  }
-
-  return accepted
-}
-
-/**
- * The page count a converter reported, or null if it is not usable.
- *
- * Page count sets the price, so a nonsense value is a nonsense charge.
- * Null means "leave what is already there", which for a new book means
- * the minimum price — the right way to fail.
- */
 export function acceptPageCount(value: unknown): number | null {
   const pages = Number(value)
   if (!Number.isFinite(pages) || pages <= 0) return null

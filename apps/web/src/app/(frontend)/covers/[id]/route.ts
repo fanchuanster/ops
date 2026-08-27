@@ -40,6 +40,7 @@ import {
   COVER_CANDIDATE_PAGES,
   chosenCoverPage,
   coverCandidateCount,
+  coverCandidateKey,
   coverKey,
   uploadedCoverId,
 } from '../../../../domain/cover'
@@ -47,6 +48,8 @@ import { isAdmin } from '../../../../lib/adminAuth'
 import { getCurrentUser } from '../../../../lib/auth'
 import { logError } from '../../../../lib/logError'
 import { revalidateCover } from '../../../../lib/revalidateCover'
+import { bookStem } from '../../../../domain/bookStorage'
+import { originalArtifact, readSourceKind } from '../../../../domain/publication'
 import {
   artifactStream,
   localArtifactPath,
@@ -161,7 +164,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // has always been. The alternatives are derived, because only page
   // one is stored — the rest are named by the same rule that told the
   // converter where to put them.
-  const key = page <= 1 ? generated.key : coverKey(id, page)
+  const key = coverCandidateKey(generated.key, page)
 
   const stream = await artifactStream(key)
   if (stream) {
@@ -251,9 +254,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const wanted = pages.slice(0, COVER_CANDIDATE_PAGES)
   const written: string[] = []
 
+  // The same stem the book's other objects use, so a cover sits beside
+  // them and survives a rename exactly as they do. A book whose cover is
+  // being replaced keeps the base key it already records rather than
+  // filing a second set under a new name.
+  const existing = book.generatedCover?.key
+  const base =
+    typeof existing === 'string' && existing.length > 0
+      ? existing
+      : coverKey(
+          bookStem({
+            artifacts: book.artifacts,
+            sourceFilename: book.conversion?.sourceFilename,
+            preferred: originalArtifact(readSourceKind(book.conversion ?? {})),
+          }),
+        )
+
   try {
     for (const [index, page] of wanted.entries()) {
-      const key = coverKey(book.id, index + 1)
+      const key = coverCandidateKey(base, index + 1)
       await bucket.put(key, await page.arrayBuffer(), {
         httpMetadata: { contentType: 'image/jpeg' },
       })

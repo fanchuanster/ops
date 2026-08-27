@@ -38,7 +38,7 @@
  * Framework-independent, like everything in `src/domain`.
  */
 
-import { type ArtifactFormat, artifactPrefix } from './conversion'
+import type { ArtifactFormat } from './conversion'
 
 /**
  * How far a book has got towards having a generated cover.
@@ -80,22 +80,16 @@ export function coverSourceFormat(formats: readonly unknown[]): ArtifactFormat |
 }
 
 /**
- * Where a generated cover lives.
+ * Where a cover is *written*, and where its candidates are *read*.
  *
- * Under the book's own prefix, like every other artifact, so the
- * containment rule in `domain/conversion.ts` covers it unchanged.
- *
- * JPEG rather than PNG: this is a photograph of a page, and a lossless
- * encoding of a scan is several times the size for no visible gain on a
- * tile 150px wide.
+ * Two functions rather than one, and the split is the whole point of
+ * dropping the book id from the path (`domain/bookStorage.ts`). A new
+ * cover is named from the slug; an existing one is found from the key
+ * its book already records, which is what lets every cover rendered
+ * under the old `books/{id}/` layout keep answering with nothing
+ * migrated.
  */
-export function coverKey(bookId: string | number, page: number = 1): string {
-  const prefix = artifactPrefix(bookId)
-  // Page one keeps the unsuffixed name it has always had, so every
-  // cover rendered before candidates existed is still at the key its
-  // book records. The alternatives are new names and can be anything.
-  return page <= 1 ? `${prefix}cover.jpg` : `${prefix}cover-${page}.jpg`
-}
+export { coverCandidateKey, coverKey } from './bookStorage'
 
 /**
  * How many opening pages are offered to choose between.

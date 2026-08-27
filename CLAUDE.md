@@ -1760,6 +1760,18 @@ deliberately not renamed. Renaming means a `wrangler secret put` that
 has to land before the deploy, and if it does not, the route fails
 closed and conversions stop silently. The name is the smaller problem.
 
+## Deploying the clock
+
+`opennextjs-cloudflare deploy` uploads the script and **does not attach
+cron triggers**. The schedule record can exist — `GET .../schedules`
+returns it, created at the deploy — while nothing ever fires, which is
+exactly as silent as it sounds: the site is up, the tick route answers,
+and no book ever converts.
+
+`wrangler triggers deploy` is what applies them, so `npm run deploy`
+ends with it. This was found the only way it can be: by putting a book
+in `master_ready` on production and watching it not move.
+
 ## The four jobs
 
     kind: "master"    source  → DOCX master
@@ -1867,30 +1879,83 @@ it. Streaming is I/O, so it stays cheap on a Worker.
 Suggested structure:
 
 books/
-  {book_id}/
-    cover.jpg          page one, when nobody uploaded a cover
-    cover-2.jpg        the other candidates, when it is not the cover
-    cover-3.jpg        (all three written by the browser that rendered
-                        them, through POST /covers/{id})
-    book/
-      master.docx
-      book.epub
-      book.pdf
-      original.pdf       a PDF upload, kept as uploaded
-      source.txt         a text upload, kept as uploaded
-      suggestions.json   what the model proposed, awaiting a decision
-      decisions.json     the same file with `approved` filled in
+  {stem}.pdf             the upload, kept as uploaded
+  {stem}.docx            the master
+  {stem}.epub            the reading edition
+  {stem}.txt             a text upload, kept as itself
+  {stem}-cover.jpg       the cover
+  {stem}-cover-2.jpg     the other rendered candidates, written by the
+  {stem}-cover-3.jpg     browser that rendered them (POST /covers/{id})
+  {stem}-suggestions.json  what the model proposed
+  {stem}-decisions.json    the same file with `approved` filled in
 
 conversion/
   {job_id}/
     input/               where an upload lands before it is filed
 
-`suggestions.json` and `decisions.json` are the correction pair
-(section 13) and sit under `book/` with everything else the pipeline
-writes. `intermediate/` and `output/` under `conversion/` were the
-container's scratch space and are no longer written to at all — the
-pipeline runs in the Worker and holds a book in memory for the seconds
-it takes to build, so there is nothing to stage.
+**The stem is the name of the file that was uploaded**, and every
+variation of a book shares it, differing only in the type suffix. It is
+`domain/bookStorage.ts`.
+
+This was `books/{book_id}/book/{filename}` until 2026-08-26, and for
+about an hour that day it was `books/{slug}` — which was wrong, and
+wrong in the way that matters: `adminApi.ts` lets an editor correct a
+slug, so a key built from one moves when a book is renamed. The name of
+the uploaded file does not change, ever.
+
+The path is not the link either way. A book reaches its objects through
+the keys it stores — `artifacts[].storageKey`, `conversion.sourceKey`,
+`generatedCover.key` — read back, never recomputed. Production had been
+proving that unnoticed for months: the two seed books record keys under
+`books/4/` and `books/18/` while being books 1 and 2, and everything
+about them works. The stem exists to give those keys a name a human can
+read in a bucket listing, not to find them.
+
+## The number belongs to the book
+
+Uploaded names are not unique — two readers both have a `scan.pdf` — so
+a name already taken gets an incrementing number: `scan`, `scan-2`,
+`scan-3`.
+
+It is reserved for the **whole book at once**, not per file. A stem
+counts as taken when *any* key it would occupy exists
+(`stemFootprint`), which is what stops a book ending up as `scan.docx`
+beside `scan-2.epub`. Naming variations after one original only means
+something if they keep agreeing, and agreeing at the first write is not
+the same as agreeing.
+
+The reservation happens once, when the first object is filed — that is
+`fileOriginal` in `lib/masterPipeline.ts`, which every source passes
+through before it is claimable. Afterwards the stem is read back off a
+key the book recorded (`bookStem`) rather than recomputed, so it cannot
+drift. The runner reserves too, for a book that somehow arrives with
+nothing filed; that is a can't-happen, and the failure it would cause —
+writing over another book's object, reporting success — is the one worth
+paying a redundant check for.
+
+**Nothing was migrated, and nothing needs to be.** A slot a book already
+fills keeps its key, so a rebuild overwrites the object the book points
+at rather than filing a second one; and a book stored under the old
+layout yields the stem `{id}/book/master`, so its next artifact is filed
+beside the ones it has instead of moving house. Cover candidates are
+found by suffixing the *stored* base key rather than rebuilding one
+(`coverCandidateKey`).
+
+Two things the old id-based path was still doing, and only one was real:
+
+- **Containment.** `acceptArtifacts` refused a key outside `books/{id}/`
+  because a converter running elsewhere reported the keys it had
+  written. There is no converter (section 13) and no reported keys, so
+  the check had nothing left to check and is deleted. What makes that
+  safe is not that the rule stopped mattering but that the untrusted
+  input it guarded no longer exists.
+- **Uniqueness by construction**, which is real, and is what the
+  numbering above replaces.
+
+`intermediate/` and `output/` under `conversion/` were the container's
+scratch space and are no longer written to at all — the pipeline runs in
+the Worker and holds a book in memory for the seconds it takes to build,
+so there is nothing to stage.
 
 An object under `conversion/` is swept by the R2 lifecycle rule after 30
 days, which is why every source is also filed under its own book

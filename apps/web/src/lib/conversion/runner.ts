@@ -39,7 +39,7 @@ import config from '@payload-config'
 import { getPayload } from 'payload'
 
 import { applySuggestions } from '../../domain/applySuggestions'
-import { artifactKey as artifactKeyFor } from '../../domain/conversion'
+import { artifactKey, bookStem, suggestionsKey } from '../../domain/bookStorage'
 import {
   type CorrectionJobKind,
   type CorrectionState,
@@ -57,9 +57,10 @@ import {
   completedState,
   inProgressState,
 } from '../../domain/pipeline'
-import { readSourceKind } from '../../domain/publication'
+import { originalArtifact, readSourceKind } from '../../domain/publication'
 import { suggestCorrections } from '../../domain/proofread'
 import { readText } from '../../domain/textSource'
+import { freeStem } from '../bookObjects'
 import { artifactBytes, putObject } from '../storage'
 import { logError } from '../logError'
 import { readDocx } from './docxRead'
@@ -85,17 +86,69 @@ const CONTENT_TYPES: Record<string, string> = {
   json: 'application/json',
 }
 
-const FILENAMES: Record<string, string> = {
-  docx: 'master.docx',
-  epub: 'book.epub',
+/**
+ * The key to write for one slot of one book.
+ *
+ * **A slot the book already fills keeps its key.** Rebuilding an EPUB
+ * after a master edit must overwrite the object the book points at, not
+ * file a second one and orphan the first — and it is what keeps every
+ * book stored under the old `books/{id}/book/` layout exactly where it
+ * is, with nothing migrated and nothing left behind.
+ *
+ * Only a slot that is empty gets a freshly minted, slug-derived key,
+ * checked against the bucket in case a renamed book left an object
+ * there (`lib/bookObjects.ts`).
+ */
+/**
+ * The key to write for one slot of one book.
+ *
+ * **A slot the book already fills keeps its key.** Rebuilding an EPUB
+ * after a master edit must overwrite the object the book points at, not
+ * file a second one and orphan the first — and it is what keeps every
+ * book stored under the old `books/{id}/book/` layout exactly where it
+ * is, with nothing migrated and nothing left behind.
+ *
+ * An empty slot takes the stem's name for that type, with no numbering
+ * of its own. The number was settled once, for the whole book, when its
+ * first object was filed (`freeStem` in `lib/bookObjects.ts`) — deciding
+ * it again here is what would let a book end up as `scan.docx` beside
+ * `scan-2.epub`.
+ */
+function keyFor(wanted: string, current?: string | null): string {
+  return typeof current === 'string' && current.length > 0 ? current : wanted
 }
 
-function artifactKey(bookId: number, format: 'docx' | 'epub'): string {
-  return artifactKeyFor(bookId, FILENAMES[format])
+/**
+ * The stem every one of this book's objects shares.
+ *
+ * Anchored on what the book has already filed, so it is fixed by the
+ * first object written and no later rename can move it. In the ordinary
+ * flow that anchor always exists by the time a job runs: the original is
+ * filed — and its stem reserved against the bucket — before a book ever
+ * reaches a claimable state (`fileOriginal` in `lib/masterPipeline.ts`).
+ *
+ * A book arriving here with nothing filed is therefore a can't-happen,
+ * and is reserved anyway. The failure it would otherwise cause is the
+ * one this whole module is careful about — writing over an object
+ * belonging to another book, which serves the wrong text under the right
+ * title and reports success.
+ */
+async function stemOf(book: Book): Promise<string> {
+  const filed = (book.artifacts ?? []).some(
+    (artifact) => typeof artifact.storageKey === 'string' && artifact.storageKey.length > 0,
+  )
+  const wanted = bookStem({
+    artifacts: book.artifacts,
+    sourceFilename: book.conversion?.sourceFilename,
+    preferred: originalArtifact(readSourceKind(book.conversion ?? {})),
+  })
+  if (filed) return wanted
+  return freeStem({ wanted, owned: [] })
 }
 
-function suggestionsKey(bookId: number): string {
-  return artifactKeyFor(bookId, 'suggestions.json')
+/** The key this book already records for one artifact format, if any. */
+function currentKey(book: Book, format: 'docx' | 'epub'): string | null {
+  return (book.artifacts ?? []).find((artifact) => artifact.format === format)?.storageKey ?? null
 }
 
 /** What one tick did, for the log and for the tests. */
@@ -201,7 +254,7 @@ async function runMaster(payload: Payload, book: Book): Promise<TickResult> {
   }
   document.author = book.author ?? document.author
 
-  const key = artifactKey(bookId, 'docx')
+  const key = keyFor(artifactKey(await stemOf(book), 'docx'), currentKey(book, 'docx'))
   if (!(await putObject(key, buildDocx(document, book.author), CONTENT_TYPES.docx))) {
     throw new Error('object storage is not configured')
   }
@@ -248,7 +301,7 @@ async function runFormats(payload: Payload, book: Book): Promise<TickResult> {
 
   const document = await fetchDocument(masterKey, book.title, book.author ?? null)
 
-  const key = artifactKey(bookId, 'epub')
+  const key = keyFor(artifactKey(await stemOf(book), 'epub'), currentKey(book, 'epub'))
   const epub = buildEpub(document, { identifier: `noblesee-${bookId}` })
   if (!(await putObject(key, epub, CONTENT_TYPES.epub))) {
     throw new Error('object storage is not configured')
@@ -298,7 +351,10 @@ async function runCorrect(payload: Payload, book: Book, env: Record<string, unkn
   const client = createChatClient(llmConfigFromEnv(env))
   const report = await suggestCorrections(document, client.complete, { model: client.model })
 
-  const key = suggestionsKey(bookId)
+  const key = keyFor(
+    suggestionsKey(await stemOf(book)),
+    book.conversion?.correction?.suggestionsKey,
+  )
   const body = JSON.stringify({
     model: report.model,
     batches: report.batches,
@@ -374,7 +430,7 @@ async function runApply(payload: Payload, book: Book): Promise<TickResult> {
   // rebuild an EPUB that is already correct.
   const wrote = report.applied.length > 0
   if (wrote) {
-    const key = artifactKey(bookId, 'docx')
+    const key = keyFor(artifactKey(await stemOf(book), 'docx'), currentKey(book, 'docx'))
     if (!(await putObject(key, buildDocx(document, book.author), CONTENT_TYPES.docx))) {
       throw new Error('object storage is not configured')
     }

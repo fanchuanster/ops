@@ -25,6 +25,7 @@
  */
 
 import type { ArtifactFormat } from './conversion'
+import { artifactKey } from './bookStorage'
 
 /**
  * What kind of file was uploaded.
@@ -227,20 +228,23 @@ export function originalArtifact(kind: SourceKind): ArtifactFormat | null {
   }
 }
 
+const ORIGINAL_FORMAT = { pdf: 'pdf', docx: 'docx', epub: 'epub', text: 'txt' } as const
+
 /**
  * Where the original is kept once it belongs to a book.
  *
- * Under the book's own prefix, and deliberately not left at the
+ * Named from the uploaded file, and deliberately not left at the
  * `conversion/` key it was uploaded to: the R2 lifecycle rule sweeps
  * that prefix after 30 days. An original that is also a published
  * artifact must outlive the conversion that produced it, and "always
  * keep the original" is not a promise a 30-day sweep can keep.
  */
-export function originalKey(bookId: string | number, kind: SourceKind): string {
-  const name = { pdf: 'original.pdf', docx: 'master.docx', epub: 'book.epub', text: 'source.txt' }[
-    kind
-  ]
-  return `books/${bookId}/book/${name}`
+export function originalKey(stem: string, kind: SourceKind): string {
+  // The original *is* one of the book's artifacts — a PDF upload is its
+  // PDF, a DOCX upload is its master — so it is named by the same rule,
+  // and the two agreeing is what makes "always keep the original" cost
+  // nothing extra rather than doubling every book.
+  return artifactKey(stem, ORIGINAL_FORMAT[kind])
 }
 
 /**

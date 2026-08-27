@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import { coverCandidatePages, coverKey } from '../../../domain/cover'
+import { coverCandidateKey, coverCandidatePages } from '../../../domain/cover'
 import { DELETION_ERRORS, canDeleteUpload } from '../../../domain/moderation'
 import { isConversionState, retryStateFor } from '../../../domain/pipeline'
 import { needsConverter, readSourceKind, resolvePlan } from '../../../domain/publication'
@@ -82,7 +82,9 @@ export async function deleteBook(_prev: ManageState, formData: FormData): Promis
     // candidate, not only the one the book wears — the stored key names
     // the chosen page, and the pages not chosen are objects too.
     book.generatedCover?.key,
-    ...coverCandidatePages(book.generatedCover ?? {}).map((page) => coverKey(book.id, page)),
+    ...coverCandidatePages(book.generatedCover ?? {}).map((page) =>
+      coverCandidateKey(book.generatedCover?.key ?? '', page),
+    ),
   ].filter((key): key is string => typeof key === 'string' && key.length > 0))
 
   try {
