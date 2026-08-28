@@ -353,7 +353,53 @@ const CONTENT_TYPES: Record<SourceKind, string> = {
 }
 
 /**
- * Start phase 1 for one queued book, if there is one.
+ * Say why a queued book is not moving, without failing it.
+ *
+ * `failed` would be the wrong state — nothing about the book is wrong,
+ * and a failed book waits for a person to requeue it — but silence is
+ * worse than either. A book stopped here reads as "Waiting to be
+ * converted" for as long as the deployment stays as it is, which is
+ * indistinguishable from waiting its turn behind someone else's scan.
+ *
+ * Written at most once. The tick runs every minute and reaches this on
+ * every one of them, so an unconditional update would rewrite the row
+ * 1,440 times a day and drag `updatedAt` along with it.
+ *
+ * Cleared by whoever moves the book on: both paths out of `queued`
+ * below set `message: null` as part of the same update.
+ */
+async function noteWaiting(
+  payload: Payload,
+  book: { id: string | number },
+  conversion: Record<string, unknown>,
+  message: string,
+): Promise<void> {
+  if (conversion.message === message) return
+  await payload.update({
+    collection: 'books',
+    id: book.id,
+    data: { conversion: { ...conversion, message } },
+    overrideAccess: true,
+  })
+}
+
+/**
+ * How many queued books one tick will consider.
+ *
+ * More than one because a book that cannot be started must not stop the
+ * books behind it. That took the whole queue out once: a scan wanting an
+ * export, on a deployment whose Adobe credentials had never been set,
+ * was the oldest queued book — so every later upload sat at `queued`
+ * behind a book that could not move until somebody set a secret.
+ *
+ * Bounded because a tick is billed for CPU. This is a short scan for
+ * something to start, not a sweep of the queue, and it still stops at
+ * the first book it can start.
+ */
+const QUEUE_SCAN = 5
+
+/**
+ * Start phase 1 for one queued book, if any of them can be started.
  *
  * Returns whether anything was done, so the caller can stop after one
  * unit of work.
@@ -366,14 +412,29 @@ export async function startNextMaster(
     collection: 'books',
     where: { 'conversion.state': { equals: 'queued' } },
     sort: 'createdAt',
-    limit: 1,
+    limit: QUEUE_SCAN,
     depth: 0,
     overrideAccess: true,
   })
 
-  const book = queued.docs[0]
-  if (!book) return false
+  for (const book of queued.docs) {
+    if (await startMasterFor(payload, book, credentials)) return true
+  }
+  return false
+}
 
+/**
+ * Try to start phase 1 for one book.
+ *
+ * Returns whether a unit of work happened. False means this book could
+ * not be started at all — nothing was written that matters and the
+ * caller moves on to the next one.
+ */
+async function startMasterFor(
+  payload: Payload,
+  book: Book,
+  credentials: AdobeCredentials | null,
+): Promise<boolean> {
   const conversion = (book.conversion ?? {}) as Record<string, unknown>
   const sourceKey = typeof conversion.sourceKey === 'string' ? conversion.sourceKey : ''
 
@@ -432,7 +493,15 @@ export async function startNextMaster(
   // Only from here on is Adobe involved, so only from here on do the
   // credentials matter. Checking them any earlier is what stranded
   // books that never needed Adobe at all.
-  if (!credentials) return false
+  if (!credentials) {
+    await noteWaiting(
+      payload,
+      book,
+      conversion,
+      'This scan is waiting to be read. The service that reads scanned pages is not configured on this deployment, so nothing has picked it up yet — your file and its details are safe, and it will convert as soon as it is.',
+    )
+    return false
+  }
 
   try {
     const bytes = await artifactBytes(sourceKey)

@@ -83,9 +83,16 @@ export default async function MyBooksPage() {
                       .join(' — ')}
                   </p>
                   {/* A failure the uploader can do nothing about is still
-                      a failure they are entitled to see the reason for. */}
-                  {state === 'failed' && book.conversion?.message ? (
-                    <p className="form-error">{book.conversion.message}</p>
+                      a failure they are entitled to see the reason for —
+                      and so is a wait. The pipeline writes a message on a
+                      book it cannot start (`lib/masterPipeline.ts`), which
+                      was shown nowhere while this read `state === 'failed'`:
+                      a book stopped for want of a credential looked exactly
+                      like one waiting its turn. */}
+                  {book.conversion?.message ? (
+                    <p className={state === 'failed' ? 'form-error' : 'hint'}>
+                      {book.conversion.message}
+                    </p>
                   ) : null}
                 </div>
                 <span className="my-books__right">

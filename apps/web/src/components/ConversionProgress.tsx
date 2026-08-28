@@ -128,10 +128,10 @@ const STAGE_OF: Record<string, string> = {
 /**
  * States that mean "a converter has to pick this up".
  *
- * A scan's OCR and master are run by this application, but nothing else
- * is — and the converter's own polling is what drives even those stages
- * forward (`lib/masterPipeline.ts`). So with no converter running, a
- * book stalls wherever it is, and these are the places it stalls.
+ * Every one of them is driven by the tick — a cron trigger on this same
+ * Worker, once a minute (`lib/masterPipeline.ts`). So a book stalls here
+ * when the tick is not running, or when it is running and cannot start
+ * this particular book, and these are the places it stalls.
  */
 const AWAITING_CONVERTER = new Set(['queued', 'ocr_ready', 'master_ready'])
 
@@ -154,10 +154,10 @@ const WORKING = new Set(['ocr', 'mastering', 'formatting'])
 /**
  * How long a book may sit queued before the wait is worth explaining.
  *
- * A converter polls every thirty seconds, so a book that has been
- * queued for a quarter of an hour is not waiting its turn — nothing is
- * listening. Saying "waiting for a converter to pick it up" then is
- * technically true and practically a lie.
+ * The tick runs every minute, so a book that has been queued for a
+ * quarter of an hour is not waiting its turn — something is wrong.
+ * Saying "waiting to be picked up" then is technically true and
+ * practically a lie.
  */
 const STALE_AFTER_MS = 15 * 60 * 1000
 
@@ -221,11 +221,18 @@ export function ConversionProgress({
         })}
       </ol>
 
-      {stalled ? (
+      {/* What the pipeline itself said about this book, when it said
+          anything. It writes one on a book it cannot start — a scan
+          waiting on an unconfigured export service, say — and that is
+          always more use than the generic notice below, which can only
+          guess at why nothing has moved. */}
+      {!failed && message ? <p className="notice">{message}</p> : null}
+
+      {stalled && !message ? (
         <p className="notice">
           {needsConverter(sourceKind, plan)
-            ? 'No worker has collected this yet. The conversion queues are served by a separate service that is not online at the moment — your book and its details are safe, and it will be picked up as soon as one is running.'
-            : 'This is still waiting to be filed. Nothing about your book needs converting, but the queue it is in is served by a service that is not online at the moment — your file and its details are safe.'}
+            ? 'Nothing has picked this up yet. Conversions are run by a scheduled job on the site itself, so this is a fault rather than a queue — your book and its details are safe, and it will convert as soon as the job is running again.'
+            : 'This is still waiting to be filed. Nothing about your book needs converting, so this is a fault rather than a queue — your file and its details are safe.'}
         </p>
       ) : null}
 
