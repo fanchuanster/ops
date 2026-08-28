@@ -39,6 +39,31 @@ export const Users: CollectionConfig = {
    */
   auth: {
     useAPIKey: true,
+    /**
+     * A year, where Payload's default is two hours.
+     *
+     * Two hours is what had readers signing in again in the middle of
+     * an afternoon, because this single number is the whole session:
+     * the JWT's own `exp`, the `expiresAt` on the `sessions` row it is
+     * checked against, and the lifetime of the cookie carrying it all
+     * come from here, so they expired together. Nothing about a
+     * library needs that — the acts worth guarding (spending credits,
+     * publishing a book, changing a password) each ask their own
+     * question at the moment they happen.
+     *
+     * Nothing renews a session, so a year is the whole of it: a reader
+     * who visits at least once in a year is never signed out, and one
+     * who has been away longer signs in again. The ceiling is
+     * deliberate rather than an oversight — a token that never expires
+     * can only be stopped by revoking it, and revocation is only as
+     * good as the lookup that reads it.
+     *
+     * What a long session does oblige is that signing out ends the
+     * session on the server rather than only dropping the cookie
+     * (`endSession` in `lib/auth.ts`). At two hours that was nearly
+     * academic; at a year it is not.
+     */
+    tokenExpiration: 60 * 60 * 24 * 365,
   },
   admin: {
     useAsTitle: 'email',

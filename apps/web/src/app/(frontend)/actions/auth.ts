@@ -1,13 +1,13 @@
 'use server'
 
 import config from '@payload-config'
-import { cookies } from 'next/headers'
+import { cookies, headers as nextHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getPayload } from 'payload'
+import { getPayload, type Payload } from 'payload'
 
 import { checkPassword } from '../../../domain/password'
 import { accrueMonthlyCredits, grantSignupCredits } from '../../../lib/credits'
-import { safeNext } from '../../../lib/auth'
+import { endSession, safeNext } from '../../../lib/auth'
 import { logError } from '../../../lib/logError'
 
 /**
@@ -28,6 +28,29 @@ const COOKIE_OPTIONS = {
   path: '/',
 }
 
+/**
+ * Store the session cookie, for as long as the token inside it is good
+ * for.
+ *
+ * The lifetime is read off the collection (`collections/Users.ts`)
+ * rather than written again here, so the cookie and the token can never
+ * disagree about when the session ends. Payload's own cookie — the one
+ * the Google flows get from `generatePayloadCookie` — has always been
+ * derived that way, and this is the password flow doing the same.
+ *
+ * Without it the cookie has no expiry at all, which is not "forever"
+ * but the opposite: a browser-session cookie, discarded when the window
+ * closes. That is half of why readers kept being asked to sign in
+ * again; the two-hour token was the other half.
+ */
+async function setSessionCookie(payload: Payload, token: string) {
+  const { auth } = payload.collections['users']!.config
+  ;(await cookies()).set(`${payload.config.cookiePrefix}-token`, token, {
+    ...COOKIE_OPTIONS,
+    maxAge: auth.tokenExpiration,
+  })
+}
+
 export async function login(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const email = String(formData.get('email') || '').trim()
   const password = String(formData.get('password') || '')
@@ -42,7 +65,7 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
       data: { email, password },
     })
     if (!result.token) return { error: 'Email or password is incorrect.' }
-    ;(await cookies()).set(`${payload.config.cookiePrefix}-token`, result.token, COOKIE_OPTIONS)
+    await setSessionCookie(payload, result.token)
     // Signing in is what pays the monthly grant — there is no cron.
     // Never throws, so a grant that cannot be recorded does not cost
     // the reader their session. See lib/credits.ts.
@@ -101,15 +124,22 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (createdId) await grantSignupCredits(payload, createdId)
 
   const result = await payload.login({ collection: 'users', data: { email, password } })
-  if (result.token) {
-    ;(await cookies()).set(`${payload.config.cookiePrefix}-token`, result.token, COOKIE_OPTIONS)
-  }
+  if (result.token) await setSessionCookie(payload, result.token)
 
   redirect(next)
 }
 
 export async function logout() {
   const payload = await getPayload({ config })
+  // Revoke the session, not just the cookie. The token names a row in
+  // the user's `sessions` and Payload checks it on every request, so
+  // deleting that row is what makes a copy of the token stop working —
+  // which matters now that one is good for a year rather than two
+  // hours. Only this session: signing out on one device leaves the
+  // reader signed in on the others.
+  const { user } = await payload.auth({ headers: await nextHeaders() })
+  const sid = (user as { _sid?: string } | null)?._sid
+  if (user && sid) await endSession(payload, user.id, sid)
   ;(await cookies()).delete(`${payload.config.cookiePrefix}-token`)
   redirect('/')
 }
