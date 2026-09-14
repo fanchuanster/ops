@@ -434,6 +434,35 @@ Limits that constrain the material: **100 MB per file**, which a
 something an uploader can act on; and one document transaction per 50
 pages, so a 400-page book costs 8.
 
+Adobe fails an export for two quite different reasons and reports both
+the same way, and since 2026-09-14 the pipeline tells them apart. A PDF
+it cannot read fails identically every time it is sent; a service that
+was busy — "The operation has timed out, please try after some time.",
+its own wording — fails a file that is perfectly good. Until then both
+landed the book in `failed`, so an uploader was shown a fault of ours,
+verbatim and with a request id attached, as though their scan were at
+fault, and a book that only needed sending again waited for someone to
+notice.
+
+`isTransientExportFailure` in `domain/adobe.ts` reads the message and
+`failOrRetry` in `lib/masterPipeline.ts` acts on it: a recognised
+transient failure returns the book to `queued` with its export handle
+released, and the next tick sends it again. Three rules bound that.
+**Recognised transience only** — an unfamiliar message fails the book,
+because failing one that would have succeeded costs a click and
+retrying one that never can costs transactions for ever. **Two
+automatic retries** (`MAX_EXPORT_RETRIES`), counted in
+`conversion.exportRetries`, since every submission is billed. And **a
+person pressing Try again starts a fresh budget**, which is
+`releasedExportHandle` clearing the count: an automatic retry is the
+pipeline guessing, a manual one is somebody deciding.
+
+A transient fault while *polling* is cheaper still and is handled
+differently: the export is untouched and its job URL is still good, so
+the book stays in `ocr` and the next tick simply asks again. Requeueing
+there would throw away a running export and pay for it twice because a
+token endpoint had a bad minute.
+
 Since 2026-08-24 the portal's own limit is **also 100 MB**, and the
 agreement is not a coincidence — it is the point. It was 64 MB, set by
 Worker memory rather than by anything about books: uploads arrived
@@ -575,6 +604,54 @@ holds for every source.
 
 DOCX and EPUB have exactly one sensible path each, so their owners are
 *told* what will happen rather than asked to pick from a list of one.
+
+## A book can hold more than one of them
+
+Since 2026-09-14 a book is not one file. It may hold **a source of each
+kind at once** — the scan *and* a transcription of it — and **which one
+the DOCX master is built from is its owner's choice**, changeable after
+they have seen how the first attempt turned out
+(`apps/web/src/domain/sources.ts`).
+
+The case is ordinary rather than exotic. Someone preserving a Chinese
+classic frequently has a scanned PDF and a plain-text transcription that
+circulates beside it. Adobe reading the scan costs a document
+transaction, takes minutes and gets characters wrong; the transcription
+is free, instant and already right — but it may be abridged, or from a
+different edition, and only the person holding both can tell. Under one
+source per book that judgement had to be made at upload, before either
+result existed, and getting it wrong meant a second upload and a second
+book.
+
+Three rules hold it together, and each is one function:
+
+- **One source per artifact slot.** A book's objects are named by format
+  (section 14), so two PDFs on one book are two files competing for one
+  name. `canAddSource` refuses a kind whose slot is filled — including
+  by a *generated* EPUB, because accepting one there would overwrite the
+  edition readers already have. A DOCX aimed at an existing master is
+  redirected to "Replace and rebuild", which is the same act said
+  properly.
+- **An EPUB is never a master source.** `canMasterFrom` excludes it, for
+  the reason section 10 gives: parsing a reading edition back into a
+  master and rendering it forward again can only lose.
+- **Adding is free; choosing is not.** Uploading another file costs no
+  quota and starts nothing. Choosing it re-enters phase 1, costs one of
+  the month's conversions and re-stamps `startedAt`, because
+  re-mastering a scan is a full Adobe export at full price.
+
+Nothing is deleted by switching. The old master is overwritten in place
+when the new one lands and both sources stay filed, so the decision is
+reversible for the price of another conversion — unlike the plan flip
+above, which is deliberately one-way.
+
+The master source is still `conversion.sourceKind` / `sourceKey` /
+`sourceFilename`, exactly as before, and every branch in the pipeline
+goes on reading those three fields. `conversion.sources` is the list;
+those three say which of it is in use. Books that predate the list have
+an empty one and a perfectly real source, so `readSources` synthesizes
+the single entry from the same three fields — which is why nothing was
+migrated and no row was rewritten.
 
 Publishing a *PDF* as it stands means the reader gets a fixed-layout
 book and no EPUB. That is a real cost against the mission — "not merely
@@ -804,6 +881,24 @@ book's PDF; a DOCX upload *is* its master; an EPUB upload *is* its
 EPUB; a text upload *is* its TXT. That last one only since 2026-08-26 —
 before it, text had no slot, so its original was left at the
 `conversion/` key and swept after 30 days.
+
+Which is also the whole constraint on holding **several** originals
+(section 3): a book may have one source of each kind and no more,
+because a second PDF would be a second file wanting one name.
+`conversion.sources` lists them and `conversion.sourceKind` says which
+one the master is built from.
+
+That list is stored rather than derived from the slots above, and the
+reason is that the slots cannot answer it: a `docx` is sometimes an
+upload and sometimes Adobe's, an `epub` sometimes an upload and
+sometimes phase 2's. Only `pdf` and `txt` are unambiguous, and a rule
+right for half the formats is worse than no rule.
+
+`sourceKey` names the *durable* copy, under the book, not the
+`conversion/` key the file was uploaded to. It did not until
+2026-09-14 — the bytes were always copied, but the pointer was left
+behind, so a text book still queued a month later would be handed to
+the runner with a key resolving to nothing.
 
 The cover is a further file and is not one of those five. Since
 2026-08-23 a book with no uploaded cover gets **page one of itself**,
@@ -1346,17 +1441,37 @@ fields misaligns everything after the join).
 A book then sits as a **draft**: private, owned, not converted, and not
 submitted. The draft is a workspace, not a form — it can be read, its
 DOCX master downloaded, corrected and re-uploaded, and it can be
-deleted. Deleting is refused only when other readers have spent credits
-on it, because an entitlement never expires.
+deleted.
 
-An administrator may delete **any** book, from the panel on
-`/admin/library` — the library's own withdrawal, and the one act on that
-screen that needs no ownership. It goes through the same
-`canDeleteUpload` as the uploader's own delete: the ownership gate is
-what the admin role opens, and the entitlement gate is not, because that
-one protects a reader who paid rather than the person who uploaded.
-Authority over the library is not authority over what somebody already
-bought.
+Since 2026-09-14 it can also gain **another file**. The upload route
+takes a `?book=` and files the new original beside the first as a second
+source; the panel on the book's own page lists what it holds and, when
+more than one of them could produce a master, offers the choice
+(section 3, `components/BookSources.tsx`). Adding costs nothing and
+changes nothing until the choice is made, which is what makes it worth
+offering to someone who is not yet sure.
+
+The panel sits on the book page rather than on the details form, and
+that placement is the argument: the details form confirms what a book
+*is*, once, before anything has happened to it, while this is a decision
+its owner takes with the results in front of them — they have read what
+Adobe made of the scan, seen what it got wrong, and now want the master
+built from the text instead. On the form the question would be asked at
+the one moment there is no evidence to answer it with.
+
+**Its owner can always delete it, and so can an administrator.**
+Ownership is the only gate `canDeleteUpload` has. An administrator
+deletes **any** book from the panel on `/admin/library` — the library's
+own withdrawal, and the one act on that screen that needs no ownership.
+
+Until 2026-08-30 there was a second gate: a book other readers had
+spent credits on could not be deleted by anyone, owner or
+administrator, because an entitlement never expires. Deleting such a
+book does break that promise, and it is still the reason not to do it
+casually — but as a *rule* it produced a book nobody at all could take
+down, which is the wrong answer for material that has to come down
+(misfiled, mis-scanned, or not distributable after all). The judgement
+is now the person's rather than the function's.
 
 That panel also names the uploader and the day the book arrived, as does
 every row of the tree beside it. `owner` is field-level restricted so a
@@ -1732,6 +1847,28 @@ not cancelled when the next one fires — so a plain read-then-write would
 run the same job twice. For a `correct` job that means paying a third
 party twice for the same book.
 
+The **export handle is released whenever a book re-enters the queue**,
+since 2026-09-14, and the reason is the mirror image of the claim above.
+`needsMasterRun` refuses to start phase 1 for a book already carrying an
+`exportJob`, so one book is never sent to Adobe twice — but the only
+thing that ever *cleared* that handle was `attachMaster`, which runs on
+success. Every failure path spread the stored conversion unchanged, so a
+book whose export failed after Adobe had accepted the job kept the job
+URL; "Try again" and any save from the details form then re-queued it
+with the handle still on. `advanceRunningMaster` only looks at `ocr`, so
+neither half of phase 1 owned it. The book sat at "Waiting to be
+converted" for ever, with no message and nothing in the log — the worst
+shape a bug can take, since everything about it looked fine.
+
+`releasedExportHandle` in `domain/pipeline.ts` is the rule, and it is
+keyed on the destination state: only `queued` releases. That is
+correctness rather than caution. `startMasterFor` writes the state and
+the handle in one update, so a *live* export is always `ocr` and
+`queued` with a handle is always stale; clearing unconditionally would
+orphan a job already paid for the moment somebody corrected a title
+while the export was running. `npm run release-exports:remote` is the
+one-shot repair for rows stranded before the fix.
+
 Cloudflare Queues is still not used, and the reasons are the ones this
 section always gave: it is a second durable record beside the Book row
 that can disagree with it, and the Book row is already the durable
@@ -1896,6 +2033,13 @@ conversion/
 **The stem is the name of the file that was uploaded**, and every
 variation of a book shares it, differing only in the type suffix. It is
 `domain/bookStorage.ts`.
+
+**The name of the *first* file, specifically**, which matters now that a
+book can be given a second one (section 3). A source added later is
+filed under the stem the book already has, never under its own name —
+including in the case that made the rule necessary, a file added to a
+book whose first upload has not been filed yet, where stemming each from
+its own name would give one book two of them and nothing would notice.
 
 This was `books/{book_id}/book/{filename}` until 2026-08-26, and for
 about an hour that day it was `books/{slug}` — which was wrong, and

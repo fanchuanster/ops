@@ -1,6 +1,6 @@
 'use client'
 
-import { type CSSProperties, useActionState } from 'react'
+import { type CSSProperties, useActionState, useState } from 'react'
 
 import { saveBookDetails, type DetailsState } from '../app/(frontend)/actions/bookDetails'
 import {
@@ -228,6 +228,12 @@ export function BookDetailsForm({
   // than asked to pick it out of a list of one.
   const plans = plansFor(book.sourceKind)
 
+  // Which plan is selected *now*, not which one was saved. The AI
+  // question below only exists inside a conversion, so it has to follow
+  // the radios rather than the stored value — a reader who picks
+  // "publish as it stands" should watch it go.
+  const [plan, setPlan] = useState<PublicationPlan>(book.plan)
+
   return (
     <form action={action} className="upload-form">
       <input type="hidden" name="bookId" value={book.id} />
@@ -360,27 +366,33 @@ export function BookDetailsForm({
       {plans.length > 1 ? (
         <fieldset className="plan-cards">
           <legend>What should we do with it?</legend>
-          {plans.map((plan) => (
-            <label key={plan} className="plan-card">
-              <input type="radio" name="plan" value={plan} defaultChecked={plan === book.plan} />
+          {plans.map((option) => (
+            <label key={option} className="plan-card">
+              <input
+                type="radio"
+                name="plan"
+                value={option}
+                checked={option === plan}
+                onChange={() => setPlan(option)}
+              />
               <span
                 className={`plan-card__tag${
                   // Follows the default rather than naming a plan, so
                   // the highlight cannot drift away from the option
                   // that is actually pre-selected.
-                  plan === defaultPlanFor(book.sourceKind) ? ' plan-card__tag--recommended' : ''
+                  option === defaultPlanFor(book.sourceKind) ? ' plan-card__tag--recommended' : ''
                 }`}
               >
-                {planCopy(book.sourceKind, plan).tag}
+                {planCopy(book.sourceKind, option).tag}
               </span>
-              <strong>{planCopy(book.sourceKind, plan).label}</strong>
-              <span>{planCopy(book.sourceKind, plan).detail}</span>
+              <strong>{planCopy(book.sourceKind, option).label}</strong>
+              <span>{planCopy(book.sourceKind, option).detail}</span>
               {/* Who else sees the file. Inside the card rather than
                   below the group, so it is read while the choice is
                   being made and cannot be attached to the wrong
                   option. */}
-              {planCopy(book.sourceKind, plan).sends ? (
-                <span className="plan-card__sends">{planCopy(book.sourceKind, plan).sends}</span>
+              {planCopy(book.sourceKind, option).sends ? (
+                <span className="plan-card__sends">{planCopy(book.sourceKind, option).sends}</span>
               ) : null}
             </label>
           ))}
@@ -395,13 +407,22 @@ export function BookDetailsForm({
       )}
 
       {/* **The AI decision is the uploader's.**
-          Offered only where converting is possible at all, because the
-          correction stage runs inside a conversion — on a book being
-          published as it stands there is nothing for it to read, and a
-          checkbox that does nothing is worse than no checkbox.
+          Offered only while converting is actually the chosen plan,
+          because the correction stage runs inside a conversion — on a
+          book being published as it stands there is nothing for it to
+          read, and a checkbox that does nothing is worse than no
+          checkbox. It followed `plansFor` until now, so a PDF showed it
+          beside "publish as it stands", which is the default: the one
+          case where it was offered and could never fire.
+
+          It disappears rather than greying out, and that is the honest
+          shape — an unmounted checkbox posts nothing, so the saved
+          answer for a book published as it stands is no, which is the
+          only answer that can be true of it.
+
           Unchecked by default: a question nobody answered is answered
           no, which is what makes the disclosure above true. */}
-      {plans.includes('convert') ? (
+      {plan === 'convert' ? (
         <label className="ai-consent">
           <input
             type="checkbox"

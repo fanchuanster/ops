@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react'
 
-import { BookTile, type BookTileData } from './BookTile'
+import { BookLine } from './BookLine'
+import type { BookTileData } from './BookTile'
 
 /**
  * One shelf in the library tree: a collection, the books filed directly
@@ -40,6 +41,9 @@ export interface ShelfNode {
  * string: the *state a reader would want to share* stays in the URL,
  * and only the fold — which is a per-reader convenience, not a view —
  * lives in the browser.
+ *
+ * Books are listed as lines — title and author, no cover — since
+ * 2026-09-14. Covers are the homepage's job (`BookLine`).
  *
  * Each node renders only its own books. A parent carries its
  * descendants by containing them visually rather than by absorbing
@@ -122,7 +126,7 @@ function Shelf({
     <section
       className={depth === 0 ? 'shelf shelf--root' : 'shelf shelf--nested'}
       // Each level steps in by one unit; the books under it step in one
-      // further, so a sub-shelf's tiles sit clear of its own heading.
+      // further, so a sub-shelf's books sit clear of its own heading.
       style={{ '--depth': depth } as React.CSSProperties}
     >
       <div className="shelf__head">
@@ -153,9 +157,9 @@ function Shelf({
 
       <div id={panelId} className="shelf__body" hidden={!open}>
         {shelf.books.length > 0 ? (
-          <ul className="shelf__books">
+          <ul className="shelf__lines">
             {shelf.books.map((book) => (
-              <BookTile key={book.id} book={book} />
+              <BookLine key={book.id} book={book} />
             ))}
           </ul>
         ) : null}

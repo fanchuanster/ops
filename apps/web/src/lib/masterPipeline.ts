@@ -46,10 +46,24 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { Payload } from 'payload'
 
-import { exportHasExpired, exportLocaleFor, masterKey, withinSizeLimit } from '../domain/adobe'
+import {
+  MAX_EXPORT_RETRIES,
+  exportHasExpired,
+  exportLocaleFor,
+  isTransientExportFailure,
+  masterKey,
+  withinSizeLimit,
+} from '../domain/adobe'
+import type { ArtifactFormat } from '../domain/conversion'
 import { bookStem } from '../domain/bookStorage'
 import { type CorrectionState, correctionStateForMaster } from '../domain/correction'
-import { type ConversionState, needsMasterRun, stateWithoutExport } from '../domain/pipeline'
+import {
+  type ConversionState,
+  needsMasterRun,
+  releasedExportHandle,
+  stateWithoutExport,
+  statusOnQueue,
+} from '../domain/pipeline'
 import {
   type SourceKind,
   needsExport,
@@ -58,6 +72,12 @@ import {
   readSourceKind,
   resolvePlan,
 } from '../domain/publication'
+import {
+  ADD_SOURCE_ERRORS,
+  type BookSource,
+  canAddSource,
+  readSources,
+} from '../domain/sources'
 import type { Book } from '../payload-types'
 import {
   type AdobeCredentials,
@@ -178,6 +198,65 @@ async function fail(
 }
 
 /**
+ * A failed export: send the book round again, or stop.
+ *
+ * Adobe answers a busy service and an unreadable PDF with the same
+ * `status: failed`, and the only thing separating them is the wording of
+ * the message — so `isTransientExportFailure` reads it, and this decides
+ * what to do about the answer.
+ *
+ * A transient failure puts the book back to `queued` with its export
+ * handle released, which is exactly what a person pressing Try again
+ * produces; the next tick starts a fresh export. A permanent one fails
+ * the book as before. Either way the vendor's own text goes to the log,
+ * because the uploader is shown something they can act on and the
+ * operator needs the request id.
+ *
+ * The retry count is written *after* `releasedExportHandle`, which
+ * resets it: this is the one caller that means to keep a number.
+ *
+ * Returns whether the book was requeued, so the caller can let go of the
+ * Adobe-side asset it is about to upload again.
+ */
+async function failOrRetry(
+  payload: Payload,
+  book: { id: string | number },
+  conversion: Record<string, unknown>,
+  { message, retryable }: { message: string; retryable: boolean },
+): Promise<boolean> {
+  const retries = typeof conversion.exportRetries === 'number' ? conversion.exportRetries : 0
+  logError(`export: book ${book.id} failed after ${retries} retries`, message)
+
+  if (!retryable || retries >= MAX_EXPORT_RETRIES) {
+    await fail(
+      payload,
+      { id: book.id, conversion },
+      retryable
+        ? 'The service that reads scanned pages was busy every time we tried, so this book has not been read yet. Nothing is wrong with your file — try again in a little while.'
+        : message,
+    )
+    return false
+  }
+
+  const attempt = retries + 1
+  await payload.update({
+    collection: 'books',
+    id: book.id,
+    data: {
+      conversion: {
+        ...conversion,
+        state: 'queued' as const,
+        ...releasedExportHandle('queued'),
+        exportRetries: attempt,
+        message: `The service that reads scanned pages was busy, so this book is being sent again (attempt ${attempt + 1} of ${MAX_EXPORT_RETRIES + 1}). Nothing is wrong with your file and there is nothing to do.`,
+      },
+    },
+    overrideAccess: true,
+  })
+  return true
+}
+
+/**
  * Attach a DOCX master to a book and hand it to phase 2.
  *
  * The bytes are in storage before the state moves, so `master_ready`
@@ -258,6 +337,11 @@ async function attachMaster(
         state: 'master_ready',
         exportJob: null,
         exportAsset: null,
+        // The budget is spent per export, not per book: a master that
+        // took two attempts must not leave the next one — a re-master
+        // from a different source (`domain/sources.ts`) — with a single
+        // transient failure between it and `failed`.
+        exportRetries: 0,
         message: null,
         // There is now something for correction to read. Queued only if
         // the uploader asked for it — `correctionStateForMaster` reads
@@ -277,72 +361,253 @@ async function attachMaster(
 }
 
 /**
- * Put the uploaded file under the book, in the slot it occupies.
+ * Copy one uploaded file into the slot it occupies under the book.
  *
  * A PDF upload *is* the book's PDF, a DOCX *is* its master, an EPUB *is*
- * its EPUB — so filing the original is also, for three of the four
- * sources, publishing an artifact. That is what makes "keep the
- * original" free rather than a second copy of everything
- * (`domain/publication.ts`).
+ * its EPUB, a text file *is* its TXT — so filing an original is also
+ * publishing an artifact. That is what makes "keep the original" free
+ * rather than a second copy of everything (`domain/publication.ts`).
  *
- * Text is the exception and gets no artifact: a .txt file is not an
- * edition of anything, and the converter reads it from `sourceKey`.
+ * Returns the artifact list as it now stands and the source entry to
+ * record, or null if the bytes could not be copied. Deliberately writes
+ * nothing itself: the two callers below disagree about what a failure
+ * means — for the book's chosen source it is a failed conversion, for
+ * one being added alongside it is a refused upload and the book is
+ * fine — and about which conversion fields move with it.
  *
- * Idempotent. A book that already has this artifact is left alone — a
- * retry must not overwrite a master an editor has since corrected with
- * the scan it was built from.
+ * Idempotent by the caller's check, not its own: a slot already filled
+ * is never reached, because a retry must not overwrite a master an
+ * editor has since corrected with the scan it was built from.
+ */
+async function fileUnderBook(
+  book: { artifacts?: Book['artifacts'] },
+  {
+    kind,
+    format,
+    sourceKey,
+    filename,
+    anchorFilename,
+  }: {
+    kind: SourceKind
+    format: ArtifactFormat
+    sourceKey: string
+    /** This file's own name, which is what its owner recognises it by. */
+    filename: unknown
+    /**
+     * The name the *book* is stemmed from — always its first upload,
+     * whichever file is being filed. See below.
+     */
+    anchorFilename: unknown
+  },
+): Promise<{ artifacts: NonNullable<Book['artifacts']>; source: BookSource } | null> {
+  const existing = book.artifacts ?? []
+
+  // **The stem is settled by the first object, and only by it.** A book
+  // that has filed anything already reads its stem back off that key
+  // (`bookStem`); only a book with nothing filed reserves one, numbered
+  // if that name is taken (`lib/bookObjects.ts`).
+  //
+  // Re-reserving for a book that has objects would be worse than
+  // redundant. `freeStem` calls a stem taken when *any* key in its
+  // footprint exists, so a second source landing on a book whose name
+  // another book happens to share would be filed under `scan-2` while
+  // the rest of this book stayed `scan` — variations that no longer
+  // agree, which is the one thing the naming scheme exists to prevent.
+  //
+  // Which is also why the stem comes from `anchorFilename` — the book's
+  // *first* upload — and never from the file in hand. A second source
+  // can be added to a book whose first one has not been filed yet (a
+  // book still queued, whose tick has not reached it), and stemming that
+  // one from its own name would mint `notes` while the scan behind it
+  // went on to mint `tao`. One book, two names, and nothing to notice it.
+  const filed = existing.some(
+    (artifact) => typeof artifact.storageKey === 'string' && artifact.storageKey.length > 0,
+  )
+  const wanted = bookStem({ artifacts: existing, sourceFilename: anchorFilename })
+  const stem = filed ? wanted : await freeStem({ wanted, owned: [] })
+
+  const key = originalKey(stem, kind)
+  const size = await copyObject(sourceKey, key, CONTENT_TYPES[kind])
+  if (size === null) return null
+
+  return {
+    artifacts: [
+      ...existing,
+      {
+        format,
+        storageKey: key,
+        bytes: size,
+        // The DOCX master is the editorial source of truth, never a
+        // reader download (CLAUDE.md section 5) — which is exactly what
+        // a DOCX upload becomes.
+        downloadable: format !== 'docx',
+      },
+    ],
+    source: {
+      kind,
+      storageKey: key,
+      filename: typeof filename === 'string' ? filename : '',
+      bytes: size,
+      addedAt: new Date().toISOString(),
+    },
+  }
+}
+
+/**
+ * `status` for a book that has just gained an artifact.
  *
- * Returns the book's artifacts as they now stand, or null if the book
- * has been failed. Returning them rather than a boolean is deliberate:
- * the caller goes on to attach a master, and doing that from the list it
- * read *before* this ran would delete the original it just filed.
+ * Written with the artifacts, in the same update, because it is the
+ * same fact: `status` says whether there is an edition to read, and for
+ * three of the four sources the file just filed *is* one
+ * (`statusOnQueue`). A book in the middle of a conversion was left at
+ * `in_production` regardless, so an administrator who approved it
+ * published a book the catalog query then refused to list — for the
+ * length of the conversion, and for ever on a deployment whose export
+ * never runs.
+ *
+ * Only ever upwards. A book that already has an edition is already
+ * `published`, and nothing here can move one back.
+ */
+function statusFor(artifacts: NonNullable<Book['artifacts']>): { status?: 'published' } {
+  return statusOnQueue(artifacts.map((artifact) => artifact.format)) === 'published'
+    ? { status: 'published' }
+    : {}
+}
+
+/**
+ * Put the book's **chosen** source under the book.
+ *
+ * Returns the artifacts and the conversion group as they now stand, or
+ * null if the book has been failed. Returning both rather than a boolean
+ * is what keeps the callers correct: each of them goes on to write the
+ * conversion group, and doing that from the copy it read *before* this
+ * ran would undo the source list and the redirected `sourceKey` below.
+ *
+ * ## Why `sourceKey` moves
+ *
+ * The upload lands at `conversion/{job}/input/...`, which the R2
+ * lifecycle rule sweeps after 30 days, and until now that is where
+ * `conversion.sourceKey` went on pointing forever. The bytes were safe —
+ * they are copied here — but the *pointer* was not, so a text book that
+ * sat in the queue past a month would be handed to the runner with a
+ * source key resolving to nothing (`runMaster`). Repointing it at the
+ * copy costs nothing and is the only version of this that stays true.
  */
 async function fileOriginal(
   payload: Payload,
   book: { id: string | number; conversion?: unknown; artifacts?: Book['artifacts'] },
   { conversion, kind }: { conversion: Record<string, unknown>; kind: SourceKind },
-): Promise<Book['artifacts'] | null> {
+): Promise<{
+  artifacts: NonNullable<Book['artifacts']>
+  conversion: Record<string, unknown>
+} | null> {
   const format = originalArtifact(kind)
   const existing = book.artifacts ?? []
-  if (!format) return existing
-  if (existing.some((artifact) => artifact.format === format)) return existing
+  if (!format) return { artifacts: existing, conversion }
+  if (existing.some((artifact) => artifact.format === format)) {
+    return { artifacts: existing, conversion }
+  }
 
-  const sourceKey = conversion.sourceKey as string
-  // The first object this book files, so this is where its stem is
-  // decided — from the name of the uploaded file, numbered if that name
-  // is already taken. Everything else the book owns is named from the
-  // key this writes (`domain/bookStorage.ts`).
-  const stem = await freeStem({
-    wanted: bookStem({ artifacts: existing, sourceFilename: conversion.sourceFilename }),
-    owned: existing.map((artifact) => artifact.storageKey),
+  const filed = await fileUnderBook(book, {
+    kind,
+    format,
+    sourceKey: conversion.sourceKey as string,
+    filename: conversion.sourceFilename,
+    anchorFilename: conversion.sourceFilename,
   })
-  const key = originalKey(stem, kind)
-  const size = await copyObject(sourceKey, key, CONTENT_TYPES[kind])
-  if (size === null) {
+  if (!filed) {
     await fail(payload, book, 'The uploaded file could not be read from storage.')
     return null
   }
 
-  const artifacts = [
-    ...existing,
-    {
-      format,
-      storageKey: key,
-      bytes: size,
-      // The DOCX master is the editorial source of truth, never a
-      // reader download (CLAUDE.md section 5) — which is exactly what a
-      // DOCX upload becomes.
-      downloadable: format !== 'docx',
-    },
+  // Composed from `readSources`, never from the stored array, because a
+  // book whose only source predates the list has an empty array and a
+  // perfectly real source. Appending to the array would lose it
+  // (`domain/sources.ts`).
+  const sources = [
+    // Against the artifacts as they were *before* this one was filed,
+    // which is where the pre-existing sources actually live. Passing the
+    // list is what repoints a legacy entry away from the `conversion/`
+    // key it was uploaded to (`readSources`).
+    ...readSources(conversion, existing).filter((source) => source.kind !== kind),
+    filed.source,
   ]
+
+  const next = {
+    ...conversion,
+    sources,
+    sourceKey: filed.source.storageKey,
+  }
 
   await payload.update({
     collection: 'books',
     id: book.id,
-    data: { artifacts },
+    data: { artifacts: filed.artifacts, conversion: next, ...statusFor(filed.artifacts) },
     overrideAccess: true,
   })
-  return artifacts
+  return { artifacts: filed.artifacts, conversion: next }
+}
+
+/**
+ * Add a second file to a book that already has one.
+ *
+ * The portal's other door (`api/upload/route.ts` with a `book`
+ * parameter). It files the new original exactly as the first one was
+ * filed, and then stops: **nothing about the conversion changes.** The
+ * master is still built from whatever the owner chose, this book is not
+ * re-queued, and no quota is spent. Choosing to build from the new file
+ * is a separate act with a separate cost (`actions/sources.ts`).
+ *
+ * That separation is the point. Uploading a transcription beside a scan
+ * should be free and reversible; committing to master from it should
+ * not be silent.
+ *
+ * Returns a message on refusal and null on success — the caller is an
+ * HTTP route, and the only thing it needs back is what to tell the
+ * person who chose the file.
+ */
+export async function addSourceToBook(
+  payload: Payload,
+  book: Book,
+  { kind, sourceKey, filename }: { kind: SourceKind; sourceKey: string; filename: string },
+): Promise<string | null> {
+  const conversion = (book.conversion ?? {}) as Record<string, unknown>
+  const decision = canAddSource({
+    kind,
+    existingFormats: (book.artifacts ?? []).map((artifact) => artifact.format),
+  })
+  if (!decision.allowed) return ADD_SOURCE_ERRORS[decision.reason]
+
+  const filed = await fileUnderBook(book, {
+    kind,
+    format: decision.slot,
+    sourceKey,
+    filename,
+    // The book's own name, not this file's. See `fileUnderBook`.
+    anchorFilename: conversion.sourceFilename,
+  })
+  // Not a failed book. The conversion this book is actually running is
+  // untouched by an upload that did not arrive, so failing it here would
+  // break something that was working over something that was optional.
+  if (!filed) return 'That file could not be stored. Please try again.'
+
+  await payload.update({
+    collection: 'books',
+    id: book.id,
+    data: {
+      artifacts: filed.artifacts,
+      conversion: {
+        ...conversion,
+        sources: [
+          ...readSources(conversion, book.artifacts).filter((source) => source.kind !== kind),
+          filed.source,
+        ],
+      },
+      ...statusFor(filed.artifacts),
+    },
+    overrideAccess: true,
+  })
+  return null
 }
 
 const CONTENT_TYPES: Record<SourceKind, string> = {
@@ -435,7 +700,11 @@ async function startMasterFor(
   book: Book,
   credentials: AdobeCredentials | null,
 ): Promise<boolean> {
-  const conversion = (book.conversion ?? {}) as Record<string, unknown>
+  // Reassigned once, by the filing below. `fileOriginal` writes the
+  // source list and repoints `sourceKey` at the copy it made, and every
+  // update after this point spreads the group — so going on to use the
+  // copy read before it would silently undo both.
+  let conversion = (book.conversion ?? {}) as Record<string, unknown>
   const sourceKey = typeof conversion.sourceKey === 'string' ? conversion.sourceKey : ''
 
   if (!sourceKey) {
@@ -461,8 +730,10 @@ async function startMasterFor(
   // to lives under `conversion/`, which the R2 lifecycle rule sweeps
   // after 30 days. An original left there would quietly disappear from
   // a published book a month after it was published.
-  const artifacts = await fileOriginal(payload, book, { conversion, kind })
-  if (artifacts === null) return true
+  const filed = await fileOriginal(payload, book, { conversion, kind })
+  if (filed === null) return true
+  const artifacts = filed.artifacts
+  conversion = filed.conversion
 
   // Nothing to send to Adobe. Where the book goes next is entirely a
   // question of what its source already is:
@@ -572,11 +843,15 @@ async function startMasterFor(
     })
     return true
   } catch (error) {
-    await fail(
-      payload,
-      book,
-      error instanceof Error ? error.message : 'The conversion could not be started.',
-    )
+    // Submitting is as capable of hitting a busy service as polling is,
+    // and here the book has almost certainly not been billed yet —
+    // everything before `startExport` fails free. So the same rule
+    // applies: a recognised transient fault goes round again, anything
+    // else fails the book and waits for a person.
+    await failOrRetry(payload, book, conversion, {
+      message: error instanceof Error ? error.message : 'The conversion could not be started.',
+      retryable: isTransientExportFailure(error instanceof Error ? error.message : null),
+    })
     return true
   }
 }
@@ -616,16 +891,31 @@ export async function advanceRunningMaster(
     if (outcome.state === 'running') {
       // Adobe's assets expire after a day, so a job still running well
       // past any real book will never produce a file we could fetch.
-      // Failing it frees the poll to move on to the next book.
+      // Letting go of it frees the poll to move on to the next book.
+      //
+      // Retryable, and for the same reason a timeout is: a job that hung
+      // says nothing about the file, and this is the one failure we
+      // diagnose ourselves rather than reading it off a message.
       if (exportHasExpired(conversion.exportStartedAt as string | null, Date.now())) {
-        await fail(payload, book, 'The conversion did not finish in time. Please try again.')
+        const retried = await failOrRetry(payload, book, conversion, {
+          message: 'The conversion did not finish in time.',
+          retryable: true,
+        })
+        if (retried && assetID) await deleteAsset(credentials, token, assetID)
         return true
       }
       return false
     }
 
     if (outcome.state === 'failed') {
-      await fail(payload, book, outcome.message ?? 'The pages could not be read.')
+      const retried = await failOrRetry(payload, book, conversion, {
+        message: outcome.message ?? 'The pages could not be read.',
+        retryable: outcome.retryable === true,
+      })
+      // The next attempt uploads the same bytes from R2, so this copy is
+      // of no further use. Best effort, as everywhere: Adobe expires it
+      // within a day anyway.
+      if (retried && assetID) await deleteAsset(credentials, token, assetID)
       return true
     }
 
@@ -652,11 +942,29 @@ export async function advanceRunningMaster(
     if (assetID) await deleteAsset(credentials, token, assetID)
     return attached
   } catch (error) {
-    await fail(
-      payload,
-      book,
-      error instanceof Error ? error.message : 'The converted file could not be read.',
-    )
+    const message = error instanceof Error ? error.message : 'The converted file could not be read.'
+
+    // A transient fault *while polling* is the cheapest kind to survive:
+    // the export itself is untouched and its job URL is still good, so
+    // the book stays in `ocr` and the next tick simply asks again. Doing
+    // what a `failed` status does here — requeueing — would throw away a
+    // running export and pay for it a second time because Adobe's token
+    // endpoint had a bad minute.
+    //
+    // The expiry check comes first because it is the only thing bounding
+    // this: every path that would otherwise notice a stuck job lives
+    // after the call that just threw, so an endpoint failing every time
+    // would leave the book polling for ever.
+    const expired = exportHasExpired(conversion.exportStartedAt as string | null, Date.now())
+    if (!expired && isTransientExportFailure(message)) {
+      logError(`export: book ${book.id} could not be polled`, error)
+      return false
+    }
+
+    await failOrRetry(payload, book, conversion, {
+      message,
+      retryable: expired || isTransientExportFailure(message),
+    })
     return true
   }
 }
@@ -687,25 +995,37 @@ export async function advanceMasterPipeline(payload: Payload): Promise<void> {
 }
 
 /**
- * Finish a book that has nothing to export, without waiting for anyone.
+ * Do everything a queued book can have done for it in this request.
  *
- * The pipeline's clock is the converter's poll (see the header), which
- * is the right answer for work a converter has to do and the wrong one
- * for work nobody has to do. A PDF published as it stands, or an EPUB
- * upload, needs no export, no rendering and no converter — and yet it
- * sat at `queued` until some converter polled, on a deployment where
- * none was running and none was needed. The book could not be read, not
- * submitted for review, and not published: "there is nothing to review
- * yet", about a book whose file was sitting right there.
+ * Two things, and the first one is for every book:
  *
- * So the details form calls this directly. Filing an original is an R2
- * copy — I/O, not computation — which is exactly the shape of work a
- * Worker is supposed to do inline.
+ *   - **File the original under the book.** An R2 copy — I/O, not
+ *     computation, exactly the shape of work a Worker should do inline.
+ *   - **Finish the book, if nothing has to be converted.** A PDF
+ *     published as it stands, or an EPUB upload, needs no export, no
+ *     rendering and no worker at all.
  *
- * Returns true if the book was settled. Never throws: this runs after
- * the uploader's details have already been saved, and a failure here
- * must not turn a successful save into an error. The book stays
- * `queued`, which the pipeline tick will pick up later.
+ * The pipeline's clock is a cron tick (see the header), which is the
+ * right answer for work somebody has to do and the wrong one for work
+ * nobody has to do: such a book sat at `queued` until a tick reached it,
+ * unreadable, unsubmittable and unpublished — "there is nothing to
+ * review yet", about a file sitting right there.
+ *
+ * Filing the original is here for the same reason, and for every source
+ * rather than only the ones that can be finished. A book being
+ * converted had no artifact until the tick picked it up, so its owner
+ * was told "Waiting to be converted" and offered nothing to read —
+ * while the file they had just uploaded was already in storage, and
+ * *is* the book's own PDF or text (`domain/publication.ts`). Filing it
+ * now costs a copy and makes the wait readable; the export, when it
+ * comes, only adds a master beside it.
+ *
+ * Returns true if the book was *settled* — moved out of `queued`. A
+ * book waiting on an export files its original and returns false, which
+ * is not an error. Never throws either: this runs after the uploader's
+ * details have already been saved, and a failure here must not turn a
+ * successful save into an error. The book stays `queued`, which the
+ * pipeline tick will pick up later.
  */
 export async function settleQueuedBook(
   payload: Payload,
@@ -719,19 +1039,27 @@ export async function settleQueuedBook(
       overrideAccess: true,
     })
 
-    const conversion = (book.conversion ?? {}) as Record<string, unknown>
+    // Reassigned by the filing below, for the reason `startMasterFor`
+    // gives: it writes the source list and repoints `sourceKey`, and the
+    // update after it spreads the whole group.
+    let conversion = (book.conversion ?? {}) as Record<string, unknown>
     if (conversion.state !== 'queued') return false
 
     const kind = readSourceKind(conversion)
     const plan = resolvePlan(kind, conversion.plan)
 
-    // Anything needing Adobe is left to the tick, which owns the whole
-    // export lifecycle — including the polling and the timeout.
-    if (needsExport(kind, plan)) return false
     if (typeof conversion.sourceKey !== 'string' || !conversion.sourceKey) return false
 
-    const artifacts = await fileOriginal(payload, book, { conversion, kind })
-    if (artifacts === null) return false
+    // First, and for every source. A book waiting on an export is
+    // waiting with something to read.
+    const filed = await fileOriginal(payload, book, { conversion, kind })
+    if (filed === null) return false
+    conversion = filed.conversion
+
+    // The state, though, is the tick's to move for anything needing
+    // Adobe: it owns the whole export lifecycle, including the polling
+    // and the timeout.
+    if (needsExport(kind, plan)) return false
 
     const state = stateWithoutExport(kind, plan)
     await payload.update({

@@ -766,6 +766,68 @@ export const Books: CollectionConfig = {
           ],
         },
         {
+          /**
+           * Every file this book was made from, not just the one the
+           * pipeline is reading.
+           *
+           * A book may hold a scan *and* a transcription of it, and
+           * which one its DOCX master is built from is a choice its
+           * owner makes on their own book page
+           * (`domain/sources.ts`). `sourceKind` and `sourceKey` below
+           * name the one currently chosen; this names all of them.
+           *
+           * Stored rather than derived from `artifacts`, because that
+           * list cannot answer the question: a `docx` is sometimes an
+           * upload and sometimes Adobe's, an `epub` sometimes an upload
+           * and sometimes phase 2's. Only `pdf` and `txt` are
+           * unambiguous, and a rule that worked for half the formats
+           * would be worse than no rule.
+           *
+           * Empty on every book uploaded before this existed, and on
+           * every draft — a source is recorded when it is *filed* under
+           * the book, which happens as the book leaves `draft`. Nothing
+           * was backfilled: `readSources` synthesizes the single entry
+           * from the three fields below when the list is empty, which
+           * is exactly what such a book has.
+           */
+          name: 'sources',
+          type: 'array',
+          admin: {
+            readOnly: true,
+            description:
+              'The uploaded originals, one per format. The master is built from whichever the owner has chosen; see domain/sources.ts.',
+          },
+          fields: [
+            {
+              name: 'kind',
+              type: 'select',
+              required: true,
+              options: [
+                { label: 'PDF', value: 'pdf' },
+                { label: 'DOCX', value: 'docx' },
+                { label: 'EPUB', value: 'epub' },
+                { label: 'Plain text', value: 'text' },
+              ],
+            },
+            {
+              name: 'storageKey',
+              type: 'text',
+              required: true,
+              admin: {
+                description:
+                  'Under the book, never the conversion/ key it was uploaded to — that prefix is swept after 30 days.',
+              },
+            },
+            {
+              name: 'filename',
+              type: 'text',
+              admin: { description: 'The uploader\u2019s own name for it, which is what they recognise it by.' },
+            },
+            { name: 'bytes', type: 'number' },
+            { name: 'addedAt', type: 'date' },
+          ],
+        },
+        {
           name: 'sourceKind',
           type: 'select',
           options: [
@@ -777,13 +839,17 @@ export const Books: CollectionConfig = {
           admin: {
             readOnly: true,
             description:
-              'What was uploaded. Decides which formats phase 2 can build at all — a PDF source already has its PDF, so only the EPUB is generated.',
+              'Which of the sources above the master is built from. Decides which formats phase 2 can build at all \u2014 a PDF source already has its PDF, so only the EPUB is generated.',
           },
         },
         {
           name: 'sourceKey',
           type: 'text',
-          admin: { readOnly: true, description: 'The uploaded original in object storage.' },
+          admin: {
+            readOnly: true,
+            description:
+              'The chosen source in object storage. Points at the conversion/ key while the book is a draft and at the book\u2019s own key once it is filed \u2014 the two hold the same bytes, but only the second outlives the 30-day sweep.',
+          },
         },
         { name: 'sourceFilename', type: 'text', admin: { readOnly: true } },
         {
@@ -822,6 +888,16 @@ export const Books: CollectionConfig = {
             readOnly: true,
             description:
               'When the export was submitted. Adobe expires assets after a day, so a job still running long past this can never be collected and the book is failed instead of polled forever.',
+          },
+        },
+        {
+          name: 'exportRetries',
+          type: 'number',
+          defaultValue: 0,
+          admin: {
+            readOnly: true,
+            description:
+              'How many times the pipeline has re-submitted this export after a transient Adobe failure. Bounded by MAX_EXPORT_RETRIES, and reset to 0 whenever a person re-queues the book by hand.',
           },
         },
         {

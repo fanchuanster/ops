@@ -84,6 +84,10 @@ export default async function FrontendLayout({ children }: { children: React.Rea
               <p className="site-footer__note">
                 Reviewed by an editor before joining the public library.
               </p>
+              <p className="site-footer__contact">
+                Contact us —{' '}
+                <a href="mailto:noblesee0077@gmail.com">noblesee0077@gmail.com</a>
+              </p>
               <p style={{ margin: 0 }}>© {new Date().getFullYear()} NobleSee</p>
             </div>
           </div>

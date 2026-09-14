@@ -9,6 +9,7 @@ import { CoverPagePicker } from '../../../../../components/CoverPagePicker'
 import { MakeCoverButton } from '../../../../../components/MakeCoverButton'
 import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
 import { BookActions } from '../../../../../components/BookActions'
+import { BookSources } from '../../../../../components/BookSources'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
 import { CorrectionReview } from '../../../../../components/CorrectionReview'
 import { MasterFile } from '../../../../../components/MasterFile'
@@ -29,8 +30,9 @@ import {
   readCorrectionState,
 } from '../../../../../domain/correction'
 import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
-import { uploadStep } from '../../../../../domain/pipeline'
+import { isConversionState, isInFlight, uploadStep } from '../../../../../domain/pipeline'
 import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
+import { readSources } from '../../../../../domain/sources'
 import { shareDescription } from '../../../../../domain/uploaderShare'
 import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
 import { loadSuggestions } from '../../../actions/correction'
@@ -111,6 +113,12 @@ export default async function BookDetailsPage({
   const sourceKind = readSourceKind(book.conversion ?? {})
   const plan = resolvePlan(sourceKind, book.conversion?.plan)
   const share = shareDescription(book.rightsStatus)
+
+  // Every file this book was made from, which for most books is the one
+  // it was uploaded as. The list is synthesized from the three `source*`
+  // fields when nothing has been filed yet, so a draft shows its file
+  // here exactly as a converted book does (`domain/sources.ts`).
+  const sources = readSources(book.conversion ?? {}, book.artifacts)
 
   // The face the book will wear on a shelf. Shown here because until
   // now the one person who never saw it was the person who uploaded it:
@@ -315,6 +323,21 @@ export default async function BookDetailsPage({
               </div>
             </div>
           </section>
+
+          {/* Before the master, because it is what the master is built
+              from — and because the answer to "the OCR got this wrong"
+              is frequently a different source rather than a corrected
+              master. */}
+          <BookSources
+            bookId={Number(book.id)}
+            sources={sources}
+            selected={sourceKind}
+            hasMaster={hasMaster}
+            // Switching mid-flight would compare-and-swap against a
+            // state a worker is holding. The control waits rather than
+            // racing it.
+            converting={isConversionState(state) && isInFlight(state)}
+          />
 
           <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />
 

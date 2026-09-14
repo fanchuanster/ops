@@ -354,8 +354,7 @@ export function BookEditPanel({
             const confirmed = window.confirm(
               `Delete “${book.title}”?\n\n` +
                 'This removes the uploaded file, the DOCX master, every format made ' +
-                'from it and the cover. It cannot be undone.\n\n' +
-                'A book readers have spent credits on cannot be deleted at all.',
+                'from it and the cover. It cannot be undone.',
             )
             if (!confirmed) event.preventDefault()
           }}

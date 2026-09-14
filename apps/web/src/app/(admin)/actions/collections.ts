@@ -193,7 +193,13 @@ export async function saveCollection(
   }
 
   revalidateCollections()
-  return {}
+  // An `ok` is what closes the card. `useOnSaved` fires on it and
+  // nothing else, so returning a bare `{}` here left the form sitting
+  // open over a row that had already saved — indistinguishable, to the
+  // editor, from a save that had not happened. Nothing renders this
+  // string: the tree behind the form reads back the new name, parent
+  // and order, which is the confirmation that matters.
+  return { ok: 'Saved.' }
 }
 
 /**

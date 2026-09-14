@@ -226,3 +226,44 @@ export function checkKindleDelivery({
 
   return { ok: true, address: address.address }
 }
+
+/**
+ * The subject line that asks Amazon to convert the attachment.
+ *
+ * Send to Kindle reads the subject, not the body: the single word
+ * `Convert` tells it to run the document through Amazon's own
+ * conversion rather than delivering the file as it stands. It is their
+ * magic word, not ours — hence a constant, so the two places that need
+ * it (the transport and the label explaining it) cannot drift.
+ *
+ * Case is theirs too. Amazon documents it capitalised and there is no
+ * value in testing whether they fold it.
+ */
+export const KINDLE_CONVERT_SUBJECT = 'Convert'
+
+/**
+ * What goes in the subject line of a delivery.
+ *
+ * Ordinarily the filename, which is what a reader sees in their Kindle
+ * library's delivery notice and in their own mail. Asking for
+ * conversion costs that: the subject is Amazon's instruction slot, so
+ * the two cannot both be said. That trade is the reader's to make,
+ * which is why it is a second button rather than something the site
+ * decides for them.
+ *
+ * Offered for every deliverable format rather than only the ones we
+ * guess would benefit. A PDF is the obvious case — converted, it
+ * reflows instead of arriving as fixed pages — but Amazon's handling of
+ * EPUB and text has changed more than once, and a reader whose book
+ * arrived wrong is better served by being able to try the other way
+ * than by our table of what should have worked.
+ */
+export function kindleSubject({
+  filename,
+  convert,
+}: {
+  filename: string
+  convert?: boolean
+}): string {
+  return convert ? KINDLE_CONVERT_SUBJECT : filename
+}

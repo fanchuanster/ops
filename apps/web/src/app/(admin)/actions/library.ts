@@ -172,9 +172,7 @@ function revalidateLibrary() {
  *
  * The library's own withdrawal. `canDeleteUpload` decides it, the same
  * function the reader's own delete goes through — an administrator is
- * excused the ownership gate and is not excused the entitlement one,
- * because that gate protects a reader who paid rather than the
- * uploader.
+ * excused the ownership gate, which is the only gate there is.
  *
  * Everything else mirrors `actions/manageBook.ts` deliberately: the
  * keys are read before the row goes, since afterwards there is nothing
@@ -201,27 +199,7 @@ export async function deleteLibraryBook(
   const ownerId = typeof book.owner === 'object' && book.owner ? book.owner.id : book.owner
   const isOwner = Boolean(ownerId && String(ownerId) === String(admin.id))
 
-  // Anyone other than the uploader holding an entitlement means credits
-  // were spent on this book. An administrator deleting their own upload
-  // is asked the same question as any other uploader, which is why the
-  // owner is excluded from the query rather than the whole ledger being
-  // counted.
-  const bought = await payload.find({
-    collection: 'entitlements',
-    where: ownerId
-      ? { and: [{ book: { equals: bookId } }, { user: { not_equals: ownerId } }] }
-      : { book: { equals: bookId } },
-    limit: 1,
-    depth: 0,
-    overrideAccess: true,
-  })
-
-  const decision = canDeleteUpload({
-    isOwner,
-    isAdmin: true,
-    boughtByOthers: bought.docs.length > 0,
-    isPublic: book.visibility === 'public',
-  })
+  const decision = canDeleteUpload({ isOwner, isAdmin: true })
   if (!decision.allowed) return { error: ADMIN_DELETION_ERRORS[decision.reason] }
 
   // A Set because the chosen candidate is named twice — once as the

@@ -235,7 +235,16 @@ __marimo__/
 .diag2
 
 # Next.js / Payload
-apps/web/node_modules/
+#
+# `node_modules/` is the one rule here that is deliberately NOT anchored,
+# despite the block above. The reason that block anchors is that several
+# of its names — `lib/`, `parts/`, `downloads/` — are ordinary words a
+# monorepo uses for source. This one never is: nothing but a package
+# manager writes a directory by that name, and an install can land at the
+# root, in a workspace, or nested inside another package. Anchored to
+# apps/web alone, the root one showed up as untracked and was one
+# `git add -A` away from being committed.
+node_modules/
 apps/web/.next/
 apps/web/src/payload-types.ts
 apps/web/tsconfig.tsbuildinfo

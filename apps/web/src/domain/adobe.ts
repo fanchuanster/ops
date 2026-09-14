@@ -102,6 +102,57 @@ export interface ExportOutcome {
   downloadUri?: string
   /** Present only when `failed`. */
   message?: string
+  /**
+   * Present only when `failed`: whether sending the same file again is
+   * worth doing. See `isTransientExportFailure`.
+   */
+  retryable?: boolean
+}
+
+/**
+ * How many times the pipeline re-submits an export on its own.
+ *
+ * Three submissions in total, then the book fails and waits for a
+ * person. The number is small because every submission is a document
+ * transaction per 50 pages — a 400-page book is 8 of a monthly 500 —
+ * and because a fault that survives three attempts is not the kind that
+ * waiting cures.
+ *
+ * A *person* pressing Try again starts a fresh budget, which is
+ * `releasedExportHandle` clearing the count (`domain/pipeline.ts`).
+ * That is deliberate: an automatic retry is the pipeline guessing, and
+ * a manual one is somebody deciding.
+ */
+export const MAX_EXPORT_RETRIES = 2
+
+/**
+ * Is this failure about the moment rather than about the file?
+ *
+ * Adobe fails an export for two quite different reasons and reports
+ * both the same way. A PDF it cannot read fails identically every time
+ * it is sent, and re-sending it buys nothing but another transaction.
+ * A service that was busy — “The operation has timed out, please try
+ * after some time.”, in Adobe’s own wording — fails a file that is
+ * perfectly good, and leaving *that* book in `failed` puts a fault of
+ * ours in front of the uploader as though their scan were at fault.
+ *
+ * Recognised transience only, never the reverse. An unfamiliar message
+ * is treated as permanent and fails the book, because the cost of the
+ * two mistakes is not symmetric: failing a book that would have
+ * succeeded costs a person one click on Try again, and retrying a book
+ * that can never succeed costs the transactions three times over, on
+ * every such book, for ever.
+ */
+export function isTransientExportFailure(message: string | null | undefined): boolean {
+  if (!message) return false
+  const text = message.toLowerCase()
+  return (
+    /timed out|timeout/.test(text) ||
+    // Adobe's own instruction, which is the clearest signal it gives.
+    /try (again|later|after)|please retry/.test(text) ||
+    /too many requests|rate limit|throttl/.test(text) ||
+    /temporarily unavailable|service unavailable|internal server error/.test(text)
+  )
 }
 
 /**
@@ -125,7 +176,7 @@ export function readExportStatus(body: unknown): ExportOutcome {
       typeof error === 'object' && error !== null && typeof (error as { message?: unknown }).message === 'string'
         ? (error as { message: string }).message
         : 'Adobe could not read this PDF.'
-    return { state: 'failed', message }
+    return { state: 'failed', message, retryable: isTransientExportFailure(message) }
   }
 
   if (status === 'done') {
@@ -135,7 +186,14 @@ export function readExportStatus(body: unknown): ExportOutcome {
         ? (asset as { downloadUri: string }).downloadUri
         : ''
     if (uri.length === 0) {
-      return { state: 'failed', message: 'Adobe reported the export finished but returned no file.' }
+      // Not retryable. The job ran to completion and Adobe says so; the
+      // missing file is a fault we cannot reach from here, and sending
+      // the same pages again is unlikely to produce a different answer.
+      return {
+        state: 'failed',
+        message: 'Adobe reported the export finished but returned no file.',
+        retryable: false,
+      }
     }
     return { state: 'done', downloadUri: uri }
   }

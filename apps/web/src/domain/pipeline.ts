@@ -31,6 +31,7 @@ import {
   type SourceKind,
   formatsToGenerate,
   needsConverter,
+  readingFormat,
 } from './publication'
 
 export const CONVERSION_STATES = [
@@ -207,6 +208,35 @@ export function stateWithoutExport(kind: SourceKind, plan: PublicationPlan): Con
   return kind === 'text' ? 'ocr_ready' : 'master_ready'
 }
 
+/**
+ * The `status` a book takes when it enters the queue.
+ *
+ * `status` is not a permission. Who may see a book is `visibility` and
+ * the review gate; `status` says whether there is a finished edition
+ * here, which is why the catalog query and `authorizeDownload` both
+ * look for `published`. So the only question this asks is whether the
+ * book has something to read *right now*.
+ *
+ * That distinction was lost for a book re-entering the queue, and it
+ * took the book out of the library. Publishing a PDF as it stands is
+ * the default (`defaultPlanFor`), so "convert it after all" is the
+ * ordinary road to an EPUB and it is taken on a book that is already
+ * published, public and being read. Converting *adds* an EPUB on top of
+ * the PDF readers already have — it removes nothing — and yet the book
+ * dropped out of `published` for the length of the conversion, which on
+ * a deployment whose export never runs is for ever.
+ *
+ * A book with nothing filed is still `in_production`, which is the
+ * honest answer: there is no edition yet. Its owner can read it as soon
+ * as the original is filed regardless, because ownership does not go
+ * through `status` (`gateBook` in `lib/authorizeDownload.ts`).
+ */
+export function statusOnQueue(
+  existingFormats: readonly string[],
+): 'in_production' | 'published' {
+  return readingFormat(existingFormats) === null ? 'in_production' : 'published'
+}
+
 export function hasMaster(state: ConversionState): boolean {
   return state === 'master_ready' || state === 'formatting' || state === 'ready'
 }
@@ -335,6 +365,50 @@ export function needsMasterRun({
 }): boolean {
   if (state !== 'queued') return false
   return !exportJob
+}
+
+/**
+ * The export handle a book keeps when it is put back into a state.
+ *
+ * The counterpart of `needsMasterRun`, and the reason it needs one: the
+ * only thing that ever cleared `exportJob` was `attachMaster`, which
+ * runs on success. Every failure path spreads the stored conversion
+ * unchanged, so a book that failed after Adobe accepted its job kept the
+ * job URL — and then `needsMasterRun` refused to start it, for ever,
+ * with no message and nothing in the log. `advanceRunningMaster` only
+ * looks at `ocr`, so neither half of phase 1 owned it. "Waiting to be
+ * converted", permanently.
+ *
+ * Clearing it is keyed on the destination state and only `queued`
+ * qualifies, which is not caution but correctness: `startMasterFor`
+ * writes the state and the handle in one update, so a *live* export is
+ * always `ocr` and `queued` with a handle is always stale. Clearing
+ * unconditionally would orphan a job we have already paid for the
+ * moment somebody saved a title while the export was running.
+ *
+ * The automatic retry budget goes with it, and that is the substantive
+ * part rather than tidying. `MAX_EXPORT_RETRIES` bounds what the
+ * pipeline will re-submit *on its own* after a transient Adobe failure
+ * (`domain/adobe.ts`); a person pressing Try again is not the pipeline
+ * guessing again, it is somebody deciding, and they are entitled to a
+ * fresh budget. Left uncleared, a book that had exhausted its retries
+ * would be manually requeued into a state where the next timeout failed
+ * it instantly.
+ *
+ * The auto-retry path spreads this too, and then writes its own count
+ * after it — so the one caller that means to keep a number says so.
+ *
+ * Returns the fields to merge, so a caller can spread it over whatever
+ * else it is writing rather than restating the shape.
+ */
+export function releasedExportHandle(state: ConversionState): {
+  exportJob?: null
+  exportAsset?: null
+  exportStartedAt?: null
+  exportRetries?: number
+} {
+  if (state !== 'queued') return {}
+  return { exportJob: null, exportAsset: null, exportStartedAt: null, exportRetries: 0 }
 }
 
 /** The four steps the design's upload flow shows across the top. */

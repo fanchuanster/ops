@@ -5,7 +5,12 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
-import { checkKindleAddress, checkKindleDelivery, tooLargeMessage } from '../../../domain/kindle'
+import {
+  checkKindleAddress,
+  checkKindleDelivery,
+  kindleSubject,
+  tooLargeMessage,
+} from '../../../domain/kindle'
 import { getCurrentUser } from '../../../lib/auth'
 import { authorizeDownload, chargeForDelivery } from '../../../lib/authorizeDownload'
 import { kindleTransport } from '../../../lib/kindle/transport'
@@ -38,6 +43,8 @@ export type KindleState = {
   error?: string
   notice?: string
   sent?: boolean
+  /** Whether the send asked Amazon to convert it, for the label. */
+  converted?: boolean
   /** Credits this send cost, so the button can say what was spent. */
   spent?: number
   /** The reader's balance afterwards, for the next confirmation. */
@@ -92,6 +99,10 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
 
   const bookId = String(formData.get('bookId') || '')
   const format = String(formData.get('format') || 'epub')
+  // Set by the second button in the split control. The submitter's own
+  // name/value is what distinguishes the two sends, so an ordinary
+  // click cannot ask for conversion by accident.
+  const convert = formData.get('convert') === '1'
   if (!bookId) return { error: 'Nothing to send.' }
 
   const { env } = await getCloudflareContext({ async: true })
@@ -166,7 +177,9 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
 
   const result = await transport!.send({
     to: eligibility.address,
-    subject: decision.filename,
+    // Amazon reads the subject as an instruction, so asking for
+    // conversion spends the line the filename would otherwise have.
+    subject: kindleSubject({ filename: decision.filename, convert }),
     attachment: { filename: decision.filename, content: bytes },
   })
 
@@ -192,6 +205,7 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
   // whole message. A line of prose next to it said the same thing twice.
   return {
     sent: true,
+    converted: convert,
     spent: decision.cost,
     balance: Math.max(0, (user.credits ?? 0) - decision.cost),
   }

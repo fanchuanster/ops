@@ -8,9 +8,12 @@ import {
   defaultPlanFor,
   sourceKindOf,
 } from '../../../../domain/publication'
+import { ADD_SOURCE_ERRORS, canAddSource } from '../../../../domain/sources'
+import type { Book } from '../../../../payload-types'
 import { getCurrentUser } from '../../../../lib/auth'
 import { extractMetadata, r2Source } from '../../../../lib/extractMetadata'
 import { logError } from '../../../../lib/logError'
+import { addSourceToBook } from '../../../../lib/masterPipeline'
 import { objectBucket } from '../../../../lib/storage'
 
 /**
@@ -50,6 +53,24 @@ import { objectBucket } from '../../../../lib/storage'
  * The cost is that the browser can no longer post a plain form: the
  * upload is an explicit request from `UploadForm`, which is also what
  * makes a progress bar possible for a file this size.
+ *
+ * ---
+ *
+ * **Two doors, and `?book=` is the second one.**
+ *
+ * Without it this makes a new book. With it the file joins a book that
+ * already exists, as another *source* — the scan beside the
+ * transcription, the transcription beside the scan
+ * (`domain/sources.ts`). Everything up to and including the write to R2
+ * is identical, which is the reason the two share a handler rather than
+ * a copy: the streaming above is subtle enough that a second
+ * implementation of it would be a second place to get it wrong.
+ *
+ * What the second door does *not* do is change the book. Adding a file
+ * costs no quota and starts no conversion; choosing to build the master
+ * from it is a separate act with a separate cost
+ * (`actions/sources.ts`). Free and reversible to add, deliberate to act
+ * on.
  */
 
 /** What the pipeline can start from, and the extension each is filed under. */
@@ -102,6 +123,40 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!request.body) return fail(400, 'Choose a file to upload.')
 
+  // Which door this is. A missing parameter is the ordinary upload; a
+  // malformed one is not quietly treated as one, because the difference
+  // between "make a new book" and "add to book 7" is not a thing to
+  // guess at.
+  const rawBook = url.searchParams.get('book')
+  if (rawBook !== null && !/^\d+$/.test(rawBook)) return fail(400, 'No such book.')
+  const bookId = rawBook === null ? null : Number(rawBook)
+
+  const payload = await getPayload({ config })
+
+  // Everything about the *destination* is settled before a byte is
+  // stored: whether the book exists, whether it is theirs, and whether
+  // it can take a file of this kind. Storing first would mean charging
+  // the reader a 60 MB upload to be told the slot was full.
+  let target: Book | null = null
+  if (bookId !== null) {
+    target = await payload
+      .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
+      .catch(() => null)
+
+    // Not found and not yours are the same answer, as everywhere else a
+    // book is addressed by id.
+    const ownerId = typeof target?.owner === 'object' ? target?.owner?.id : target?.owner
+    if (!target || !ownerId || String(ownerId) !== String(user.id)) {
+      return fail(404, 'No such book.')
+    }
+
+    const decision = canAddSource({
+      kind,
+      existingFormats: (target.artifacts ?? []).map((artifact) => artifact.format),
+    })
+    if (!decision.allowed) return fail(409, ADD_SOURCE_ERRORS[decision.reason])
+  }
+
   const bucket = await objectBucket()
   if (!bucket) return fail(503, 'Uploads are not available on this server yet.')
 
@@ -144,6 +199,25 @@ export async function POST(request: Request): Promise<Response> {
     return fail(500, 'Could not store that file. Please try again.')
   }
 
+  // **The second door ends here.** The file is copied under the book,
+  // recorded as one of its sources, and nothing else happens: no
+  // metadata is read (the book already has its own, confirmed by its
+  // owner), no quota is spent, no conversion is started.
+  if (target) {
+    const refusal = await addSourceToBook(payload, target, {
+      kind,
+      sourceKey,
+      filename,
+    })
+    // The staged copy goes either way. On success `addSourceToBook` has
+    // made the durable copy under the book; on refusal nothing points at
+    // it at all. Leaving it would be paying for an object with no reader
+    // until the lifecycle rule swept it a month later.
+    await bucket.delete(sourceKey).catch(() => {})
+    if (refusal) return fail(409, refusal)
+    return Response.json({ bookId: target.id })
+  }
+
   // Read after storing rather than before, because the bytes are in R2
   // and nowhere else. Never throws; worst case is an empty suggestion
   // and a form the reader fills in themselves.
@@ -153,8 +227,6 @@ export async function POST(request: Request): Promise<Response> {
 
   const title = (suggested.title || filename.replace(/\.[^.]+$/, '')).trim()
   const slug = `${slugify(suggested.title ?? '') || 'book'}-${jobId.slice(0, 8)}`
-
-  const payload = await getPayload({ config })
 
   // A book's title is unique (`collections/Books.ts`), so this would be
   // refused by the database in a moment anyway. It is checked here for

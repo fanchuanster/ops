@@ -23,8 +23,10 @@ import {
   isInFlight,
   needsMasterRun,
   recoversFromFailure,
+  releasedExportHandle,
   retryStateFor,
   stateAfterMasterEdit,
+  statusOnQueue,
   uploadStep,
 } from './pipeline'
 
@@ -55,6 +57,28 @@ describe('a failure nothing will retry', () => {
     // sent to somebody's device.
     expect(recoversFromFailure({ state: 'ready', sourceKind: 'pdf', plan: 'as_is' })).toBe(false)
     expect(recoversFromFailure({ state: 'queued', sourceKind: 'text', plan: 'as_is' })).toBe(false)
+  })
+})
+
+describe('entering the queue does not take a book out of the library', () => {
+  it('keeps a book that already has an edition published', () => {
+    // The bug: converting a published PDF is the ordinary road to an
+    // EPUB, and it dropped the book out of `published` — so the catalog
+    // query stopped returning it and readers lost a book that was
+    // sitting in storage the whole time.
+    expect(statusOnQueue(['pdf'])).toBe('published')
+    expect(statusOnQueue(['txt'])).toBe('published')
+    expect(statusOnQueue(['epub', 'docx'])).toBe('published')
+  })
+
+  it('says in production while there is nothing to read', () => {
+    expect(statusOnQueue([])).toBe('in_production')
+  })
+
+  it('does not count the master as an edition', () => {
+    // The DOCX is the editorial source of truth, never a reader
+    // download — a book that has only one has nothing to read yet.
+    expect(statusOnQueue(['docx'])).toBe('in_production')
   })
 })
 
@@ -153,6 +177,49 @@ describe('deciding to start an export', () => {
 
   it('does not run for a book past phase 1', () => {
     expect(needsMasterRun({ state: 'master_ready' })).toBe(false)
+  })
+})
+
+describe('putting a book back in the queue', () => {
+  const JOB = 'https://pdf-services.adobe.io/ops/id/abc'
+
+  it('drops the handle from the export that failed', () => {
+    // The bug: every failure path kept `exportJob`, and only
+    // `attachMaster` ever cleared it. So a retried book was queued
+    // holding a job nothing would poll, `needsMasterRun` refused to
+    // start a new one, and `advanceRunningMaster` only looks at `ocr` —
+    // "Waiting to be converted", for ever, silently.
+    expect(releasedExportHandle('queued')).toEqual({
+      exportJob: null,
+      exportAsset: null,
+      exportStartedAt: null,
+      exportRetries: 0,
+    })
+  })
+
+  it('gives a hand-requeued book a fresh automatic retry budget', () => {
+    // An automatic retry is the pipeline guessing; a person pressing Try
+    // again is somebody deciding. A book that had exhausted its retries
+    // would otherwise be requeued into a state where the next timeout
+    // failed it instantly.
+    expect(releasedExportHandle('queued').exportRetries).toBe(0)
+  })
+
+  it('makes a re-queued book startable again', () => {
+    const conversion = { state: 'queued' as const, exportJob: JOB }
+    expect(needsMasterRun(conversion)).toBe(false)
+    expect(needsMasterRun({ ...conversion, ...releasedExportHandle('queued') })).toBe(true)
+  })
+
+  it('leaves a running export alone', () => {
+    // `startMasterFor` writes the state and the handle in one update, so
+    // a live export is always `ocr`. Clearing unconditionally would
+    // orphan a job we have paid for the moment somebody saved a title
+    // while it was running.
+    expect(releasedExportHandle('ocr')).toEqual({})
+    expect(releasedExportHandle('master_ready')).toEqual({})
+    expect(releasedExportHandle('ready')).toEqual({})
+    expect(releasedExportHandle('failed')).toEqual({})
   })
 })
 

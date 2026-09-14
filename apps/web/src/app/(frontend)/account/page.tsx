@@ -16,7 +16,6 @@ import {
   RESEND_PRICE,
 } from '../../../domain/credits'
 import { getCurrentUser } from '../../../lib/auth'
-import { logout } from '../actions/auth'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account' }
@@ -90,12 +89,6 @@ export default async function AccountPage() {
       ) : null}
 
       <KindleSettings current={user.kindleEmail ?? null} />
-
-      <form action={logout} style={{ marginTop: '2.5rem' }}>
-        <button type="submit" className="button-quiet">
-          Sign out
-        </button>
-      </form>
     </>
   )
 }

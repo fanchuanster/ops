@@ -12,10 +12,13 @@ import {
 } from '../../../domain/moderation'
 import { levelId, parseProposedLevel } from '../../../domain/levels'
 import {
+  type ConversionState,
   hasMaster,
   isConversionState,
   recoversFromFailure,
+  releasedExportHandle,
   stateAfterMasterEdit,
+  statusOnQueue,
 } from '../../../domain/pipeline'
 import { isUploaderSelectableRights, type RightsStatus } from '../../../domain/rights'
 import { quotaMessage } from '../../../domain/uploadQuota'
@@ -138,6 +141,17 @@ export async function saveBookDetails(
     plan,
   })
 
+  // Where the save leaves the book in the pipeline. Lifted out of the
+  // update because two fields now turn on it — `status` and the export
+  // handle — and a condition spelled twice is a condition that can
+  // disagree with itself.
+  const staysPut = alreadyConverting && !startsConverting && !rescuesFromFailure
+  const nextState: ConversionState = staysPut
+    ? isConversionState(book.conversion?.state)
+      ? book.conversion.state
+      : 'none'
+    : 'queued'
+
   // The quota counts conversions, so a book that will not be converted
   // does not consume one. Publishing a PDF as it stands, or filing an
   // uploaded EPUB, costs no pages read and no rendering — charging for
@@ -194,17 +208,28 @@ export async function saveBookDetails(
         // quietly move it back out of `published`, where the catalog
         // query and `authorizeDownload` both look for it, because
         // somebody corrected its title.
-        ...(alreadyConverting && !startsConverting && !rescuesFromFailure
+        //
+        // And even when the book *is* entering the queue, `published`
+        // survives if there is already an edition to read: converting a
+        // published PDF adds an EPUB beside it and takes nothing away,
+        // so the book must not leave the library for the length of the
+        // conversion (`statusOnQueue`).
+        ...(staysPut
           ? {}
-          : { status: 'in_production' as const }),
+          : { status: statusOnQueue((book.artifacts ?? []).map((a) => a.format)) }),
         // Queued either way. A reader who is not asking for publication
         // still wants their EPUB.
         conversion: {
           ...book.conversion,
-          state:
-            alreadyConverting && !startsConverting && !rescuesFromFailure
-              ? book.conversion?.state
-              : 'queued',
+          state: nextState,
+          // Anything left over from an export that failed. The spread
+          // above carries it, and `needsMasterRun` then reads it as a
+          // job already running and never starts one — so a book
+          // re-queued from this form sat at "Waiting to be converted"
+          // for ever. Only ever cleared for `queued`: a live export is
+          // `ocr`, and this form is also how a title gets corrected
+          // while one is running (`releasedExportHandle`).
+          ...releasedExportHandle(nextState),
           // What the uploader chose, narrowed to what this source can
           // actually do. A form value is untrusted input: asking for
           // `as_is` on a DOCX would publish a Word file as a book.
@@ -229,16 +254,20 @@ export async function saveBookDetails(
     return { error: 'Could not save those details. Please try again.' }
   }
 
-  // A book with nothing to convert is finished the moment its original
-  // is filed under it, so finish it here rather than leaving it queued
-  // for a converter with no work to do. Without this, "publish it as it
-  // stands" produced a book that could not be read, reviewed or
-  // published on any deployment where no converter happened to be
-  // polling — which is most of them, since such a book needs none.
+  // Every queued book, whatever it is waiting for. Two things happen
+  // here and only the second one is conditional:
+  //
+  //   - **The original is filed under the book**, which is what makes a
+  //     book readable while it waits. A converting book had no artifact
+  //     at all until the pipeline tick reached it, so "Waiting to be
+  //     converted" meant "not readable" — about a file sitting in
+  //     storage, on a page offering to convert it.
+  //   - **A book with nothing to convert is finished**, rather than left
+  //     queued for a worker with no work to do.
   //
   // Never throws, and a false answer is not an error: anything it
   // declines to settle is still queued for the pipeline tick.
-  if (!needsConverter(sourceKind, plan)) await settleQueuedBook(payload, bookId)
+  await settleQueuedBook(payload, bookId)
 
   revalidatePath('/account/books')
   revalidatePath(`/account/books/${bookId}`)

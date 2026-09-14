@@ -8,6 +8,8 @@ export interface BookTileData {
   slug: string
   title: string
   originalTitle?: string | null
+  /** Not shown on a tile; the library's lines print it (`BookLine`). */
+  author?: string | null
   cover?: { url?: string | null; alt?: string | null } | string | number | null
   /** Page one, rendered by the converter when nobody uploaded a cover. */
   generatedCover?: {
@@ -23,6 +25,12 @@ export interface BookTileData {
 
 /**
  * A book as a portrait tile: a 2:3 face, then the title beneath it.
+ *
+ * **The homepage's listing, and only the homepage's.** The library
+ * lists books as `BookLine` — title and author, no cover — since
+ * 2026-09-14. A shelf of faces is the right way to show a visitor what
+ * this library is; it is the wrong way to let a reader find one book
+ * among every shelf at once.
  *
  * The author was under the title until 2026-08-24 and is gone. A shelf
  * is scanned rather than read, and at 0.625rem in the library's tiles

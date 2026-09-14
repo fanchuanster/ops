@@ -1,6 +1,6 @@
 import React from 'react'
 
-import { BookTile } from '../../../components/BookTile'
+import { BookLine } from '../../../components/BookLine'
 import { CollectionShelves, type ShelfNode } from '../../../components/CollectionShelves'
 import { ShareCta } from '../../../components/ShareCta'
 import {
@@ -56,6 +56,14 @@ export const metadata = { title: 'Library' }
  * shelves, and each shelf's own `childOrder` arranges what is on it.
  * A reader offered a button to overrule that is being offered a way to
  * undo the curation the library exists to provide.
+ *
+ * **Books are listed by title and author, without covers**, since
+ * 2026-09-14. The cover shelf is the homepage's: it shows a visitor
+ * what this library is, which is what a wall of faces is good at. This
+ * page is where a reader who is already here goes to find one book
+ * among every shelf at once, and there a thumbnail is something to read
+ * past. The lines also give the author back — the tile dropped it
+ * because it would not fit — and stop clamping titles to two lines.
  *
  * The reading-level filter is not in the design, and is kept anyway —
  * levels are a product feature (CLAUDE.md section 5.1), and a reader
@@ -223,9 +231,9 @@ export default async function BooksPage({
           {/* The selected collection's own books, unheaded: the page
               heading above is their heading. */}
           {lead.length > 0 ? (
-            <ul className="shelf__books shelf__books--lead">
+            <ul className="shelf__lines shelf__lines--lead">
               {lead.map((book) => (
-                <BookTile key={book.id} book={book} />
+                <BookLine key={book.id} book={book} />
               ))}
             </ul>
           ) : null}

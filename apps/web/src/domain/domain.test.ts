@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  KINDLE_CONVERT_SUBJECT,
   KINDLE_SENDER_ADDRESS,
   checkKindleAddress,
   checkKindleDelivery,
@@ -22,6 +23,7 @@ import {
   isEmailableSize,
   tooLargeMessage,
   isKindleDeliverableFormat,
+  kindleSubject,
 } from './kindle'
 import {
   SIGN_IN_REFUSAL_MESSAGES,
@@ -238,6 +240,16 @@ describe('kindle delivery', () => {
 
   it('names one sender, so the UI reminder and the From header cannot drift', () => {
     expect(KINDLE_SENDER_ADDRESS).toBe('kindle@noblesee.com')
+  })
+
+  it('subjects a delivery with the filename, and a conversion with Amazon\'s word', () => {
+    expect(kindleSubject({ filename: 'Analects.epub' })).toBe('Analects.epub')
+    expect(kindleSubject({ filename: 'Analects.epub', convert: false })).toBe('Analects.epub')
+    // The subject *is* the instruction, so asking for conversion
+    // replaces the filename rather than decorating it.
+    expect(kindleSubject({ filename: 'Analects.pdf', convert: true })).toBe(
+      KINDLE_CONVERT_SUBJECT,
+    )
   })
 })
 
@@ -821,30 +833,10 @@ describe('what an uploader may claim about their own file', () => {
 
 describe('deleting your own upload', () => {
   const request = (over: Partial<Parameters<typeof canDeleteUpload>[0]> = {}) =>
-    canDeleteUpload({
-      isOwner: true,
-      isAdmin: false,
-      boughtByOthers: false,
-      isPublic: false,
-      ...over,
-    })
+    canDeleteUpload({ isOwner: true, isAdmin: false, ...over })
 
-  it('lets an uploader delete their own private book', () => {
+  it('lets an uploader delete their own book', () => {
     expect(request()).toEqual({ allowed: true })
-  })
-
-  it('lets them delete a public book nobody has taken', () => {
-    // Being in the library is not itself a reason to keep it.
-    expect(request({ isPublic: true })).toEqual({ allowed: true })
-  })
-
-  it('refuses when other readers have bought it', () => {
-    // An entitlement never expires; deleting the book underneath one
-    // would make that promise false.
-    expect(request({ boughtByOthers: true })).toEqual({
-      allowed: false,
-      reason: 'bought_by_others',
-    })
   })
 
   it('refuses anyone who is not the uploader', () => {
@@ -857,17 +849,16 @@ describe('deleting your own upload', () => {
     expect(request({ isOwner: false, isAdmin: true })).toEqual({ allowed: true })
   })
 
-  it('refuses an administrator a book readers have bought', () => {
-    // Authority over the library is not authority over what somebody
-    // already paid credits for.
-    expect(request({ isOwner: false, isAdmin: true, boughtByOthers: true })).toEqual({
-      allowed: false,
-      reason: 'bought_by_others',
-    })
+  it('lets both of them delete a book other readers have bought', () => {
+    // The entitlement gate is gone on purpose: it could leave a book
+    // that nobody at all — not its owner, not an administrator — was
+    // able to take down.
+    expect(request()).toEqual({ allowed: true })
+    expect(request({ isOwner: false, isAdmin: true })).toEqual({ allowed: true })
   })
 
   it('has a message for every refusal', () => {
-    for (const reason of ['not_owner', 'bought_by_others'] as const) {
+    for (const reason of ['not_owner'] as const) {
       expect(DELETION_ERRORS[reason]).toBeTruthy()
     }
   })

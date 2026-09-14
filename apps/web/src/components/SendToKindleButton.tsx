@@ -1,10 +1,17 @@
 'use client'
 
-import { useActionState } from 'react'
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react'
 
 import { sendToKindle, type KindleState } from '../app/(frontend)/actions/kindle'
 import { RESEND_PRICE } from '../domain/credits'
 import {
+  KINDLE_CONVERT_SUBJECT,
   MAX_ATTACHMENT_BYTES,
   describeBytes,
   isEmailableSize,
@@ -22,6 +29,14 @@ import {
  * the native format and it stays reflowable. The PDFs are offered
  * because some readers want them, but they arrive fixed-layout, which
  * is the thing this project exists to move away from.
+ *
+ * The control is split: the button sends, and the caret beside it
+ * offers the one variation worth having — a send whose subject line is
+ * the word `Convert`, which is how Amazon is asked to run the file
+ * through its own conversion rather than deliver it as it stands. That
+ * is a second button rather than the default because it costs the
+ * filename: the subject is Amazon's instruction slot, so a converted
+ * delivery arrives without the book's name on it.
  *
  * What the page chooses to render is never what enforces anything: the
  * server action re-checks the address, the format, the rights, the
@@ -118,10 +133,26 @@ export function SendToKindleButton({
   const label = pending
     ? 'Sending…'
     : state.sent
-      ? 'Sent'
+      ? // Which of the two sends it was, because they arrive
+        // differently: a converted document appears in the Kindle
+        // library under Amazon's own name for it rather than the
+        // filename, and a reader who sees only "Sent" has no way to
+        // tell whether the thing they asked for is what happened.
+        state.converted
+        ? 'Sent for conversion'
+        : 'Sent'
       : price > 0
         ? `Send to Kindle — ${price} credit${price === 1 ? '' : 's'}`
         : 'Send to Kindle'
+
+  // A repeat send costs a credit and must never be spent silently, so
+  // the confirmation guards *both* buttons — the second one is another
+  // delivery of the same book, charged identically. Returning false
+  // means the caller prevents the click, which stops the submit event
+  // ever firing and so keeps the form action from running. Doing it
+  // from the button rather than the form's onSubmit avoids depending on
+  // React honouring defaultPrevented for action props.
+  const confirmed = () => !state.sent || window.confirm(resendWarning(currentBalance))
 
   return (
     <form action={action} className="send-to-kindle">
@@ -161,26 +192,130 @@ export function SendToKindleButton({
         <input type="hidden" name="format" value={formats[0].format} />
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className={`send-to-kindle__button${state.sent ? ' send-to-kindle__button--sent' : ''}`}
-        // Preventing the click's default stops the submit event ever
-        // firing, which is what keeps the form action from running.
-        // Doing this from the button rather than the form's onSubmit
-        // avoids depending on React honouring defaultPrevented for
-        // action props.
-        onClick={(event) => {
-          if (state.sent && !window.confirm(resendWarning(currentBalance))) {
-            event.preventDefault()
-          }
-        }}
-      >
-        {label}
-      </button>
+      <SplitSend
+        label={label}
+        sent={Boolean(state.sent)}
+        pending={pending}
+        confirmed={confirmed}
+      />
 
       {/* Only failures get words. Success is the button itself. */}
       {state.error ? <span className="form-error">{state.error}</span> : null}
     </form>
+  )
+}
+
+/**
+ * The send button, and the menu of the one other way to send.
+ *
+ * Both are submit buttons inside the caller's form, which is what keeps
+ * the format select and the book id in play for either one: the
+ * submitter's own `name`/`value` is included in the FormData, so
+ * "Send with Convert" is an ordinary send that additionally carries
+ * `convert=1`. Nothing about the request shape differs, and an
+ * ordinary click cannot ask for conversion by accident.
+ *
+ * The menu closes on Escape and on a press outside it, because a
+ * dropdown that only closes by choosing something traps a reader who
+ * opened it to look.
+ */
+function SplitSend({
+  label,
+  sent,
+  pending,
+  confirmed,
+}: {
+  label: string
+  sent: boolean
+  pending: boolean
+  /** Asks about a repeat send; false means don't submit. */
+  confirmed: () => boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const away = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    // `pointerdown` rather than `click`: closing on the press means the
+    // menu is gone before a click lands on whatever is underneath,
+    // which is what makes pressing elsewhere feel like dismissal rather
+    // than a swallowed first click.
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open])
+
+  const guard = (event: ReactMouseEvent) => {
+    if (!confirmed()) event.preventDefault()
+    setOpen(false)
+  }
+
+  return (
+    <div className="send-split" ref={box}>
+      <div className="send-split__pair">
+        <button
+          type="submit"
+          disabled={pending}
+          className={`send-to-kindle__button send-split__main${
+            sent ? ' send-to-kindle__button--sent' : ''
+          }`}
+          onClick={guard}
+        >
+          {label}
+        </button>
+
+        <button
+          type="button"
+          disabled={pending}
+          className={`send-to-kindle__button send-split__toggle${
+            sent ? ' send-to-kindle__button--sent' : ''
+          }`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="Other ways to send"
+          onClick={() => setOpen((was) => !was)}
+        >
+          <span aria-hidden="true">▾</span>
+        </button>
+      </div>
+
+      {open ? (
+        <div className="send-split__menu" role="menu">
+          <button
+            type="submit"
+            role="menuitem"
+            name="convert"
+            value="1"
+            disabled={pending}
+            className="send-split__item"
+            onClick={guard}
+          >
+            Send with {KINDLE_CONVERT_SUBJECT}
+            {/*
+              Said here rather than in a tooltip, because the whole
+              reason to pick this is a book that arrived in the wrong
+              shape, and a reader in that position should not have to
+              hover to find out what the option does — or discover
+              afterwards that it took the title off the delivery.
+            */}
+            <span className="send-split__note">
+              Asks Amazon to convert it to Kindle format. The subject line carries the instruction,
+              so the book arrives without its filename.
+            </span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }

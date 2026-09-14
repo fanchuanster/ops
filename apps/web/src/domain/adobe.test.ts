@@ -4,8 +4,10 @@ import {
   EXPORT_TIMEOUT_MS,
   MAX_SOURCE_BYTES,
   documentTransactions,
+  MAX_EXPORT_RETRIES,
   exportHasExpired,
   exportLocaleFor,
+  isTransientExportFailure,
   masterKey,
   needsExport,
   readExportStatus,
@@ -86,7 +88,27 @@ describe('reading a job status', () => {
     expect(readExportStatus({ status: 'failed', error: { message: 'BAD_PDF' } })).toEqual({
       state: 'failed',
       message: 'BAD_PDF',
+      retryable: false,
     })
+  })
+
+  it('marks a busy service as worth sending again', () => {
+    // Adobe's own wording, request id and all, which is what a book
+    // failed on in production and what nothing retried.
+    expect(
+      readExportStatus({
+        status: 'failed',
+        error: {
+          message: 'The operation has timed out, please try after some time.; requestId=neN0EWBJ',
+        },
+      }).retryable,
+    ).toBe(true)
+  })
+
+  it('does not retry an export that finished without a file', () => {
+    // The job ran to completion and Adobe says so. Sending the same
+    // pages again is unlikely to produce a different answer.
+    expect(readExportStatus({ status: 'done', asset: {} }).retryable).toBe(false)
   })
 
   it('treats an unrecognised status as still running', () => {
@@ -139,5 +161,37 @@ describe('where the master lives', () => {
   it('sits under its own book’s prefix', () => {
     // The containment rule the download path checks.
     expect(masterKey(7)).toBe('books/7/book/master.docx')
+  })
+})
+
+describe('telling a busy service from an unreadable file', () => {
+  it('recognises the ways Adobe says it was busy', () => {
+    expect(isTransientExportFailure('The operation has timed out, please try after some time.')).toBe(
+      true,
+    )
+    expect(isTransientExportFailure('Request timeout')).toBe(true)
+    expect(isTransientExportFailure('429: Too Many Requests')).toBe(true)
+    expect(isTransientExportFailure('Service Unavailable, please retry')).toBe(true)
+    expect(isTransientExportFailure('500: Internal Server Error')).toBe(true)
+  })
+
+  it('treats a fault in the file as permanent', () => {
+    expect(isTransientExportFailure('BAD_PDF')).toBe(false)
+    expect(isTransientExportFailure('The input file is password protected.')).toBe(false)
+    expect(isTransientExportFailure('DISQUALIFIED_PAGE_LIMIT')).toBe(false)
+  })
+
+  it('treats an unfamiliar message as permanent', () => {
+    // Recognised transience only. Failing a book that would have
+    // succeeded costs one click; retrying one that never can costs the
+    // transactions three times over, on every such book, for ever.
+    expect(isTransientExportFailure('Something entirely new went wrong')).toBe(false)
+    expect(isTransientExportFailure('')).toBe(false)
+    expect(isTransientExportFailure(null)).toBe(false)
+  })
+
+  it('leaves room for more than one attempt and not many', () => {
+    expect(MAX_EXPORT_RETRIES).toBeGreaterThanOrEqual(1)
+    expect(MAX_EXPORT_RETRIES).toBeLessThanOrEqual(3)
   })
 })

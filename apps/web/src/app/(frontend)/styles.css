@@ -342,6 +342,18 @@ h3 {
   margin: 0;
 }
 
+.site-footer__contact {
+  margin: 0;
+}
+
+.site-footer__contact a {
+  color: inherit;
+}
+
+.site-footer__contact a:hover {
+  color: var(--ink);
+}
+
 .button-quiet {
   font: inherit;
   font-family: var(--font-sans);
@@ -546,6 +558,19 @@ h3 {
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
+
+  /* Stacked, the column sits above the panel — sticking would park it
+     over what the reader came to read. */
+  .account__side {
+    position: static;
+  }
+}
+
+/* The sections and sign out travel together, so the whole column is
+   what sticks rather than the list inside it. */
+.account__side {
+  position: sticky;
+  top: 1.5rem;
 }
 
 .account-nav ul {
@@ -555,8 +580,13 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  position: sticky;
-  top: 1.5rem;
+}
+
+/* Quiet, and set apart from the sections: leaving is not one of them. */
+.account-signout {
+  margin: 1.25rem 0 0;
+  padding: 1rem 0.8rem 0;
+  border-top: 1px solid var(--rule-soft);
 }
 
 .account-nav a {
@@ -1321,6 +1351,132 @@ h3 {
 .submit-review h3 {
   margin: 0 0 0.5rem;
   font-size: 1rem;
+}
+
+/* --- the files a book was made from -------------------------------- */
+
+/*
+ * Sits directly above the master panel and wears the same card, because
+ * the two are one thought read downwards: this is what the master is
+ * built from, and that is the master.
+ */
+.sources {
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-card);
+}
+
+.sources h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.sources__list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* One row per file. Wraps rather than truncating: the names here are
+   the reader's own, frequently Chinese and frequently long, and a name
+   you cannot read is the one thing this list must not produce. */
+.sources__item {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+/* The one the master is built from, marked by the accent edge rather
+   than by a fill — the row is not selected, it is in use, and a
+   selection colour would read as something you could click off. */
+.sources__item--current {
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sources__name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.sources__size {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.sources__what {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.sources__mark {
+  align-self: center;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.sources__switch {
+  align-self: center;
+  margin: 0;
+}
+
+.sources__cost {
+  margin-top: 0.85rem;
+}
+
+.sources__add {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule-soft);
+  max-width: 32rem;
+  font-family: var(--font-sans);
+}
+
+.sources__add label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  width: 100%;
+}
+
+.sources__add label > span {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.sources__add small {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.sources__add .upload-progress {
+  width: 100%;
 }
 
 /* --- a draft's master file ---------------------------------------- */
@@ -2836,6 +2992,92 @@ h3 {
   color: var(--ink-soft);
 }
 
+/*
+ * The split control: send, and the caret that offers the other way.
+ *
+ * The two halves read as one button — the pair carries the shape and
+ * the seam between them is a single shared rule, so the caret looks
+ * attached to the send rather than beside it. `position: relative` on
+ * the wrapper is what the menu hangs from.
+ */
+.send-split {
+  position: relative;
+  display: inline-flex;
+}
+
+.send-split__pair {
+  display: inline-flex;
+}
+
+.send-split__main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* One rule between the halves rather than two touching borders. */
+.send-split__toggle {
+  border-left: none;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-inline: 0.4rem;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+/*
+ * Hangs below the control, left-aligned with it, and wide enough to
+ * hold the sentence explaining what the option costs — narrow enough
+ * that it does not become a panel. It floats above the formats row it
+ * sits in, so it needs a ground of its own.
+ */
+.send-split__menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 20;
+  min-width: 16rem;
+  max-width: min(22rem, 80vw);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+  padding: 0.25rem;
+}
+
+.send-split__item {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+  color: var(--ink-soft);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.send-split__item:hover:not(:disabled),
+.send-split__item:focus-visible {
+  background: var(--paper-band);
+  color: var(--ink);
+}
+
+.send-split__item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The sentence under the option, in the quieter ink asides use. */
+.send-split__note {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--ink-faint);
+}
+
 .send-to-kindle select {
   border: 1px solid var(--rule);
   border-radius: var(--radius);
@@ -2973,40 +3215,89 @@ h3 {
   min-height: 2.8em;
 }
 
+/* --- a book as a line --------------------------------------------- */
+
 /*
- * The library's tiles run at 3/5 of the homepage's, from the design.
+ * The library lists books as text: title, then author.
  *
- * Not a stylistic preference: the tree shows every shelf at once where
- * the drill-down showed one level of them, so a card sized for two
- * teaser shelves on the homepage would fit four books to a row here and
- * push most of the library under the fold. The homepage keeps the
- * larger tile, where there are only two rails and room to spare.
+ * The tiles above are the homepage's. They ran here too, at 3/5 size,
+ * until 2026-09-14 — 90px faces, a 0.625rem title clamped to two lines
+ * and no author at all, because none of it fit. That is a picture too
+ * small to recognise a book by attached to a name too short to read
+ * one by, which is the worst of both and costs a third of the page.
+ *
+ * A shelf of covers is for being *shown* books; this page is for
+ * *finding* one across every shelf at once, and for that the name is
+ * the thing. Nothing is clamped and the author is back.
+ *
+ * Columns rather than one long list: the entries are short, the tree
+ * shows every shelf at once, and a single column would make a shelf of
+ * twelve books as tall as the fold. `auto-fill` so a shelf of two does
+ * not stretch its lines across the whole page.
  */
-.library .tile {
-  width: clamp(66px, 9.5vw, 90px);
+.shelf__lines {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: 0.125rem 1.5rem;
 }
 
-.library .tile__face {
-  margin-bottom: 0.375rem;
-  border-radius: 0.5rem;
+/* A shelf's books step in one level further than its own heading, the
+   same as the homepage's rails do. Root shelves have nothing above
+   them to clear. */
+.shelf--nested > .shelf__body > .shelf__lines {
+  padding-left: calc(var(--step) * (var(--depth, 0) + 1));
 }
 
-.library .tile__glyph {
-  font-size: 1.25rem;
+/* The selected collection's own books, above its child shelves. */
+.shelf__lines--lead {
+  margin-bottom: 2.5rem;
 }
 
-.library .tile__title {
-  font-size: 0.625rem;
+/*
+ * The whole row is the link, so the target is the width of the column
+ * rather than the width of the title — a two-character title is still
+ * comfortable to hit on a phone.
+ */
+.line a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  padding: 0.3125rem 0.5rem;
+  margin: 0 -0.5rem;
+  border-radius: 0.375rem;
+  text-decoration: none;
+  transition: background-color 0.15s;
 }
 
-.library .shelf__books {
-  gap: 0.5rem;
+.line a:hover {
+  background: var(--paper-band);
 }
 
-@media (min-width: 40rem) {
-  .library .shelf__books {
-    gap: 0.75rem;
-  }
+.line__title {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+/*
+ * The author gives way first. It is what tells two editions apart once
+ * the title is read, so it belongs on the line — but a long name must
+ * not push a title out of its own column.
+ */
+.line__author {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* --- the conversion portal ---------------------------------------- */

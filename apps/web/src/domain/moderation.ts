@@ -251,58 +251,46 @@ export interface DeletionRequest {
    * first gate distinguishes them — the second binds both.
    */
   isAdmin: boolean
-  /** Do readers other than the uploader hold entitlements to it? */
-  boughtByOthers: boolean
-  /** Is it currently in the public library? */
-  isPublic: boolean
 }
 
 export type DeletionDecision =
   | { allowed: true }
   | { allowed: false; reason: DeletionBlockedReason }
 
-export type DeletionBlockedReason = 'not_owner' | 'bought_by_others'
+export type DeletionBlockedReason = 'not_owner'
 
 /**
  * May this person delete this upload?
  *
- * For its uploader: yes, almost always. It is their book, it is private
- * by default, and a workspace you cannot clear out is not a workspace.
+ * Ownership is the only question. For its uploader: yes. It is their
+ * book, it is private by default, and a workspace you cannot clear out
+ * is not a workspace. For an administrator: yes to any book, theirs or
+ * not — somebody has to be able to take a book out of the library
+ * (material that turns out to be misfiled, mis-scanned, or not
+ * distributable after all) and ownership is exactly the thing they will
+ * not have.
  *
- * For an administrator: yes to any book, theirs or not. Somebody has to
- * be able to take a book out of the library — material that turns out
- * to be misfiled, mis-scanned, or not distributable after all — and
- * ownership is exactly the thing they will not have.
- *
- * The exception binds both of them, and that is the point of it: a
- * reader has spent credits to have this book delivered. That purchase
- * is permanent by design — an entitlement never expires — and deleting
- * the book underneath it would make the promise false whoever presses
- * the button. An administrator has authority over the library, not over
- * what a reader already bought. Being in the public library is *not*
- * itself a reason to refuse; a book nobody has taken can still be
- * withdrawn.
+ * Nothing else refuses. Until 2026-08-30 a book other readers had spent
+ * credits on could not be deleted by anyone, on the reasoning that an
+ * entitlement never expires and deleting the book underneath one makes
+ * that promise false. It does — and the alternative was worse: an
+ * owner and an administrator between them could then be left with a
+ * book neither could remove, which is the wrong answer for material
+ * that has to come down. Being in the public library is not a reason to
+ * refuse either; a published book is withdrawn by deleting it.
  */
 export function canDeleteUpload(request: DeletionRequest): DeletionDecision {
   if (!request.isOwner && !request.isAdmin) return { allowed: false, reason: 'not_owner' }
-  if (request.boughtByOthers) return { allowed: false, reason: 'bought_by_others' }
   return { allowed: true }
 }
 
 export const DELETION_ERRORS: Record<DeletionBlockedReason, string> = {
   not_owner: 'That book is not yours to delete.',
-  bought_by_others:
-    'Other readers have spent credits to have this book sent to them, and what they bought does not expire. It cannot be deleted — ask an administrator to withdraw it from the library instead.',
 }
 
 /**
  * The same refusal, said to an administrator.
- *
- * The reader-facing sentence ends by telling them to ask an
- * administrator, which is no help to the administrator reading it.
  */
 export const ADMIN_DELETION_ERRORS: Record<DeletionBlockedReason, string> = {
   not_owner: 'Administrators only.',
-  bought_by_others:
-    'Readers have spent credits to have this book sent to them, and what they bought does not expire. Deleting it would take back something they paid for, so it cannot be deleted — unpublish it instead.',
 }
