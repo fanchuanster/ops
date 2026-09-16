@@ -181,7 +181,7 @@ the catalog gets books without uploading any.
 ```bash
 sudo apt install ghostscript && pip install pymupdf   # install both
 python3 tools/shrink-pdf.py --inspect scan.pdf        # what is in it
-python3 tools/shrink-pdf.py scan.pdf                  # -> scan-small.pdf
+python3 tools/shrink-pdf.py scan.pdf                  # -> scan-28MB.pdf
 ```
 
 PyMuPDF is nominally optional and worth installing anyway: it is what trims
@@ -231,6 +231,10 @@ moves the file it says resolution is the wrong lever and names the right ones.
 `--quality` recompresses the images even when nothing downsamples, and `--gray`
 is the bigger win for a black-and-white book photographed in colour, though it
 takes the red seals with it.
+
+The result is named for the size it came out at — `scan-28MB.pdf` — which is
+the one fact you wanted when the whole point was getting under a number. `-o`
+overrides it.
 
 `--quality` is a 0-100 scale over Ghostscript's `QFactor`, defaulting to 60,
 which is Ghostscript's own default. It is deliberately not `-dJPEGQ`: that

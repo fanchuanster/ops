@@ -9,7 +9,7 @@ scanned at 300dpi clears 100 MB without difficulty, and those are exactly
 the historical scans this library exists to preserve. This is the tool
 for those books.
 
-    tools/shrink-pdf.py scan.pdf
+    tools/shrink-pdf.py scan.pdf              # -> scan-28MB.pdf
     tools/shrink-pdf.py scan.pdf -o ready.pdf
     tools/shrink-pdf.py --inspect scan.pdf
     tools/shrink-pdf.py --gray --min-dpi 150 huge.pdf
@@ -144,6 +144,17 @@ def human(n: float) -> str:
     if n < MIB:
         return f"{n / 1024:.0f} KB"
     return f"{n / MIB:.1f} MB"
+
+
+def size_label(n: int) -> str:
+    """The size as a filename wears it: `28MB`.
+
+    Whole megabytes, to the nearest. The tool only ever runs on a book
+    over the 100 MB limit, so a result is tens of megabytes and the
+    difference between 28 and 28.2 is not a fact worth carrying in a
+    filename.
+    """
+    return f"{round(n / MIB)}MB"
 
 
 def upload_limit() -> tuple[int, str]:
@@ -386,7 +397,9 @@ def describe(path: Path, found: Survey | None) -> None:
         print("  nothing to work on. Look at embedded fonts or attachments.")
 
 
-def shrink(src: Path, dst: Path, target: int, args: argparse.Namespace) -> bool:
+def shrink(
+    src: Path, out_dir: Path, explicit: Path | None, target: int, args: argparse.Namespace
+) -> bool:
     """Walk the ladder until something fits, then put it in place.
 
     Attempts are written beside the destination so the winner is a rename
@@ -419,7 +432,7 @@ def shrink(src: Path, dst: Path, target: int, args: argparse.Namespace) -> bool:
             " OCR floor — check a page before trusting the master."
         )
 
-    workdir = Path(tempfile.mkdtemp(prefix=".shrink-", dir=dst.parent))
+    workdir = Path(tempfile.mkdtemp(prefix=".shrink-", dir=out_dir))
     attempt = workdir / "attempt.pdf"
     tried: list[tuple[int, int, bool]] = []
     last: tuple[int, int] | None = None
@@ -453,7 +466,7 @@ def shrink(src: Path, dst: Path, target: int, args: argparse.Namespace) -> bool:
             tried.append((dpi, made, True))
 
             if fits:
-                return finish(src, attempt, dst, dpi, made, size)
+                return finish(src, attempt, out_dir, explicit, dpi, made, size)
 
             responded = responded or moved
             last = (dpi, made) if moved else None
@@ -516,8 +529,27 @@ def report_failure(
     print("  a book is whole, and half a scan is not a book.")
 
 
-def finish(src: Path, attempt: Path, dst: Path, dpi: int, made: int, was: int) -> bool:
-    """Check the result is the same book, then put it in place."""
+def finish(
+    src: Path,
+    attempt: Path,
+    out_dir: Path,
+    explicit: Path | None,
+    dpi: int,
+    made: int,
+    was: int,
+) -> bool:
+    """Check the result is the same book, then put it in place.
+
+    The name carries the size it came out at, which is the one fact you
+    want when the whole point was getting under a number, and it is only
+    knowable once the work is done — so the destination is settled here
+    rather than before the ladder is walked.
+    """
+    dst = explicit or out_dir / f"{src.stem}-{size_label(made)}{src.suffix}"
+    if dst.resolve() == src.resolve():
+        print(f"  Refusing it: that would write over {src.name}.")
+        return False
+
     before, after = page_count(src), page_count(attempt)
     if before is not None and after is not None and before != after:
         print(f"  Refusing it: {before} pages in, {after} out. Ghostscript lost pages.")
@@ -597,14 +629,10 @@ def main() -> int:
             print()
             continue
 
-        dst = args.output or (args.out_dir or path.parent) / f"{path.stem}-small.pdf"
-        if dst.resolve() == path.resolve():
-            print(f"{path}: refusing to write over the original")
-            failed += 1
-            continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
+        out_dir = args.output.parent if args.output else (args.out_dir or path.parent)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-        if not shrink(path, dst, target, args):
+        if not shrink(path, out_dir, args.output, target, args):
             failed += 1
 
     return 1 if failed else 0
