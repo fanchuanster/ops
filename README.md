@@ -222,12 +222,16 @@ traditional Chinese glyphs and the book arrives as a master full of noise —
 a document transaction and a proofreader's afternoon spent on something worse
 than nothing. `--min-dpi` goes lower and says so on the way past.
 
-**Resolution is not always the lever.** A rung below the scan's own resolution
+**Resolution is not always the lever.** A rung above the scan's own resolution
 downsamples nothing, and a scan already compressed hard re-encodes to the size
-it started at — so a 225 MB book can come back 225 MB at every rung. The tool
-measures that rather than assuming it: a rung that returns the file unchanged
-says so, no estimate is ever extrapolated from one that did, and when no rung
-moves the file it says resolution is the wrong lever and names the right ones.
+it started at — so a 225 MB book can come back the same size at every rung. The
+tool measures that rather than assuming it: each rung is judged against the rung
+above it rather than against the input, so the re-encoding every pass does is
+never read as a downsample; nothing is extrapolated from a rung that did not
+earn it; and a scan already under the whole ladder — a 150 dpi book under the
+200 dpi floor — is given one pass instead of four identical ones, with the
+reason on the line. When resolution cannot help, the tool says so and names
+what can.
 `--quality` recompresses the images even when nothing downsamples, and `--gray`
 is the bigger win for a black-and-white book photographed in colour, though it
 takes the red seals with it.

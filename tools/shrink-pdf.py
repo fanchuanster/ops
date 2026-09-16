@@ -32,13 +32,15 @@ and then OCRs into noise has spent a document transaction and a
 proofreader's afternoon to produce something worse than nothing. Going
 lower is allowed, deliberately, and says so on the way past.
 
-RESOLUTION IS NOT ALWAYS THE LEVER. A rung below the scan's own
+RESOLUTION IS NOT ALWAYS THE LEVER. A rung above the scan's own
 resolution downsamples nothing, and a scan already compressed harder than
 --quality re-encodes to the size it started at. The tool measures this
-rather than assuming it: a rung that returns the file unchanged is
-reported as unchanged, and no estimate is ever extrapolated from it. When
-no rung moves the file, resolution is the wrong lever and --quality,
---gray and --mono-dpi are the right ones.
+rather than assuming it: a rung is judged against the rung above it, not
+against the input, so the re-encoding every rung does is never mistaken
+for a downsample, and no estimate is extrapolated from a rung that did
+not earn it. A scan under the whole ladder is given one pass rather than
+four identical ones, and is told that resolution is the wrong lever and
+--quality, --gray and --mono-dpi are the right ones.
 
 KEEP THE ORIGINAL. NobleSee preserves the file it is given: the upload
 *is* the book's PDF artifact and is what a reader is sent. Shrinking is
@@ -117,8 +119,14 @@ SKIP_SLACK = 1.15
 Each rung costs a full Ghostscript pass — a minute or more on a 100 MB
 book — so a rung the last result says cannot fit is not worth measuring.
 The prediction scales with image area, which holds only between two rungs
-that both actually downsample; it is therefore made only from a rung that
-demonstrably shrank the file, and is discarded the moment one does not.
+that both actually downsample, so it is made only from a rung measurably
+smaller than the rung above it and discarded the moment one is not.
+
+Which is why the first rung never predicts anything. Measured against the
+input it always looks like it worked — re-encoding a scanner's quality-95
+JPEGs takes a third off on its own — and a prediction extrapolated from
+that reads a re-encoding as a downsample and skips the rung that would
+have fit. One rung is not two measurements, whatever it returned.
 """
 
 GS_BINARIES = ("gs", "gswin64c", "gswin32c")
@@ -127,6 +135,32 @@ GS_BINARIES = ("gs", "gswin64c", "gswin32c")
 Windows builds ship `gswin64c.exe` — the console variant — and no `gs`
 at all, so a portable Ghostscript unzipped into a directory on PATH is
 invisible to a tool that only looks for `gs`.
+"""
+
+COLOUR_PAGES = 0.25
+COLOUR_SAMPLES = 4
+COLOUR_SPREAD = 24
+COLOUR_POINTS = 0.02
+"""What counts as a scan --gray has something to take away from.
+
+Not "does this book contain colour", which is the question that made
+--gray the advice for every scan and a win for almost none of them. A
+225 MB book of grey pages with a colour cover came back 163.7 MB with
+--gray and 163.7 MB without, for a hundred seconds of Ghostscript each
+way: the pages were DeviceGray already and the cover is one leaf.
+
+So the test is whether colour is *most of the book*. Under COLOUR_PAGES
+of the sampled images being multi-channel, there is nothing to drop
+however vivid the cover is.
+
+Above it, the colourspace still has to be checked against the pixels,
+because a grey book photographed on a colour sensor is stored as RGB and
+declares itself colour. Chroma planes over grey paper are flat, subsample
+4:2:0 and compress to almost nothing, so dropping them saves almost
+nothing. A few images are decoded and sampled, and the scan counts as
+colour when more than COLOUR_POINTS of the points have channels spread
+further apart than COLOUR_SPREAD — wide enough to pass over JPEG ringing
+around black type, narrow enough to catch a red seal.
 """
 
 FILTERS = (
@@ -184,12 +218,21 @@ def upload_limit() -> tuple[int, str]:
 class Survey:
     """What is actually in a PDF, when PyMuPDF is here to say."""
 
-    def __init__(self, pages: int, images: int, dpi: list[float], colour: bool, bitonal: int):
+    def __init__(
+        self,
+        pages: int,
+        images: int,
+        dpi: list[float],
+        multichannel: int,
+        bitonal: int,
+        saturated: bool | None = None,
+    ):
         self.pages = pages
         self.images = images
         self.dpi = dpi
-        self.colour = colour
+        self.multichannel = multichannel
         self.bitonal = bitonal
+        self.saturated = saturated
 
     @property
     def median_dpi(self) -> float | None:
@@ -198,6 +241,73 @@ class Survey:
     @property
     def mostly_bitonal(self) -> bool:
         return self.images > 0 and self.bitonal * 2 > self.images
+
+    @property
+    def colour(self) -> bool:
+        return self.multichannel > 0
+
+    @property
+    def colour_share(self) -> float:
+        return self.multichannel / self.images if self.images else 0.0
+
+    @property
+    def mostly_colour(self) -> bool:
+        return self.colour_share >= COLOUR_PAGES
+
+    @property
+    def grey_in_all_but_name(self) -> bool:
+        """Colour --gray cannot take away: a few plates, or none at all."""
+        if self.images == 0:
+            return False
+        return not self.mostly_colour or self.saturated is False
+
+
+def saturation(doc, xrefs: list[int]) -> bool | None:
+    """Whether the pages actually have colour in them, or None if unreadable.
+
+    Decoding is the only way to know, so a handful of images are decoded
+    and sampled rather than every one of them: the question is whether
+    --gray has anything to take away, and a book that carries colour
+    carries it on more pages than four.
+    """
+    import pymupdf
+
+    checked = 0
+    for xref in xrefs:
+        if checked >= COLOUR_SAMPLES:
+            break
+        try:
+            pix = pymupdf.Pixmap(doc, xref)
+        except Exception:
+            continue
+        checked += 1
+
+        channels = pix.n - pix.alpha
+        if channels == 1:
+            continue
+        if channels != 3:
+            try:
+                pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+            except Exception:
+                continue
+
+        data = pix.samples
+        stride = pix.n
+        points = len(data) // stride
+        if not points:
+            continue
+        step = max(1, points // 2000) * stride
+
+        seen = wide = 0
+        for at in range(0, points * stride - stride + 1, step):
+            seen += 1
+            channel = data[at:at + 3]
+            if max(channel) - min(channel) > COLOUR_SPREAD:
+                wide += 1
+        if seen and wide > seen * COLOUR_POINTS:
+            return True
+
+    return False if checked else None
 
 
 def survey(path: Path, sample: int = 40) -> Survey | None:
@@ -222,18 +332,24 @@ def survey(path: Path, sample: int = 40) -> Survey | None:
             dpi: list[float] = []
             images = 0
             bitonal = 0
-            colour = False
+            multichannel = 0
+            xrefs: list[int] = []
             for index in range(0, pages, step):
-                for info in doc[index].get_image_info():
+                for info in doc[index].get_image_info(xrefs=True):
                     images += 1
+                    if info.get("xref"):
+                        xrefs.append(info["xref"])
                     width = info.get("bbox", (0, 0, 0, 0))[2] - info["bbox"][0]
                     if width > 1 and info.get("width"):
                         dpi.append(info["width"] / (width / 72))
                     if info.get("bpc", 8) == 1:
                         bitonal += 1
                     if info.get("cs-name", "") not in ("DeviceGray", ""):
-                        colour = True
-            return Survey(pages, images, dpi, colour, bitonal)
+                        multichannel += 1
+            found = Survey(pages, images, dpi, multichannel, bitonal)
+            if not found.mostly_colour:
+                return found
+            return Survey(pages, images, dpi, multichannel, bitonal, saturation(doc, xrefs))
     except Exception:
         return None
 
@@ -360,15 +476,24 @@ def rungs_for(min_dpi: int, found: Survey | None) -> list[int]:
     result the next rung down beats on every axis. Without PyMuPDF there
     is nothing to trim against and the whole ladder is walked, which is
     why the unchanged-rung rule has to carry the same job empirically.
+
+    A scan below *every* rung --min-dpi allows gets exactly one, the
+    floor. This is the case the trimming exists for and the one it used
+    to miss: a 150 dpi book under a 200 dpi floor left nothing "within"
+    the scan, and falling back to the whole ladder walked 400, 300, 250
+    and 200 to prove four times that the images are not 400 dpi — five
+    minutes of Ghostscript on a 200 MB book for four identical files.
+    One pass still re-encodes, which is the only lever left at that
+    floor, and the report says so rather than implying a rung helped.
     """
     ladder = [d for d in DPI_LADDER if d >= min_dpi] or [min_dpi]
 
     median = found.median_dpi if found else None
-    if median:
-        within = [d for d in ladder if d <= median * 1.05]
-        if within:
-            return within
-    return ladder
+    if not median:
+        return ladder
+
+    within = [d for d in ladder if d <= median * 1.05]
+    return within or ladder[-1:]
 
 
 def describe(path: Path, found: Survey | None) -> None:
@@ -386,7 +511,14 @@ def describe(path: Path, found: Survey | None) -> None:
     print(f"  {found.pages} page{plural}, {found.images} images sampled", end="")
     if found.median_dpi:
         print(f", around {found.median_dpi:.0f} dpi", end="")
-    print(", colour" if found.colour else ", greyscale or bitonal")
+    if not found.colour:
+        print(", greyscale or bitonal")
+    elif found.saturated is False:
+        print(", stored as colour but grey on the page")
+    elif not found.mostly_colour:
+        print(f", grey pages and some colour ({found.colour_share:.0%} of the images)")
+    else:
+        print(", colour")
     if filters:
         print("  compression: " + ", ".join(f"{k} x{v}" for k, v in filters.items()))
     if found.mostly_bitonal:
@@ -408,7 +540,12 @@ def shrink(
     A rung that does not shrink the file is recorded as unchanged and
     poisons nothing: the predictor is dropped, so the next rung is
     measured rather than guessed at. Skipping on an estimate is only
-    sound while the estimate comes from a rung that actually worked.
+    sound while the estimate comes from a rung that actually worked, and
+    "worked" is measured against the rung above rather than against the
+    input — otherwise the re-encoding every rung does is read as a
+    downsample, and a ladder that is doing nothing looks like one that
+    is working. Whether the file moved at all is the separate question,
+    and it is the one the advice at the end answers.
 
     Two rungs returning the same size say the images are below both of
     them and resolution is not engaging, which is said on the line rather
@@ -426,6 +563,10 @@ def shrink(
         return True
 
     ladder = rungs_for(args.min_dpi, found)
+    median = found.median_dpi if found else None
+    if median and ladder[-1] >= median:
+        print(f"  Around {median:.0f} dpi already, under every rung --min-dpi allows, so")
+        print(f"  this is one pass at {ladder[-1]} dpi that re-encodes and downsamples nothing.")
     if args.min_dpi < DEFAULT_MIN_DPI:
         print(
             f"  Ladder goes down to {args.min_dpi} dpi, below the {DEFAULT_MIN_DPI} dpi"
@@ -458,6 +599,7 @@ def shrink(
             elapsed = time.monotonic() - started
             fits = made <= target
             moved = made <= size * RESPONSE_FLOOR
+            engaged = previous is not None and made <= previous * RESPONSE_FLOOR
             note = "fits" if fits else "still too big" if moved else "unchanged by this rung"
             if previous and abs(made - previous) < previous * 0.01:
                 note += ", same as the last rung"
@@ -469,7 +611,7 @@ def shrink(
                 return finish(src, attempt, out_dir, explicit, dpi, made, size)
 
             responded = responded or moved
-            last = (dpi, made) if moved else None
+            last = (dpi, made) if engaged else None
 
         report_failure(tried, args, found, responded, size)
         return False
@@ -488,17 +630,31 @@ def report_failure(
 
     Only what is not already in play is offered: telling somebody to try
     the flag they just used is how a tool teaches you to stop reading it.
-    A file no rung moved needs different advice from one that shrank and
-    not enough, so the two are not given the same paragraph.
+
+    Three endings, not two. A file no rung moved, a file the ladder
+    shrank and not far enough, and — the one that reads as the second
+    but is not — a file that got smaller without a single rung
+    downsampling anything, because the scan is already below the floor.
+    Reporting that as "smallest was 163.6 MB at 250 dpi" credits a rung
+    that did nothing and sends the next run down a ladder that cannot
+    help. What helped was the re-encoding, and what is left is the
+    flags that re-encode harder.
     """
     floor = min(tried, key=lambda rung: rung[1])
     measured = min((r for r in tried if r[2]), key=lambda rung: rung[1])
+    lowest = min(r[0] for r in tried if r[2])
+    median = found.median_dpi if found else None
+    flat = median is not None and lowest >= median
 
     if not responded:
-        lowest = min(r[0] for r in tried if r[2])
         print(f"  No rung changed the file, so resolution is not the lever here.")
         print(f"  The images are at or below {lowest} dpi, or already compressed")
         print(f"  harder than quality {args.quality}, so downsampling them does nothing.")
+    elif flat:
+        off = 100 - (measured[1] * 100 // max(size, 1))
+        print(f"  Re-encoding alone took {off}% off, to {human(measured[1])}, and that is all")
+        print(f"  the ladder had: around {median:.0f} dpi, this scan is under the {lowest} dpi")
+        print(f"  floor, so no rung downsampled anything and none of them could have.")
     else:
         print(
             f"  Nothing on the ladder fits. Smallest was {human(measured[1])} at {measured[0]} dpi",
@@ -509,15 +665,30 @@ def report_failure(
         else:
             print(".")
 
+    under = [d for d in DPI_LADDER if median and d < median]
+
     options = []
     if args.quality > 50:
         options.append(
             f"--quality under {args.quality}, which recompresses the images even"
             " when nothing downsamples"
         )
-    if not args.gray:
-        options.append("--gray, if the book is black-and-white and the scan is not")
-    if args.min_dpi > min(DPI_LADDER) and responded:
+    if not args.gray and not (found and found.grey_in_all_but_name):
+        options.append(
+            "--gray, this scan carries real colour and the text almost certainly does not"
+            if found and found.mostly_colour
+            else "--gray, if the book is black-and-white and the scan is not"
+        )
+    elif not args.gray:
+        print("  --gray is not one of them: the pages are already grey, and dropping")
+        print("  colour planes that hold no colour saves nothing.")
+    if flat and under:
+        options.append(
+            f"--min-dpi {under[0]}, the first rung under this scan's own {median:.0f} dpi"
+            f" and the point where resolution starts to do anything — below the"
+            f" {DEFAULT_MIN_DPI} dpi OCR floor, so read a page before trusting it"
+        )
+    elif args.min_dpi > min(DPI_LADDER) and responded and not flat:
         options.append(f"--min-dpi under {args.min_dpi}, checking a page afterwards")
     if (found is None or found.mostly_bitonal) and args.mono_dpi > min(DPI_LADDER):
         options.append(f"--mono-dpi under {args.mono_dpi}, if the pages are bitonal")
