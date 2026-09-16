@@ -3,19 +3,6 @@
 import ePub, { type Book, type Rendition } from 'epubjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/**
- * The in-browser reflowable reader.
- *
- * This is the product thesis made concrete: the same text the reader
- * could only pan around in a scanned PDF, reflowed and under their
- * control. Everything exposed here — size, spacing, measure, theme — is
- * a knob a paper book doesn't have and a scan actively denies.
- *
- * epub.js renders into an iframe it owns, so the page's own stylesheet
- * cannot reach the text. Themes are registered with epub.js instead,
- * and re-registered whenever the settings change.
- */
-
 const FONT_SIZES = [90, 100, 112, 125, 140, 160, 185] as const
 const SPACING = { snug: 1.5, normal: 1.75, loose: 2.1 } as const
 
@@ -64,42 +51,33 @@ export function Reader({
   useEffect(() => setSettings(loadSettings()), [])
 
   const applyTheme = useCallback((rendition: Rendition, s: Settings) => {
-    const dark =
-      document.documentElement.dataset.theme === 'dark' ||
-      (!document.documentElement.dataset.theme &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches)
-
     rendition.themes.register('noblesee', {
       body: {
-        background: dark ? '#14120f' : '#fbf9f4',
-        color: dark ? '#e8e3d9' : '#23201b',
+        background: '#fbf9f4',
+        color: '#23201b',
         'font-family': s.serif
           ? '"Noto Serif TC", "Source Han Serif TC", "Songti TC", Georgia, serif'
           : '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
         'line-height': String(SPACING[s.spacing]),
-        // A measure cap is the single biggest legibility win on a wide
-        // screen: without it lines run the full window width and the
-        // eye loses its place returning to the left margin.
         'max-width': s.measure ? '34rem' : 'none',
         margin: '0 auto',
         padding: '0 1.25rem',
       },
       p: { 'text-align': 'justify', 'text-justify': 'inter-ideograph' },
-      a: { color: dark ? '#c9a227' : '#7a5c2e' },
+      a: { color: '#7a5c2e' },
       'h1, h2, h3': { 'line-height': '1.35' },
     })
     rendition.themes.select('noblesee')
     rendition.themes.fontSize(`${FONT_SIZES[s.fontIndex]}%`)
   }, [])
 
-  // Mount the book once. Settings changes re-theme the existing
-  // rendition rather than tearing it down, so the reader's position is
-  // never lost by nudging the font size.
   useEffect(() => {
     if (!viewerRef.current) return
 
-    const book = ePub(epubUrl)
+    const book = ePub(epubUrl, { openAs: 'epub' })
     bookRef.current = book
+
+    book.on('openFailed', () => setError('This edition could not be opened.'))
 
     const rendition = book.renderTo(viewerRef.current, {
       width: '100%',
@@ -149,7 +127,9 @@ export function Reader({
     return (
       <div className="reader__error">
         <p>{error}</p>
-        <p className="hint">The EPUB download on the book page may still work.</p>
+        <p className="hint">
+          You can still send this book to your e-reader from the book page.
+        </p>
       </div>
     )
   }
@@ -163,7 +143,7 @@ export function Reader({
         </div>
         <button
           type="button"
-          className="theme-toggle"
+          className="button-quiet"
           onClick={() => setPanelOpen((open) => !open)}
           aria-expanded={panelOpen}
         >

@@ -1,65 +1,217 @@
 'use client'
 
-import { useActionState } from 'react'
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react'
 
 import { sendToKindle, type KindleState } from '../app/(frontend)/actions/kindle'
+import { RESEND_PRICE } from '../domain/credits'
+import {
+  KINDLE_CONVERT_SUBJECT,
+  MAX_ATTACHMENT_BYTES,
+  describeBytes,
+  isEmailableSize,
+  tooLargeMessage,
+} from '../domain/kindle'
 
-/**
- * Sends one part to the reader's Kindle.
- *
- * This is the only way a book leaves the site. There are no download
- * links: NobleSee gives you a book to read — in the reader, or on your
- * device — rather than a file to collect.
- *
- * EPUB is the default and is listed first because Amazon converts it to
- * the native format and it stays reflowable. The PDFs are offered
- * because some readers want them, but they arrive fixed-layout, which
- * is the thing this project exists to move away from.
- *
- * What the page chooses to render is never what enforces anything: the
- * server action re-checks the address, the format, the rights, the
- * staged release and the limit regardless.
- */
 const FORMAT_LABEL: Record<string, string> = {
   epub: 'EPUB — reflowable',
-  pdf_standard: 'PDF — Standard',
-  pdf_large: 'PDF — Large',
-  pdf_xl: 'PDF — Extra Large',
+  pdf: 'PDF',
+  txt: 'Plain text',
+}
+
+export type DeliverableFormat = { format: string; bytes?: number | null }
+
+function oversized({ bytes }: DeliverableFormat): boolean {
+  return typeof bytes === 'number' && bytes > 0 && !isEmailableSize(bytes)
+}
+
+function resendWarning(balance: number | undefined): string {
+  const cost = `${RESEND_PRICE} credit${RESEND_PRICE === 1 ? '' : 's'}`
+  const have =
+    typeof balance === 'number' ? ` You have ${balance} credit${balance === 1 ? '' : 's'}.` : ''
+
+  return (
+    `You have already sent this book.\n\n` +
+    `Sending it again costs ${cost}.${have}\n\n` +
+    `Send it again?`
+  )
 }
 
 export function SendToKindleButton({
-  partId,
+  bookId,
   formats,
+  price,
+  balance,
 }: {
-  partId: string | number
-  formats: string[]
+  bookId: string | number
+  formats: DeliverableFormat[]
+  price: number
+  balance: number
 }) {
   const [state, action, pending] = useActionState<KindleState, FormData>(sendToKindle, {})
 
   if (formats.length === 0) return null
 
+  const sendable = formats.filter((f) => !oversized(f))
+
+  if (sendable.length === 0) {
+    const smallest = Math.min(...formats.map((f) => f.bytes as number))
+
+    return (
+      <span className="send-hint" title={tooLargeMessage(smallest)}>
+        Too large to email — {describeBytes(smallest)}, over the{' '}
+        {describeBytes(MAX_ATTACHMENT_BYTES)} limit. Read it here instead.
+      </span>
+    )
+  }
+
+  const currentBalance = state.balance ?? balance
+
+  const label = pending
+    ? 'Sending…'
+    : state.sent
+      ?
+        state.converted
+        ? 'Sent for conversion'
+        : 'Sent'
+      : price > 0
+        ? `Send to Kindle — ${price} credit${price === 1 ? '' : 's'}`
+        : 'Send to Kindle'
+
+  const confirmed = () => !state.sent || window.confirm(resendWarning(currentBalance))
+
   return (
     <form action={action} className="send-to-kindle">
-      <input type="hidden" name="partId" value={String(partId)} />
+      <input type="hidden" name="bookId" value={String(bookId)} />
 
       {formats.length > 1 ? (
-        <select name="format" defaultValue="epub" aria-label="Format to send">
+        <select
+          name="format"
+          defaultValue={sendable.some((f) => f.format === 'epub') ? 'epub' : sendable[0].format}
+          aria-label="Format to send"
+        >
           {formats.map((f) => (
-            <option key={f} value={f}>
-              {FORMAT_LABEL[f] ?? f}
+            <option
+              key={f.format}
+              value={f.format}
+              disabled={oversized(f)}
+              title={oversized(f) ? tooLargeMessage(f.bytes as number) : undefined}
+            >
+              {FORMAT_LABEL[f.format] ?? f.format}
+              {oversized(f)
+                ? ` — ${describeBytes(f.bytes as number)}, over the ${describeBytes(
+                    MAX_ATTACHMENT_BYTES,
+                  )} email limit`
+                : ''}
             </option>
           ))}
         </select>
       ) : (
-        <input type="hidden" name="format" value={formats[0]} />
+        <input type="hidden" name="format" value={formats[0].format} />
       )}
 
-      <button type="submit" disabled={pending} className="send-to-kindle__button">
-        {pending ? 'Sending…' : 'Send to Kindle'}
-      </button>
+      <SplitSend
+        label={label}
+        sent={Boolean(state.sent)}
+        pending={pending}
+        confirmed={confirmed}
+      />
 
       {state.error ? <span className="form-error">{state.error}</span> : null}
-      {state.notice ? <span className="form-notice">{state.notice}</span> : null}
     </form>
+  )
+}
+
+function SplitSend({
+  label,
+  sent,
+  pending,
+  confirmed,
+}: {
+  label: string
+  sent: boolean
+  pending: boolean
+  confirmed: () => boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const away = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open])
+
+  const guard = (event: ReactMouseEvent) => {
+    if (!confirmed()) event.preventDefault()
+    setOpen(false)
+  }
+
+  return (
+    <div className="send-split" ref={box}>
+      <div className="send-split__pair">
+        <button
+          type="submit"
+          disabled={pending}
+          className={`send-to-kindle__button send-split__main${
+            sent ? ' send-to-kindle__button--sent' : ''
+          }`}
+          onClick={guard}
+        >
+          {label}
+        </button>
+
+        <button
+          type="button"
+          disabled={pending}
+          className={`send-to-kindle__button send-split__toggle${
+            sent ? ' send-to-kindle__button--sent' : ''
+          }`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="Other ways to send"
+          onClick={() => setOpen((was) => !was)}
+        >
+          <span aria-hidden="true">▾</span>
+        </button>
+      </div>
+
+      {open ? (
+        <div className="send-split__menu" role="menu">
+          <button
+            type="submit"
+            role="menuitem"
+            name="convert"
+            value="1"
+            disabled={pending}
+            className="send-split__item"
+            onClick={guard}
+          >
+            Send with {KINDLE_CONVERT_SUBJECT}
+            <span className="send-split__note">
+              Asks Amazon to convert it to Kindle format. The subject line carries the instruction,
+              so the book arrives without its filename.
+            </span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }

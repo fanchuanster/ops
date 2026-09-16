@@ -1,52 +1,27 @@
-/**
- * Seeds the public catalog.
- *
- * Idempotent: everything is matched on slug and updated in place, so
- * running it twice never duplicates a book. That matters because it is
- * wired into `docker compose up` as a one-shot service.
- *
- * No data is migrated from the previous WordPress implementation — the
- * books below are re-declared here from scratch. The `storageKey`
- * values, however, point at artifacts that already exist in our own R2
- * bucket, so the download path has real files to serve instead of
- * dangling references. Regenerate them with
- * `tools/generate-seed-content.py` if they are ever lost.
- *
- * Run with:  npm run seed
- */
-
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-type FormatKey = 'docx' | 'epub' | 'pdf_standard' | 'pdf_large' | 'pdf_xl'
+import { LEVEL_IDS, type BookLevel } from '../domain/levels'
 
-interface SeedPart {
-  title: string
-  order: number
-  /** Prefix in object storage; the five artifacts hang off it. */
-  keyPrefix: string
-}
+type FormatKey = 'docx' | 'epub' | 'pdf'
 
 interface SeedBook {
   slug: string
   title: string
   originalTitle: string
   author: string
-  translator: string
   language: 'zh-Hant' | 'zh-Hans' | 'en' | 'zh-en'
   description: string
-  collections: string[]
-  stagedRelease?: { enabled: boolean; unlockDelayHours: number }
-  parts: SeedPart[]
+  collection: string
+  level: BookLevel
+  pageCount: number
+  keyPrefix: string
 }
 
-/** Filenames are fixed per format, so only the prefix varies per part. */
 const ARTIFACT_FILES: Record<FormatKey, string> = {
   docx: 'master.docx',
   epub: 'book.epub',
-  pdf_standard: 'standard.pdf',
-  pdf_large: 'large.pdf',
-  pdf_xl: 'xl.pdf',
+  pdf: 'book.pdf',
 }
 
 const COLLECTIONS: { title: string; slug: string; description?: string; parent?: string }[] = [
@@ -74,6 +49,12 @@ const COLLECTIONS: { title: string; slug: string; description?: string; parent?:
     slug: 'personal-development',
   },
   {
+    title: 'Life-Lifting',
+    slug: 'life-lifting',
+    description:
+      'Books that change how a life is lived — wisdom, character, health and the daily practice of living well.',
+  },
+  {
     title: 'Authors',
     slug: 'authors',
     description: 'Browse by author.',
@@ -88,39 +69,33 @@ const BOOKS: SeedBook[] = [
     title: 'Tao Te Ching',
     originalTitle: '道德經',
     author: 'Laozi (老子)',
-    translator: 'James Legge (1891)',
     language: 'zh-en',
     description:
       'One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge’s 1891 translation, which is in the public domain, alongside the original Chinese text.',
-    collections: ['chinese-classics', 'philosophy-wisdom'],
-    parts: [{ title: 'Chapter 1 / 第一章', order: 1, keyPrefix: 'books/4/parts/11' }],
+    collection: 'chinese-classics',
+    level: 'normal',
+    pageCount: 3,
+    keyPrefix: 'books/4/book',
   },
   {
     slug: 'analects',
     title: 'The Analects',
     originalTitle: '論語',
     author: 'Confucius (孔子)',
-    translator: 'James Legge (1893)',
     language: 'zh-en',
     description:
       'The recorded sayings of Confucius and his disciples, compiled by later followers — among the most influential works in Chinese thought on learning, character, and how to live well. This edition presents James Legge’s 1893 translation, which is in the public domain, alongside the original Chinese.',
-    collections: ['chinese-classics', 'personal-development'],
-    // Multi-part, so staged release is exercised by real seed data.
-    stagedRelease: { enabled: true, unlockDelayHours: 24 },
-    parts: [
-      { title: 'Book I — 學而 (Xue Er)', order: 1, keyPrefix: 'books/18/parts/20' },
-      { title: 'Book II — 為政 (Wei Zheng)', order: 2, keyPrefix: 'books/18/parts/26' },
-      { title: 'Book III — 八佾 (Ba Yi)', order: 3, keyPrefix: 'books/18/parts/32' },
-    ],
+    collection: 'chinese-classics',
+    level: 'essential',
+    pageCount: 6,
+    keyPrefix: 'books/18/book',
   },
 ]
 
-function artifactsFor(part: SeedPart) {
+function artifactsFor(spec: SeedBook) {
   return (Object.keys(ARTIFACT_FILES) as FormatKey[]).map((format) => ({
     format,
-    storageKey: `${part.keyPrefix}/${ARTIFACT_FILES[format]}`,
-    // The editable master is an editorial artifact, not a reader
-    // download — it is the source of truth and stays internal.
+    storageKey: `${spec.keyPrefix}/${ARTIFACT_FILES[format]}`,
     downloadable: format !== 'docx',
   }))
 }
@@ -128,7 +103,6 @@ function artifactsFor(part: SeedPart) {
 async function seed() {
   const payload = await getPayload({ config })
 
-  // --- collections, parents first so children can point at them ------
   const collectionIds = new Map<string, number>()
   for (const spec of [...COLLECTIONS].sort((a, b) => (a.parent ? 1 : 0) - (b.parent ? 1 : 0))) {
     const existing = await payload.find({
@@ -152,7 +126,6 @@ async function seed() {
     console.log(`${existing.docs[0] ? 'updated' : 'created'} collection: ${spec.title}`)
   }
 
-  // --- books and their parts -----------------------------------------
   for (const spec of BOOKS) {
     const existing = await payload.find({
       collection: 'books',
@@ -165,49 +138,25 @@ async function seed() {
       slug: spec.slug,
       originalTitle: spec.originalTitle,
       author: spec.author,
-      translator: spec.translator,
       language: spec.language,
       description: spec.description,
-      // Both seed titles are pre-1928 translations of pre-modern texts.
       rightsStatus: 'public_domain' as const,
       visibility: 'public' as const,
+      level: LEVEL_IDS[spec.level],
+      pageCount: spec.pageCount,
+      artifacts: artifactsFor(spec),
+      review: { state: 'unsubmitted' as const },
       status: 'published' as const,
-      stagedRelease: spec.stagedRelease ?? { enabled: false, unlockDelayHours: 24 },
-      collections: spec.collections
-        .map((slug) => collectionIds.get(slug))
-        .filter((id): id is number => id !== undefined),
+      collection: collectionIds.get(spec.collection) ?? null,
     }
 
-    const book = existing.docs[0]
-      ? await payload.update({ collection: 'books', id: existing.docs[0].id, data })
-      : await payload.create({ collection: 'books', data })
+    if (existing.docs[0]) {
+      await payload.update({ collection: 'books', id: existing.docs[0].id, data })
+    } else {
+      await payload.create({ collection: 'books', data })
+    }
 
     console.log(`${existing.docs[0] ? 'updated' : 'created'} book: ${spec.title}`)
-
-    for (const part of spec.parts) {
-      // Matched on (book, order): a part's title may be re-edited, its
-      // position in the book is what identifies it.
-      const existingPart = await payload.find({
-        collection: 'parts',
-        where: { and: [{ book: { equals: book.id } }, { order: { equals: part.order } }] },
-        limit: 1,
-      })
-
-      const partData = {
-        title: part.title,
-        book: book.id,
-        order: part.order,
-        status: 'published' as const,
-        artifacts: artifactsFor(part),
-      }
-
-      if (existingPart.docs[0]) {
-        await payload.update({ collection: 'parts', id: existingPart.docs[0].id, data: partData })
-      } else {
-        await payload.create({ collection: 'parts', data: partData })
-      }
-      console.log(`  part ${part.order}: ${part.title}`)
-    }
   }
 
   console.log('Seed complete.')

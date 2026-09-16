@@ -51,8 +51,34 @@ cd apps/web
 ```
 
 - Site: http://localhost:8787
-- Admin: http://localhost:8787/admin (create the first user on first visit)
+- Admin: http://localhost:8787/admin — the editorial UI: review queue, library,
+  collections, readers. Administrators only.
+- REST/GraphQL: http://localhost:8787/api — Payload's API. There is no
+  generated admin panel; it was deleted on 2026-08-24 once `/admin` covered
+  everything still needed (see `payload.config.ts`), which is also how the
+  Worker bundle stopped growing towards the 10 MB limit. Bootstrap the first
+  administrator with `npm run create-admin`.
+- API docs: http://localhost:8787/api/docs — Swagger UI over the REST API,
+  generated from the collection configs (`src/plugins/apiDocs.ts`); the document
+  itself is at `/api/openapi.json`. Both are administrators-only and answer 404
+  to anyone else, because the document names every collection and its whole
+  field shape. Authorize with a personal access token from `/account/tokens`,
+  or just stay signed in — the session cookie works too.
+- GraphQL playground: http://localhost:8787/api/graphql-playground — off unless
+  `PAYLOAD_GRAPHQL_PLAYGROUND=1` is in `.dev.vars`, which never reaches a
+  deploy. Administrators only on top of that, and `wrangler dev` reads
+  `.dev.vars` at startup — adding the line to a running server does nothing
+  until it is restarted. `/api/graphql` itself is POST-only, and the schema can
+  also be dumped without any of this: `./cf npx payload-graphql generate:schema`.
 - Health: http://localhost:8787/health — checks D1, not just the process
+- Analytics: Google Analytics 4, configured by `GA_MEASUREMENT_ID` in
+  `wrangler.jsonc` vars (not a secret — a measurement ID is served inside every
+  page). It renders only on the public site and only for requests that actually
+  arrived at `NEXT_PUBLIC_SERVER_URL`'s host, so `wrangler dev` and the
+  `*.workers.dev` URL never reach the property; `/admin` has its own layout and
+  is never measured. The tag is server-rendered — `next/script` inside a client
+  component puts nothing executable in the HTML, which is invisible to Google's
+  own tag detector. See `src/lib/analytics.ts` and `components/GoogleAnalytics.tsx`.
 
 Migrations are explicit and versioned in `apps/web/src/migrations`; the adapter
 is configured with `push: false` so nothing alters the schema at boot.
@@ -141,10 +167,128 @@ pip install python-docx ebooklib weasyprint pillow
 python3 tools/generate-seed-content.py
 ```
 
-Writes DOCX, EPUB and three PDF sizes into `content/seed/`. This stands in for
-the real OCR/AI conversion pipeline (`services/converter`, not yet built) so the
-seed content is reproducible rather than a pile of committed binaries nobody can
-regenerate.
+Writes DOCX, EPUB and one PDF into `content/seed/`. The seed content is
+generated rather than committed so it is reproducible instead of a pile of
+binaries nobody can regenerate.
+
+This used to stand in for a conversion pipeline that did not yet generate
+EPUB. It no longer stands in for anything — the pipeline runs in the Worker
+and builds real editions (CLAUDE.md section 13) — but the seed is still how
+the catalog gets books without uploading any.
+
+### Preparing a downloaded scan
+
+```bash
+sudo apt install ghostscript && pip install pymupdf   # install both
+python3 tools/clean-pdf.py --dry-run *.pdf            # what would happen
+python3 tools/clean-pdf.py 619294728-13230487-南怀瑾选集-第9卷-2013-03-P699.pdf
+```
+
+A file pulled from an archive mirror arrives with two unrelated problems, and
+`tools/clean-pdf.py` answers both in one pass at the point of intake. The
+filename is a database id and a byte-range suffix wrapped around the title that
+actually matters, so any leading or trailing run of digits and `-` is stripped
+and the file renamed in place — `南怀瑾选集-第9卷-2013-03-P.pdf`. The strip is
+literal, so a trailing letter stops it: this is a filename cleanup, not a guess
+at where the title really ends. The space, `.` or `_` the digits were hanging
+off goes with them — `...复旦大学出版社.19.pdf` ends up as
+`...复旦大学出版社.pdf`, not with the dot left dangling — and that trim runs
+once rather than sending the strip round again. The scan is then measured against the same
+100 MB ceiling as below and, if it is over, handed to the ladder — replacing the
+file in place, so what is left is one file at one clean name rather than an
+original with a smaller copy beside it. `--keep-original` leaves the input alone
+and names the copy for its size instead.
+
+Either pass can be skipped (`--skip-rename`, `--skip-shrink`): renaming never
+touches page content and shrinking never touches the name.
+
+### Shrinking an oversized scan
+
+```bash
+python3 tools/shrink-pdf.py --inspect scan.pdf        # what is in it
+python3 tools/shrink-pdf.py scan.pdf                  # -> scan-28MB.pdf
+```
+
+This is the size half on its own, for a file whose name is already what you
+want.
+
+PyMuPDF is nominally optional and worth installing anyway: it is what trims
+the ladder to the scan's own resolution. Without it the tool walks rungs that
+cannot do anything, a minute each on a large book, and can only report which
+compression filters it found in the raw bytes.
+
+On Windows, `tools/clean-pdf.ps1` and `tools/shrink-pdf.ps1` arrange the three
+things that have to be right before any of this works — a portable Ghostscript
+on PATH under its Windows name `gswin64c.exe`, a UTF-8 console so a book named
+南怀瑾选集-典藏版-第05卷-扫描版.pdf prints instead of raising
+`UnicodeEncodeError`, and whichever of `python`/`python3`/`py` actually runs:
+
+```powershell
+.\tools\clean-pdf.ps1 $env:USERPROFILE\Downloads\619294728-南怀瑾选集-第9卷-P699.pdf
+.\tools\clean-pdf.ps1 C:\scans\*.pdf -DryRun
+.\tools\shrink-pdf.ps1 C:\scans\book.pdf -Inspect
+.\tools\shrink-pdf.ps1 C:\scans\book.pdf -Quality 40 -Gray
+```
+
+`clean-pdf.ps1` is the one to reach for after a download: it does the rename and
+the shrink. `shrink-pdf.ps1` is the size half alone, and keeps `-Inspect`,
+`-Force`, `-Output` and `-OutDir`, which belong to that tool. Both pass only the
+switches you actually gave, so the defaults stay the Python tool's own and the
+two cannot drift apart; `-Help` prints them from the tool itself.
+
+Neither changes directory, so relative paths still resolve, and both look for
+the portable build in `$env:USERPROFILE\ghostscript-portable\bin` unless
+`-GhostscriptDir` says otherwise. Missing Ghostscript stops `shrink-pdf.ps1`,
+which can do nothing without it, and only warns `clean-pdf.ps1`, which can still
+rename. The plumbing itself is in `tools/pdf-tools.ps1`, dot-sourced by both —
+all three are saved with a UTF-8 byte order mark, because Windows PowerShell 5.1
+reads a `.ps1` as ANSI without one and turns the Chinese in them into mojibake.
+
+The upload limit is 100 MB, and it is not a number we chose: it is Adobe's
+ceiling for the Export PDF call and Cloudflare's request cap on this plan
+(CLAUDE.md sections 3 and 14). A 400-page book scanned at 300dpi goes past it
+easily, and those are the books this library is for.
+
+`tools/shrink-pdf.py` re-encodes the page images at a lower resolution and
+changes nothing else — no pages dropped, no splitting, text and vectors carried
+through as text and vectors. It descends a resolution ladder and stops at the
+first rung under the limit, so the result is the best quality that fits rather
+than the smallest file it could make.
+
+The ladder stops at 200 dpi, because below that Adobe starts losing dense
+traditional Chinese glyphs and the book arrives as a master full of noise —
+a document transaction and a proofreader's afternoon spent on something worse
+than nothing. `--min-dpi` goes lower and says so on the way past.
+
+**Resolution is not always the lever.** A rung above the scan's own resolution
+downsamples nothing, and a scan already compressed hard re-encodes to the size
+it started at — so a 225 MB book can come back the same size at every rung. The
+tool measures that rather than assuming it: each rung is judged against the rung
+above it rather than against the input, so the re-encoding every pass does is
+never read as a downsample; nothing is extrapolated from a rung that did not
+earn it; and a scan already under the whole ladder — a 150 dpi book under the
+200 dpi floor — is given one pass instead of four identical ones, with the
+reason on the line. When resolution cannot help, the tool says so and names
+what can.
+`--quality` recompresses the images even when nothing downsamples, and `--gray`
+is the bigger win for a black-and-white book photographed in colour, though it
+takes the red seals with it.
+
+The result is named for the size it came out at — `scan-28MB.pdf` — which is
+the one fact you wanted when the whole point was getting under a number. `-o`
+overrides it.
+
+`--quality` is a 0-100 scale over Ghostscript's `QFactor`, defaulting to 60,
+which is Ghostscript's own default. It is deliberately not `-dJPEGQ`: that
+switch belongs to the jpeg output device and `pdfwrite` ignores it, so every
+value of it produced byte-identical output and the flag was a placebo.
+
+It reads the limit out of `domain/publication.ts` rather than keeping its own
+copy, which has already moved once (64 MB until 2026-08-24).
+
+Keep the original. NobleSee preserves the file it is given — the upload *is*
+the book's PDF artifact and what a reader is sent — so shrinking is how a book
+gets in, not an archival step.
 
 ## Layout
 
@@ -161,9 +305,11 @@ apps/web/                    the application — public site, API and admin
   scripts/create-admin.ts    bootstraps an admin once the first-user screen is gone
   wrangler.jsonc             Worker bindings — mirrors `terraform output`
   wrangler.remote.jsonc      the same bindings, pointed at live D1/R2 (opt-in only)
+  worker-entry.ts            OpenNext's handler plus the conversion cron
+  src/lib/conversion/        the pipeline: DOCX, EPUB, the LLM client, the runner
 content/seed/                generated book artifacts (DOCX/EPUB/PDF)
 infra/                       Terraform: R2, D1, DNS, the www redirect
-tools/                       smoke test, seed-content generator, R2 mirror
+tools/                       smoke test, seed-content generator, R2 mirror, PDF shrinker
 docs/                        architecture decisions and roadmap
 ```
 
@@ -214,9 +360,9 @@ sent to the reader's device. It is never handed over as a file to collect. That
 is a product decision, not a technical limit: NobleSee exists to make books
 pleasant to *read*, and a folder of PDFs is not that.
 
-**Delivery limits count books, not files.** A reader who sends EPUB and all
-three PDF variants of one book to their Kindle has consumed one slot, because
-they read one book. Reading in the browser is never limited at all — the policy
+**Delivery limits count books, not files.** A reader who sends both the EPUB
+and the PDF of one book to their Kindle has consumed one slot, because they
+read one book. Reading in the browser is never limited at all — the policy
 paces bulk delivery, and charging someone for opening a book would penalise
 exactly the behaviour the site is for. This is an application-level fairness
 policy, not a bandwidth control.

@@ -28,6 +28,9 @@
       ],
       "@/*": [
         "./src/*"
+      ],
+      "open-next-worker": [
+        "./types/openNextWorker.ts"
       ]
     }
   },

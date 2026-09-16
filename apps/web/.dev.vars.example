@@ -27,3 +27,56 @@ PAYLOAD_SECRET=
 # added via `email_dns_records` in infra/terraform.tfvars — Amazon drops
 # a personal document whose sender fails SPF or DKIM, silently.
 RESEND_API_KEY=
+
+# Adobe PDF Services. Optional: with these unset, phase 1's export
+# stages do not run and a queued scan simply waits — the same fail-closed
+# shape the converter handoff uses, so the Worker can be deployed before
+# the credentials exist.
+#
+# Both come from a project in the Adobe Developer Console
+# (developer.adobe.com), under "PDF Services API". These are NOT the same
+# thing as an Acrobat Pro subscription, which grants the desktop and web
+# applications and no API credentials at all.
+#
+# Billing is per document transaction — one per 50 pages of a PDF → DOCX
+# export, so a 400-page book costs 8. The free tier is 500 a month.
+# ADOBE_API_KEY is accepted as an alias for ADOBE_CLIENT_ID, because that
+# is what the Developer Console calls the value. The secret has no alias
+# and is not optional: a token is issued from the pair, so the key on its
+# own authenticates nothing.
+ADOBE_CLIENT_ID=
+ADOBE_CLIENT_SECRET=
+
+# The GraphQL playground at /api/graphql-playground. Local only.
+#
+# Not a secret — the one thing here that is not — but it belongs in this
+# file rather than the committed `vars` block precisely because this file
+# never reaches a deploy. Setting it turns on Payload's playground *and*
+# schema introspection, and introspection is an ordinary query to
+# /api/graphql that no role check can gate. The route itself is
+# administrators-only either way.
+#
+# Unset it and the playground answers 404, which is the right state for
+# anything deployed. The Swagger UI at /api/docs needs none of this.
+PAYLOAD_GRAPHQL_PLAYGROUND=1
+
+# The conversion pipeline, which runs in this Worker (CLAUDE.md section
+# 13) and is driven by a cron trigger once a minute.
+#
+# CONVERTER_SECRET authenticates the tick route the cron calls. The name
+# is historical — the converter container it belonged to was deleted on
+# 2026-08-26 — and is kept deliberately: renaming it means a secret that
+# has to land before the deploy, and if it does not, the route fails
+# closed and conversions stop silently.
+#
+# Unset, the route 404s and nothing converts. At least 16 characters.
+#
+# Locally, `wrangler dev --test-scheduled` exposes /__scheduled so a tick
+# can be fired by hand instead of waiting for the minute.
+CONVERTER_SECRET=
+
+# xAI, for the AI correction stage — the same key as the repo-root .env.
+# It was the container's until the pipeline moved here; without it a
+# correction job fails with a clear message and nothing else is
+# affected. See CLAUDE.md section 4.
+XAI_API_KEY=

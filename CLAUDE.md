@@ -51,7 +51,6 @@ a high-quality Kindle book:
 - low visual distraction
 - excellent mobile experience
 - excellent e-reader compatibility
-- dark/light reading modes where appropriate
 - preservation of the original meaning and structure
 
 NobleSee should particularly focus on books that currently have poor
@@ -161,12 +160,11 @@ The platform should eventually provide:
 - Online book reading
 - AI-assisted book digitization and production
 - EPUB/PDF and potentially other e-reader formats
-- Staged/part-based book releases
 - Paid early unlocks
 - Donations
 - Send-to-Kindle functionality
-- Delivery abuse protection (per-user limit on number of books delivered
-  per period — not a network/bandwidth control)
+- A credit economy: every book has a price, and sending one to a device
+  spends credits (section 5.2)
 
 This list said "Book downloads" until 2026-08-13. It is deliberately
 gone: a book is read here, in the reflowable reader, or sent to the
@@ -175,13 +173,16 @@ a product decision, not a technical limit. NobleSee exists to make books
 pleasant to *read*, and a folder of PDFs is not that.
 
 "Download" survives in code and in this document as the name of the
-*authorization* concept — the rights/limit/staged-release decision in
+*authorization* concept — the rights and credit decision in
 `src/lib/authorizeDownload.ts` and the `Downloads` ledger. Kindle
 delivery runs through exactly that path, because it is a download that
 happens to arrive by email.
 - User blogs (each user has their own blog)
 - E-reader product/affiliate sales
 - Potential automated X/Twitter anti-explicit-content activity
+- A conversion portal: readers upload their own material and get a
+  readable edition back (section 6.1)
+- Reading levels: essential / normal / extensive (section 5.1)
 
 ---
 
@@ -203,15 +204,42 @@ Use **Next.js + React + TypeScript with Payload CMS on Cloudflare D1**
 for:
 
 - User accounts and authentication
-- Book/Part/Format domain model
+- Book/Format domain model
 - Administration and the editorial/proofreading workflow
 - Rights status and access control
-- Download authorization, rate limiting, staged release
+- Delivery authorization and the credit economy
 - Donations/payment integration (Stripe)
 - The JSON API consumed by the frontend
 
 Payload runs *inside* the Next.js application rather than beside it, so
 the admin, the API and the public site are one deployable.
+
+**Payload's generated admin panel is not part of that**, since
+2026-08-24. `/admin` is NobleSee's own editorial UI and the only one;
+`app/(payload)/cms` is deleted, which is how Payload says to disable a
+panel now that `admin.disable` is deprecated. It survived as the tool
+for whatever the editorial UI had no screen for, and what that came
+down to in the end was two acts — granting the admin role and
+correcting an email — which are now the readers panel. Deleting it
+takes `@payloadcms/next/views` out of a Worker bundle that had reached
+7.7 MB gzipped against a 10 MB limit.
+
+What it took with it is worth stating: a browser view of the
+`Downloads`, `Entitlements`, `credit-ledger` and `reading-progress`
+collections for anyone other than yourself, and the Media list. Each is
+still reachable through `app/(payload)/api`, which stays. A screen for
+them is a real piece of work and a fair thing to want; it is not a
+reason to keep an entire second admin.
+
+Since 2026-08-25 that API is at least *legible*: `/api/docs` serves
+Swagger UI over an OpenAPI 3 document generated from the collection
+configs themselves (`apps/web/src/plugins/apiDocs.ts`), so the docs
+cannot drift from the API the way a hand-written spec would. It is
+administrators-only and answers Payload's own "route not found" to
+everyone else — the document names every collection and its whole field
+shape, which is a map worth not publishing. This is not a replacement
+for the missing screens. Reading `credit-ledger` through Swagger is
+still reading a table, not looking at an account.
 
 That deployable is a **Cloudflare Worker**, built by OpenNext, on **D1**
 for the database and **R2** for book artifacts. This section specified
@@ -239,17 +267,90 @@ it, never the reverse.
 The following must remain server-side application functionality
 (Next.js route handlers and Payload, never the browser):
 
-- book management and book parts
+- book management
 - release scheduling
-- download authorization and rate limiting
+- delivery authorization and credit accounting
 - payment/unlock state
 - rights status enforcement
 - conversion job orchestration
 - Kindle delivery
 - AI functionality and API integrations
 
-Do NOT turn the web application into the conversion pipeline. That stays
-a separate FastAPI service (`services/converter`).
+This said "Do NOT turn the web application into the conversion pipeline.
+That stays a separate FastAPI service (`services/converter`)" until
+2026-08-26. The service is deleted and the pipeline is in the Worker
+(section 13), so the rule as written is inverted.
+
+What it was protecting is still right, and is now stated as itself: **do
+not put long computation in the Worker.** A Worker is billed and limited
+by CPU time. Anything that wants an OCR model, a font stack, a headless
+office suite or any native library belongs behind an HTTP call to
+something that has them — the way Adobe PDF Services and xAI already
+are. The old rule was a proxy for this one, and it stopped tracking it
+the moment the pipeline's last native dependency was deleted.
+
+## 2.2 Open source and third-party integration are welcome
+
+This project is open to open source, third-party integration, borrowing
+and reuse. Where a mature library, plugin, model or hosted API already
+does the job well, use it rather than reimplementing it. That applies to
+OCR engines, document tooling, LLM providers, payment and email — the
+default answer to "should we build this ourselves?" is no.
+
+The conditions on that are the ordinary ones, not obstacles:
+
+- honour the licence of anything borrowed, and keep attribution intact;
+- keep the dependency behind an interface where it is plausibly
+  replaceable (`domain/adobe.ts` and `lib/conversion/llm.ts` are the
+  pattern);
+- credentials come from the environment, never from source;
+- when user-owned content goes to a third-party service, say so on the
+  screen where that is chosen (section 6.1). The rule is disclosure and
+  a private alternative, not a prohibition.
+
+---
+
+## 2.3 Coding standards
+
+House rules, shared with this author's other repositories and kept in
+step with `mds/MSM_Automations/CLAUDE.md`.
+
+- **Early returns.** Guard clauses first, main logic unindented.
+- **Reuse before writing.** Look in `domain/` for rules and `lib/` for
+  I/O before adding a function; extend rather than duplicate, and put a
+  shared helper in the shared module, not beside its first caller.
+- **No comments in code.** Names and structure carry the meaning; a
+  block that needs a comment to be understood gets renamed or split out
+  instead. The reasoning belongs here, in this document, where it is
+  read once rather than re-read beside every function. The codebase was
+  stripped to this rule on 2026-09-16 — ~5,900 comments across 226
+  files. Only machine-read directives survive: `@ts-*`, `eslint-*`,
+  `/// <reference>`, `# shellcheck`, `# noqa`.
+- **Log through `lib/logError.ts`**, not bare `console.*`, and leave no
+  debugging output behind.
+- **Rules are pure functions.** `domain/` imports no framework;
+  `npm run verify` enforces it. Test the case, name the test after it.
+
+---
+
+## 2.4 Working in this repo
+
+- **Scratch files go in `tmp/`** (gitignored), never the repo root,
+  prefixed with whoever made them — `tmp/<agent>_<description>.<ext>`.
+  Disposable: never referenced from committed code, deleted when done.
+- **Branches.** `master` is default, `wen_dev` is the working branch.
+  Single maintainer, no review gate: merge `wen_dev` into `master`
+  locally, push, then `bash .reset.sh`, which recreates `wen_dev` off
+  the fresh `master` — never delete it as part of the merge. Keep real
+  merge commits, with a message describing the diff.
+- **After a push, say what was pushed and stop.** No PR reminders or
+  links unless asked.
+- **Nothing enters Cloudflare except through Terraform.** `infra/` is
+  the record; a hand-made resource is in no state file and no diff. Use
+  the CLI and dashboard to read.
+- **Verify the assumption, especially in a hurry.** Measure a limit from
+  the thing that has it. "It can't do X" and "my change can't have
+  caused this" are hypotheses until a command proves them.
 
 ---
 
@@ -263,50 +364,57 @@ Target architecture:
                            |
         Next.js + Payload application  [Cloudflare Worker]
         catalog, book pages, reader, blog,
-        accounts, rights, limits, staged
-        release, delivery, admin/editorial
-        UI, JSON API
+        accounts, rights, credits,
+        delivery, admin/editorial
+        UI, JSON API, **the conversion pipeline**
                            |
-        +------------------+------------------+
-        |                  |                  |
-     bindings           bindings           HTTP API
-        |                  |                  |
-        v                  v                  v
-  Cloudflare D1     Cloudflare R2          Stripe
-   (SQLite)               |                Resend
-        |           Book artifacts        (Kindle)
-        |           DOCX/EPUB/PDF
-        |                  ^
-        |                  |
-        v                  |
- Cloudflare Queues         |
-        |                  |
-        v                  |
-   Converter  [container] -+
-        |
-        +---------+---------+
-        |         |         |
-       OCR       LLM     Rendering
-                  |
-                 vLLM
-                  |
-           Gemma 4 31B
+        +----------+-------+--------+-----------+
+        |          |                |           |
+     bindings   bindings         HTTP API    cron
+        |          |                |           |
+        v          v                v           v
+  Cloudflare  Cloudflare        Adobe PDF    every minute:
+      D1          R2            Services     advance one book
+   (SQLite)        |            xAI API
+                   |            Stripe
+            Book artifacts      Resend (Kindle)
+            DOCX/EPUB
 
 The dividing line is CPU shape, not importance: a Worker is billed and
 limited by CPU time, so I/O-shaped request handling belongs on it and
-long *computation* — OCR, LLM correction, DOCX/EPUB/PDF rendering — does
-not. `docs/CLOUDFLARE_ARCHITECTURE.md` has the full table.
+long *computation* does not. `docs/CLOUDFLARE_ARCHITECTURE.md` has the
+full table.
 
-The Worker never waits for a conversion. It enqueues a job and returns
-an id; the converter consumes the queue and writes results back to R2.
-The converter therefore needs no inbound port, which is what makes it
-deployable behind this host's filtered egress.
+**There is no converter service.** There was one — a Python container
+running OCR, LLM correction and format rendering — until 2026-08-26.
+What retired it was not a decision to consolidate but the fact that
+every reason it existed had already been removed one at a time:
+
+- **PaddleOCR went** on 2026-08-26 (section 8). Reading a scan is an
+  Adobe HTTP call now, made from the Worker.
+- **WeasyPrint and LibreOffice went** with the generated PDF on the same
+  day (section 11), taking the last apt layer and the CJK font set.
+- **The LLM was always an HTTP call.** Nothing about it needed a
+  machine.
+
+What was left — parse a DOCX, write an EPUB, talk HTTP — links against
+no native library at all, which section 11 had already noticed made it
+"a plausible candidate for the Worker itself". So the pipeline is
+`apps/web/src/lib/conversion/` and `apps/web/src/domain/`, and the
+container is deleted.
+
+That rule still governs what may come *back*. Anything wanting a model,
+a font stack or a native library does not belong in the Worker; it
+belongs behind an HTTP call to something that has them, the way Adobe
+already is.
+
+The Worker never waits for a conversion on a reader's request. Work is
+claimed and run by a **cron trigger**, once a minute, one book per tick.
 
 Separate services:
 
 - NobleSee Web (Next.js + Payload on D1/R2) — one Worker serving the
-  public site, the API and the admin
-- NobleSee Converter — container; OCR, LLM correction, format generation
+  public site, the API, the admin *and the conversion pipeline*
 - NobleSee X Worker
 - Kindle delivery — built, and *not* a separate service: Workers cannot
   speak SMTP, so it goes over Resend's HTTP API from the Worker itself
@@ -314,22 +422,334 @@ Separate services:
 Deployment:
 
 `wrangler deploy` for the Worker; Terraform in `infra/` for R2, D1, DNS
-and the redirect. There is no Docker Compose stack — it was retired on
-2026-08-13 when the last container left production. Development still
+and the redirect. There is no Docker Compose stack and **no container in
+production at all** — the last one left on 2026-08-26. Development still
 uses a container for the toolchain, for an unrelated glibc reason
 documented in `README.md`.
 
-Where the converter container runs is deliberately still open. The queue
-boundary means it can be answered later without touching application
-code.
+"Where the converter container runs" was an open question here from the
+day it was written. It is closed by there being no container: nothing to
+host, nothing to push to a registry, and no second place for the job
+list to disagree with the Book row.
 
 Kubernetes / AWS EKS remains a possible future target. Do not
 prematurely introduce Kubernetes-specific complexity into the MVP.
 
-PaddleOCR is the OCR engine feeding the conversion services (see section
-8, OCR, for the fuller evaluation). The conversion service is
-deliberately standalone and platform-agnostic — it talks to the web
-application over HTTP and knows nothing about the frontend.
+A scanned PDF becomes a DOCX master through **Adobe PDF Services**,
+over its REST API — the Export PDF operation, with an `ocrLang` of
+`zh-Hant`, `zh-CN` or `en-US`. This was Google Document AI until
+2026-08-19 and PaddleOCR until 2026-08-14; `infra/documentai.tf` still
+provisions the Google resources and carries a banner saying nothing
+calls them.
+
+The reason for each move is the same one and it is not OCR quality. OCR
+cannot run on a Worker — 128 MB of memory and five minutes of CPU
+against a model needing more of both — so calling a hosted service turns
+that compute into an HTTP request, which a Worker is billed almost
+nothing for. Document AI did that for the *reading*. Adobe does it for
+the reading **and the mastering**, in one call, which is the whole of
+phase 1 rather than the first half of it.
+
+That collapse is what the change bought, and it deleted more than it
+added:
+
+- **No OCR handoff document.** Document AI returned one string for a
+  whole document plus byte ranges into it, sharded across files, with
+  int64 offsets encoded as strings and indexed in code points. Slicing
+  that back into pages was `domain/ocr.ts`, and it is gone.
+- **No running-head removal.** Adobe puts running heads and folios in
+  Word's header and footer parts, which `lib/conversion/docxRead.ts`
+  does not walk. They are excluded by *where they are* rather than by
+  inferring position from normalized vertices across the book.
+- **No heading classification, and no paying for style information.**
+  Adobe returns `Heading 1` / `Heading 2`, which the DOCX reader
+  already maps — because a corrected master had to be readable back
+  anyway. Document AI only offered type sizes to reason from, and only
+  as a premium per-page extra.
+
+What it costs is worth stating plainly. Adobe's structure detection is
+now unauditable in a way ours was not: when it decides wrongly, there is
+no ratio to tune, only a master to correct. Section 5 already says the
+master is the source of truth and open to correction, so that is the
+intended repair — but it is a human's time rather than a threshold.
+
+Limits that constrain the material: **100 MB per file**, which a
+400-page 300dpi scan can exceed, and which is refused before upload with
+something an uploader can act on; and one document transaction per 50
+pages, so a 400-page book costs 8.
+
+Adobe fails an export for two quite different reasons and reports both
+the same way, and since 2026-09-14 the pipeline tells them apart. A PDF
+it cannot read fails identically every time it is sent; a service that
+was busy — "The operation has timed out, please try after some time.",
+its own wording — fails a file that is perfectly good. Until then both
+landed the book in `failed`, so an uploader was shown a fault of ours,
+verbatim and with a request id attached, as though their scan were at
+fault, and a book that only needed sending again waited for someone to
+notice.
+
+`isTransientExportFailure` in `domain/adobe.ts` reads the message and
+`failOrRetry` in `lib/masterPipeline.ts` acts on it: a recognised
+transient failure returns the book to `queued` with its export handle
+released, and the next tick sends it again. Three rules bound that.
+**Recognised transience only** — an unfamiliar message fails the book,
+because failing one that would have succeeded costs a click and
+retrying one that never can costs transactions for ever. **Two
+automatic retries** (`MAX_EXPORT_RETRIES`), counted in
+`conversion.exportRetries`, since every submission is billed. And **a
+person pressing Try again starts a fresh budget**, which is
+`releasedExportHandle` clearing the count: an automatic retry is the
+pipeline guessing, a manual one is somebody deciding.
+
+A transient fault while *polling* is cheaper still and is handled
+differently: the export is untouched and its job URL is still good, so
+the book stays in `ocr` and the next tick simply asks again. Requeueing
+there would throw away a running export and pay for it twice because a
+token endpoint had a bad minute.
+
+Since 2026-08-24 the portal's own limit is **also 100 MB**, and the
+agreement is not a coincidence — it is the point. It was 64 MB, set by
+Worker memory rather than by anything about books: uploads arrived
+through a Next server action, which parses the whole request into
+memory before any of our code runs. The upload is now a raw request
+body streamed straight into R2 (`api/upload/route.ts`), so memory no
+longer decides it and the two ceilings that remain — Adobe's, and
+Cloudflare's 100 MB request cap on Free and Pro — are the same number.
+
+A file the portal accepts is therefore a file Adobe will read. Raising
+it further means a Business plan *and* an answer for scans Adobe
+refuses, which is a product decision rather than a constant.
+
+Because of all that, **the pipeline is split at the master**, not at
+OCR. Phase 1 turns a source into the master — an Adobe call for a PDF, a
+parse for a DOCX or text — and phase 2 renders everything downstream.
+Both run in the Worker (section 13): the split is about what may be
+re-run, not about which machine runs it. Mastering a scan is a fetch
+now, so section 2.1's rule against computation in the Worker is not bent
+by it.
+
+The export stages are advanced by the same **cron tick** that claims
+jobs — once a minute, at most one book, before any job is claimed
+(`apps/web/src/lib/masterPipeline.ts`). The converter's poll was the
+clock until 2026-08-26.
+
+Credentials are `ADOBE_CLIENT_ID` and `ADOBE_CLIENT_SECRET`, from a
+project in the Adobe Developer Console. **An Acrobat Pro subscription is
+not these credentials** — it licenses the desktop and web applications
+and carries no API access. PDF Services is a separate product with its
+own free tier (500 document transactions a month) and its own paid
+plans. With the secrets unset the export stages do not run at all, so
+the Worker deploys fine ahead of them.
+
+## Two phases, joined at the master
+
+Production is two pipelines, not one:
+
+    Phase 1   original → DOCX master        expensive, run once
+    Phase 2   DOCX master → EPUB, PDF…      cheap, run whenever
+
+The split is what makes section 5's "the DOCX master is the source of
+truth" mean something. An editor corrects OCR damage in the master, or
+an uploader re-uploads a corrected one (section 6.2), and the book
+returns to `master_ready` — phase 2 runs again and phase 1 does not.
+Re-running phase 1 would pay Google a second time to re-read pages
+already read, and would discard the correction that prompted it.
+
+The states are in `apps/web/src/domain/pipeline.ts`, and every rule that
+follows from the split is a function there rather than a condition in a
+route: what a tick may claim, where a phase lands when it finishes,
+where a failure restarts from. That last one is keyed on whether a DOCX
+artifact exists rather than on the state, because the state is what a
+failure loses and the artifact is the evidence that survived.
+
+## Phase 2 does not wait for review
+
+Phase 2 runs as soon as a master exists. Every book that reaches
+`master_ready` is offered to the next tick that claims work, whoever
+owns it and whatever its review state — `claimFor` in
+`apps/web/src/domain/pipeline.ts` consults neither.
+
+Between 2026-08-15 and 2026-08-17 it did wait: a reader's upload sat at
+`master_ready` until an administrator approved it. That gate was
+backwards, in two ways that only show up from the outside.
+
+**What a reviewer reads is the finished edition.** Publication publishes
+the deliverables — the EPUB is what a reader will actually open, so it is
+what the decision is about. Holding the EPUB until the review left the
+reviewer with a DOCX master and an act of imagination.
+
+**A private book is never submitted at all.** Section 6.2 says an upload
+may stay private forever and that submitting is optional. Under the gate,
+"optional" meant the book was never converted past its master, so the one
+reader entitled to it could not read it either — while section 5.2
+promises exactly that reader every word.
+
+Review still decides publication, and `enforcePublicationReview` in the
+Books collection is where it is enforced: an owned book cannot become
+`visibility: public` without an approved review *and* a rights status
+that permits distribution. That is the gate that was always doing the
+work. Building an EPUB is not publishing it — a converted private upload
+is `status: published` but still `visibility: private`, readable by its
+owner and by nobody else (`readBooks` in `collections/Books.ts`).
+
+Reviewing therefore means reading the book: an administrator opens
+`/read/<slug>` like anyone else, which is what the Books access rule
+grants them.
+
+## Four sources, and what each one needs
+
+The uploaded file can be a **PDF, a DOCX, an EPUB** or plain text, and
+what happens next is almost entirely decided by which it is
+(`apps/web/src/domain/publication.ts`):
+
+    PDF    the owner chooses: read it into a master and build the EPUB,
+           or publish the file exactly as it stands
+    text   the owner chooses: build a master and an EPUB from it,
+           or publish the text exactly as it stands
+    DOCX   already the master — no conversion to one; build EPUB + PDF
+    EPUB   already the edition — nothing is converted at all
+
+**Two of the four get a choice**, and they are the two where converting
+buys something an uploader might reasonably decline.
+
+For a PDF the trade is the sharp one: a scan has to be read before it
+can reflow, which costs money and time and can go wrong, while a
+born-digital PDF may already be perfectly good. Nobody but the uploader
+can weigh that.
+
+Text joined it on 2026-08-26. Until then it was always converted, on the
+reasoning that a .txt has no layout of its own so publishing it as it
+stands is publishing a text file. True, and not a reason to refuse: a
+text file **reflows**, which is the whole property the pipeline exists
+to give a scan. What converting adds is *structure* — chapters, a
+contents list, a navigable EPUB — and that is worth offering rather than
+imposing, especially while it means waiting a tick for something the
+reader can already read.
+
+So a text upload can be read, reviewed, published and sent to a Kindle
+as itself. `txt` is an artifact format
+(`domain/conversion.ts`), never generated and only ever the upload kept
+as itself; `readingFormat` puts it last, behind the editions a
+conversion would produce, and `/read` sets it as prose in the site's own
+typography (`components/TextReader.tsx`) rather than handing it to a
+viewer. Amazon has accepted `.txt` for as long as it has accepted
+anything, so delivery needed nothing new.
+
+That change closed a quieter hole. `originalArtifact('text')` returned
+null, which meant a converted text book's original was never filed under
+the book at all — it stayed at the `conversion/` key, which the R2
+lifecycle rule sweeps after 30 days. "Always keep the original" now
+holds for every source.
+
+DOCX and EPUB have exactly one sensible path each, so their owners are
+*told* what will happen rather than asked to pick from a list of one.
+
+## A book can hold more than one of them
+
+Since 2026-09-14 a book is not one file. It may hold **a source of each
+kind at once** — the scan *and* a transcription of it — and **which one
+the DOCX master is built from is its owner's choice**, changeable after
+they have seen how the first attempt turned out
+(`apps/web/src/domain/sources.ts`).
+
+The case is ordinary rather than exotic. Someone preserving a Chinese
+classic frequently has a scanned PDF and a plain-text transcription that
+circulates beside it. Adobe reading the scan costs a document
+transaction, takes minutes and gets characters wrong; the transcription
+is free, instant and already right — but it may be abridged, or from a
+different edition, and only the person holding both can tell. Under one
+source per book that judgement had to be made at upload, before either
+result existed, and getting it wrong meant a second upload and a second
+book.
+
+Three rules hold it together, and each is one function:
+
+- **One source per artifact slot.** A book's objects are named by format
+  (section 14), so two PDFs on one book are two files competing for one
+  name. `canAddSource` refuses a kind whose slot is filled — including
+  by a *generated* EPUB, because accepting one there would overwrite the
+  edition readers already have. A DOCX aimed at an existing master is
+  redirected to "Replace and rebuild", which is the same act said
+  properly.
+- **An EPUB is never a master source.** `canMasterFrom` excludes it, for
+  the reason section 10 gives: parsing a reading edition back into a
+  master and rendering it forward again can only lose.
+- **Adding is free; choosing is not.** Uploading another file costs no
+  quota and starts nothing. Choosing it re-enters phase 1, costs one of
+  the month's conversions and re-stamps `startedAt`, because
+  re-mastering a scan is a full Adobe export at full price.
+
+Nothing is deleted by switching. The old master is overwritten in place
+when the new one lands and both sources stay filed, so the decision is
+reversible for the price of another conversion — unlike the plan flip
+above, which is deliberately one-way.
+
+The master source is still `conversion.sourceKind` / `sourceKey` /
+`sourceFilename`, exactly as before, and every branch in the pipeline
+goes on reading those three fields. `conversion.sources` is the list;
+those three say which of it is in use. Books that predate the list have
+an empty one and a perfectly real source, so `readSources` synthesizes
+the single entry from the same three fields — which is why nothing was
+migrated and no row was rewritten.
+
+Publishing a *PDF* as it stands means the reader gets a fixed-layout
+book and no EPUB. That is a real cost against the mission — "not merely
+to host PDFs" — and it was the reason converting was the default rather
+than the choice being neutral. (For text the cost is much smaller, as
+above: the words already reflow.)
+
+**Since 2026-08-25 the default is the other one**: publish it as it
+stands, convert nothing, ready immediately. The reasoning above is still
+right about the finished book and was wrong about this moment.
+Converting is the expensive path — an Adobe export, a queue, minutes
+before the uploader sees anything and longer if the export is retried —
+and it was being taken on behalf of someone who had done nothing yet but
+choose a file.
+
+What makes the fast default safe is that it is the one that cannot be
+regretted. The original is kept whatever is chosen, so nothing is lost
+by starting there, and a reader who wanted their book today cannot
+un-wait for a conversion they did not ask for. The mission is served by
+the option being offered plainly on the same screen, with what it costs
+to skip it said out loud, rather than by taking the decision for them.
+
+The decision stays reversible, and *that* is now load-bearing rather
+than a footnote: switching a settled book from as-it-stands to converted
+puts it back in the queue, re-stamps its `startedAt` so the conversion
+is charged to the month it actually happens in, and builds the EPUB on
+top of the PDF already filed (`saveBookDetails`). Only in that
+direction — a converted book set back to as-it-stands is a metadata
+change, not a request to delete an EPUB somebody may already have been
+sent.
+
+## Everything slow is queued, and a worker moves the book
+
+There is no synchronous conversion anywhere. The expensive stages — the
+PDF→DOCX export, and EPUB/PDF generation — are queues, and the book's
+own `conversion.state` *is* the queue and the status. A worker claims a
+book by a compare-and-swap on that state, does the work, and reports
+back; the owner watches the state change on their book page
+(`ConversionProgress`). Nothing blocks a request on any of it.
+
+That is why a book with nothing to convert — an EPUB upload, or a PDF
+published as it stands — still passes through `queued`. It is filed by
+the same tick, just without a job at the end of it.
+
+Phase 2 builds everything the source can give it, on the first run.
+`requestFormat`, `conversion.pendingFormats` and the on-demand button
+existed to ration WeasyPrint across three PDF sizes; no PDF is rendered
+at all any more (section 11), so there is nothing left to ration and all
+three are gone.
+
+`formatsToBuild` still has one subtle case: when the book already has
+formats, every one of them is rebuilt. That is a master edit, and
+regenerating only what is missing would leave the existing EPUB behind,
+still carrying the errors the edit removed.
+
+The pipeline knows nothing about the frontend, and is reached only
+through `domain/pipeline.ts` and `lib/conversion/runner.ts`. That
+boundary was a separate HTTP service until 2026-08-26 (section 13); it
+is the module layout that keeps it now.
 
 ---
 
@@ -355,11 +775,10 @@ The frontend must provide:
 - archive/category layouts
 - accessibility
 - performance optimization
-- dark/light reading modes
 - an excellent reflowable reading experience
 
 Do NOT put business logic in the frontend. Rights checks, delivery
-authorization, rate limiting and staged release are enforced
+authorization and credit accounting are enforced
 server-side; the frontend renders what the API permits and must never be
 the only thing standing between a reader and a restricted file.
 
@@ -372,32 +791,77 @@ JavaScript is justified.
 
 ---
 
-# 4. EXISTING AI INFRASTRUCTURE
+# 4. AI INFRASTRUCTURE
 
-A self-hosted vLLM endpoint already exists.
+The LLM provider is **xAI**, over its OpenAI-compatible HTTP API.
 
-Completion endpoint:
+    XAI_BASE_URL=https://api.x.ai/v1     (default; need not be set)
+    XAI_MODEL=grok-4.20-0309-non-reasoning
+                                         (default; need not be set)
+    XAI_API_KEY=...                      (required)
 
-http://10.211.51.231:8000/v1/chat/completions
+This block said `grok-4.6` until 2026-08-26 and the code never agreed:
+the default has been the cheap non-reasoning variant since it was
+measured against grok-4.6 and found to give the same corrections on
+sample lines at 2.4x cheaper output. Correction is a narrow,
+well-specified task over short inputs, and reasoning tokens are billed
+as output at twice the input rate — which over a whole book is the real
+cost of the stage. The document is now what the code does.
 
-Model:
+**`XAI_API_KEY` is a Worker secret**, since 2026-08-26:
 
-google/gemma-4-31B-it-qat-w4a16-ct
+    wrangler secret put XAI_API_KEY
 
-Use OpenAI-compatible HTTP APIs when possible.
+Before that it was only ever set on the converter container, because the
+container was the only thing that talked to xAI. The container is gone
+(section 13) and the correction stage runs in the Worker, so the key has
+to be where the code is. With it unset, correction jobs fail with a
+clear message and nothing else in the pipeline is affected — a book
+still converts, it just gets no suggestions.
+
+This section specified a self-hosted vLLM endpoint at
+`http://10.211.51.231:8000/v1` running `google/gemma-4-31B-it-qat-w4a16-ct`
+until 2026-08-13. Both are interchangeable as far as the code is
+concerned — the client in `apps/web/src/lib/conversion/llm.ts` speaks
+the OpenAI chat-completions shape and takes base URL, model and key from
+the environment, so pointing it back at vLLM is a matter of setting
+`XAI_BASE_URL` and `XAI_MODEL`. Nothing in the pipeline knows which is
+answering.
 
 IMPORTANT:
 
-- Do not expose this endpoint directly to public browsers.
-- The web application should not directly depend on the vLLM endpoint.
-- The conversion/AI service should communicate with vLLM.
-- Make the LLM endpoint configurable through environment variables.
-- Never hard-code the endpoint in application source code.
-
-Example:
-
-VLLM_BASE_URL=http://10.211.51.231:8000/v1
-VLLM_MODEL=google/gemma-4-31B-it-qat-w4a16-ct
+- Do not expose the endpoint or the key directly to public browsers.
+- This said "the web application should not directly depend on the LLM
+  endpoint; only the conversion service talks to it". There is no
+  conversion service (section 13), so the web application is now the
+  only thing that talks to it. The requirement underneath is unchanged
+  and is the line above: the endpoint and the key are server-side, and a
+  browser never sees either.
+- Make endpoint, model and key configurable through environment
+  variables; never hard-code any of them in application source.
+- The key is read from the Worker's environment — a `wrangler secret` in
+  production, `.dev.vars` locally. Both are gitignored and stay that
+  way. The repo-root `.env` fallback went with the CLI that needed it.
+- The provider is a third party, which the self-hosted endpoint was not.
+  **Whether a reader's upload goes to it is the reader's decision**, made
+  on the upload screen and stored as `conversion.aiCorrection`
+  (migration `20260826_090000_ai_correction`). It was a hard-coded
+  `false` until 2026-08-26, under a rule that forbade the send outright.
+  The runner re-reads it at the moment of sending rather than trusting
+  the state it was queued in, so a reader who changes their mind between
+  the two does not have their book sent.
+  Unanswered means no — an absent or null column reads as `false`, so
+  every book uploaded before the question existed stays where it was.
+- Correction is **advisory whatever the answer**. The stage writes
+  suggestions and a human approves them (section 7); consenting to the
+  send is not consenting to an edit.
+- **The person who approves them is the book's owner**, on their own
+  book page, since 2026-08-26. Until then `allow_third_party_ai` reached
+  the converter and nothing read it but a progress label: the correction
+  stage existed only in the converter's CLI, so the checkbox proposed nothing,
+  sent no text anywhere, and there was no screen on which anyone could
+  have adopted a suggestion. `domain/correction.ts` is the state it now
+  drives.
 
 ---
 
@@ -411,7 +875,6 @@ A Book should include concepts such as:
 - title
 - subtitle
 - author
-- translator
 - language
 - description
 - cover
@@ -420,35 +883,465 @@ A Book should include concepts such as:
 - status
 - created_at
 - updated_at
+- collection, and `collectionOrder` — its place among that collection's
+  own books (section 5.4)
 
-A book contains multiple Parts.
+`translator` was on that list and on the book until 2026-08-25. It is
+gone, column included (`20260825_120000_drop_translator`). Nothing ever
+filled it in: extraction reads a title, an author, a language and a
+length out of a file (`domain/metadata.ts`) and no source carries a
+translator, so on the upload form it was the one box that was always
+empty and always prose — asking an uploader confirming their own scan to
+compose something, which is the argument that had kept it off that form
+until 2026-08-21. The credit reads better in the description, which is
+where both seed books already carried it, so the byline on a book page
+lost nothing a reader was relying on.
+
+`originalTitle` survives that cut, but the **uploader is no longer
+asked for it**, since 2026-09-16. It was the same box: extraction
+cannot fill it either, and an uploader confirming a Chinese scan whose
+title is already Chinese has nothing to put in a field asking for the
+title "in its own script" — so it sat empty on the one form whose whole
+argument is that it shows people what their file already says. It stays
+on the admin edit panel, where the person filling it in is the person
+who has decided the catalogue title is a translation, and it is still
+what a book page prints as its heading. Removing it from the form meant
+removing it from the save as well: a form that no longer posts a field
+would otherwise clear it every time an uploader saved.
+
+A book is whole. It was split into Parts until 2026-08-14, each
+separately released and separately downloadable; that is gone, and the
+`parts` table with it. A book is one record, one DOCX master, one set of
+generated formats — as it was written.
 
 Example:
 
 Book
 |
-+-- Part 1
-|    +-- DOCX
-|    +-- EPUB
-|    +-- PDF Standard
-|    +-- PDF Large
-|    +-- PDF Extra Large
++-- pageCount, priceCredits
 |
-+-- Part 2
-|    +-- DOCX
-|    +-- EPUB
-|    +-- PDF Standard
-|    +-- PDF Large
-|    +-- PDF Extra Large
-|
-+-- Part 3
-     ...
++-- the original          preserved, whatever was uploaded
++-- DOCX (master)         owner only, never a reader download
++-- EPUB                  the reading edition
++-- PDF                   mirrors the original's own layout
++-- TXT                   a plain text upload, kept as itself
+
+The original is **always** one of those slots, which is what makes
+"always keep the original" cost nothing extra rather than doubling every
+book (`apps/web/src/domain/publication.ts`). A PDF upload *is* the
+book's PDF; a DOCX upload *is* its master; an EPUB upload *is* its
+EPUB; a text upload *is* its TXT. That last one only since 2026-08-26 —
+before it, text had no slot, so its original was left at the
+`conversion/` key and swept after 30 days.
+
+Which is also the whole constraint on holding **several** originals
+(section 3): a book may have one source of each kind and no more,
+because a second PDF would be a second file wanting one name.
+`conversion.sources` lists them and `conversion.sourceKind` says which
+one the master is built from.
+
+That list is stored rather than derived from the slots above, and the
+reason is that the slots cannot answer it: a `docx` is sometimes an
+upload and sometimes Adobe's, an `epub` sometimes an upload and
+sometimes phase 2's. Only `pdf` and `txt` are unambiguous, and a rule
+right for half the formats is worse than no rule.
+
+`sourceKey` names the *durable* copy, under the book, not the
+`conversion/` key the file was uploaded to. It did not until
+2026-09-14 — the bytes were always copied, but the pointer was left
+behind, so a text book still queued a month later would be handed to
+the runner with a key resolving to nothing.
+
+The cover is a further file and is not one of those five. Since
+2026-08-23 a book with no uploaded cover gets **page one of itself**,
+rendered as a JPEG beside its artifacts (`apps/web/src/domain/cover.ts`).
+For a scan that page *is* the cover the publisher printed, which is why
+the PDF is preferred over the EPUB's declared cover.
+
+Two covers, and the order between them is the whole rule: an uploaded
+`cover` is a deliberate choice and always wins; `generatedCover` is
+only ever the default. When there is neither, the tile still draws the
+book's own first character, which was the only answer before this and
+remains the right one for a book nothing can be rendered from.
+
+Rendering happens **once**. The same opening pages of the same file
+rasterize to the same pictures, so the "render again" that sat beside
+the picker was a download and a wait in exchange for the images already
+in the bucket; it is gone from both screens, and making a cover is
+offered only while nothing has been rendered — which still covers the
+case that matters, a render that failed and never reached `ready`.
+
+Page one is the default rather than the definition, since 2026-08-25.
+The **first three pages** are rendered and the book records which of
+them it wears, because the page a publisher printed the cover
+on is frequently not the first leaf a scanner fed — a blank verso, a
+library stamp, a half-title. Three is the number for the same reason
+the choice exists at all: past a leaf or two it stops being "which of
+these is the cover" and becomes browsing the book, which the reader
+already does. An EPUB has one declared cover image and no pages, so it
+has one candidate and no choice.
+
+Uploading that image is **the owner's or an administrator's**, since
+2026-08-25 — it was administrators only, through
+`app/(admin)/actions/cover.ts`, which is now deleted and its two actions
+moved beside the page choice in `app/(frontend)/actions/cover.ts`. One
+rule, one file. Both covers are now served by the same
+door: `/covers/<id>` asks the Books access rule and then streams either
+the uploaded image or a rendered page, and `Media` refuses everyone but
+an administrator. It was `read: () => true`, which was survivable while
+only administrators uploaded — they upload for books already in the
+library — and became a hole the moment an owner could upload for a
+private draft, because the file sat at `/api/media/file/<filename>`
+under whatever the uploader called it. `cover.jpg` is not a secret.
+
+The choice of *which rendered page* belongs to **the owner or an
+administrator** too, which is the one place a book's uploader and its
+editors have equal power over it.
+Everything else on that boundary is asymmetric — rights, visibility and
+level are the administrator's (section 6.1), the bibliographic fields
+are the uploader's. A cover is neither: it is not a claim about the
+book, only which photograph of it looks right, and the person holding
+the physical copy is at least as well placed to say. The control is one
+component (`components/CoverPagePicker.tsx`) on both screens, over one
+action (`app/(frontend)/actions/cover.ts`).
+
+That also fixed something quieter: until then the one person who never
+saw a book's cover was the person who uploaded it. It is rendered after
+conversion, onto pages a private upload appears on none of — so the
+owner's own book page now shows it.
+
+Books whose cover was rendered before this keep it, at the unsuffixed
+key page one has always had, and are simply offered no alternatives —
+nothing was rendered to offer. "Make a cover from the book" on either
+screen renders a fresh set.
+
+**The rendering happens in the browser**, and that is the important
+part. It was job kind three on the converter until 2026-08-25, claimed
+off the same poll as OCR and format generation — an accident of where
+the renderer happened to be written, and it cost the library every
+cover it had: a converter claimed each of the fourteen books, never
+reported back, and `claimCover` only ever offered `pending`, so nothing
+retried and nothing said so. Rasterizing page one has nothing to do
+with converting a book.
+
+So it happens on the machine that already has the file open
+(`apps/web/src/lib/client/coverImages.ts`). The uploader's browser
+renders the candidates between the upload finishing and the draft page
+loading, so a book has a cover *before* its conversion is queued; an
+editor's browser does it for a book already in the library, reading the
+source back through `/covers/<id>/source` (owner or administrator
+only). pdf.js rasterizes a PDF, epub.js pulls the declared image out of
+an EPUB, and both are dynamically imported so a reader who never
+uploads downloads neither.
+
+Two things this cannot do, and they are the price. **There is no DOCX
+renderer in a browser**, so a book whose only artifact is a master
+waits for the PDF phase 2 builds anyway — what the converter produced
+there was the first page of typeset text, the unhappy case even when it
+worked. And making a cover for an existing book means **downloading the
+book to photograph its first page**, which for a 60 MB scan is a real
+wait on a slow connection; the button says so rather than pretending
+otherwise.
+
+**When it fails, the screen says which way it failed**, since
+2026-09-16 (`components/MakeCoverButton.tsx`). A file that could not be
+opened at all is reported as one that may be incomplete; a file that
+opened and yielded no page keeps the old sentence. Until then
+everything — a 404 on the source, a damaged file, a render that
+produced nothing, a failed store — was "No cover could be made from
+this book", and `coverImagesFor` swallowed the error that would have
+said which. That one sentence was the only symptom a truncated upload
+ever produced (section 6.2).
+
+The Worker was never a candidate for this. pdf.js is a megabyte of
+JavaScript against a bundle already at 7.7 MB of a 10 MB limit, and
+rasterizing is exactly the CPU-shaped work section 3 says does not
+belong there.
+
+What the split bought was staged release — a per-reader clock that paced
+someone through a book. That is also gone. The credit price in section
+5.2 is what governs access now.
 
 The DOCX master is the source of truth.
 
 Reader-facing formats must be generated from the approved DOCX master.
 
 Do NOT use PDF as the canonical source.
+
+## 5.1 Reading levels
+
+Every book carries a level: **essential**, **normal** or **extensive**.
+They nest rather than exclude — a reader browsing at one level sees that
+level and everything shallower:
+
+    essential  →  essential
+    normal     →  essential + normal
+    extensive  →  essential + normal + extensive
+
+The levels are stored and compared as ordered **ids**, never as names:
+`essential = 10, normal = 20, extensive = 30`, in
+`apps/web/src/domain/levels.ts`. A reader at id N sees every book whose
+id is ≤ N, which is one indexed comparison in the catalog query. The gaps
+are deliberate — a level added later between two existing ones takes id
+25 and needs no stored row rewritten.
+
+This is **curation, not access control**. A reader chooses their own
+level and can raise it at any time, so `extensive` is always one click
+away. Rights clearance, private-workspace ownership and the credit
+price are the access rules (sections 5.2 and 6), they are enforced
+independently, and
+nothing about levels may ever be relied on to keep a reader away from
+anything. The purpose is the mission's "low visual distraction": let a
+reader start with the core and open up the tail when they want it.
+
+Level is an administrator field, like rights status and visibility
+(section 6.1). An upload arrives at **normal** — the library's own
+default (`DEFAULT_BOOK_LEVEL`), not the tail. It arrived at `extensive`
+until 2026-08-24, on the reasoning that an unreviewed upload should not
+surface in the default browse view; but what keeps it out of that view
+is `visibility: 'private'`, and levels are curation rather than access
+control. All the old default achieved was that an approved book landed
+in the tail unless somebody remembered to move it.
+
+An editor sets a level three ways, and they are the same field:
+one book at a time from the pill in the Books list (comparative — the
+question is about the books either side of it), one book at a time in
+that screen's edit panel, and **a whole shelf at once** from
+`/admin/collections`. The shelf form hands a level down the collection's
+entire subtree, in one of two modes that `shelfLevelFor` in
+`domain/levels.ts` owns: as a **cap**, which can only ever move a book
+shallower and leaves a curated one alone, or **exactly**, which
+overwrites whatever was there. Cap is what the form offers first. A
+shelf stores no level of its own — this is an act performed on books,
+not an attribute that a book filed there later would inherit.
+
+---
+
+## 5.2 Credits
+
+Every book has a price in credits, derived from the length of its DOCX
+master: one credit per 70 pages, at least 1 and never more than 7. The
+rule is `priceInCredits` in `apps/web/src/domain/credits.ts`; the price
+is stored on the book by a collection hook so what a reader was charged
+is a recorded fact rather than a re-derivation that could change under
+them.
+
+Credits pay for **taking a book away** — sending it to a device. They
+never pay for reading. The online reader is free, unlimited, and needs
+no account at all, which is not a generosity setting but the product
+thesis: a reader who cannot afford a credit must still get every word.
+`canReadOnline` and `canAccessArtifact` in `domain/rights.ts` are two
+rules for exactly this reason — the first deliberately stops before the
+account requirement the second enforces.
+
+  - New accounts start with 10 credits.
+  - A month in which the reader signs in is worth 5; a month they are
+    away is worth 2. Being away is not punished.
+  - The first delivery of a book buys it, at the book's price. Every
+    later delivery costs 1 credit, with a confirmation before it is
+    spent. That charge is what replaced the rolling 24-hour delivery cap
+    as the thing bounding how fast an account can drain the library.
+  - A reader's own upload is free to send. It is their book.
+
+Accrual is lazy and has no scheduled job behind it. A sign-in always
+grants for its own month, so any month with no grant recorded is by
+construction a month with no sign-in and can be paid the away rate on
+sight — `accrualFor` in `domain/credits.ts`. Backlog is capped at 24
+months so a reader returning after years does not arrive to a windfall.
+
+The balance lives on the user and the `credit-ledger` collection is the
+account of how it got there. That duplication is deliberate: summing a
+ledger on D1 for every delivery decision would be a table scan per
+request. `apps/web/src/lib/credits.ts` is the only module permitted to
+move a balance, and it writes both together.
+
+---
+
+## 5.3 Collections nest
+
+A collection is a shelf, and a shelf can stand on another shelf:
+"Confucian" under "Chinese Classics", "Nan Huaijin" under "Authors".
+The rule that makes it worth having is that **a parent carries
+everything beneath it** — a reader who opens "Chinese Classics" gets the
+books filed directly on it and the books on every shelf standing on it.
+Anything less and nesting is only filing.
+
+The tree, the subtree filter behind `?collection=`, and the rules about
+what may be filed under what are `apps/web/src/domain/collectionTree.ts`.
+Three of those rules earn their place:
+
+- A collection may not be its own ancestor. Enforced in a collection
+  hook rather than only in the admin screen, because the admin screen is
+  not the only door into the table — the REST API is another — and a
+  ring of collections would strand every shelf in it.
+- The tree is three levels deep at most, counting a *moved subtree's*
+  own height rather than just the node being moved. The limit is
+  editorial: past a grandchild a reader is navigating a filesystem
+  rather than browsing a library.
+- A parent that no longer exists reads as a root. Deleting a shelf
+  therefore never makes its children vanish, which matters because the
+  foreign key clears the reference rather than refusing the delete.
+
+Ordering is per-parent: the arrows in `/admin/collections` move a shelf
+among its own siblings and can never lift it out of the one it stands
+on. Where it is filed is a separate decision, made with the parent
+picker on the same card.
+
+The browse page shows **the whole tree at once, folded**. Every shelf
+and every shelf standing on it is on the page, and each heading is a
+control that collapses its own subtree
+(`components/CollectionShelves.tsx`).
+
+It showed one level at a time until 2026-08-24 — root shelves in the
+library, a collection's own children once you were inside it — because
+a nested library rendered flat is a wall of every shelf at once. The
+wall is real; drilling down was the wrong answer to it. It hid the
+library behind a click and made a reader guess which shelf was worth
+opening, which is the opposite of browsing. Folding answers the same
+objection directly: a reader who wants a shelf out of the way puts it
+out of the way, and nothing else moves.
+
+Two things survive that change and are worth stating, because they are
+what keeps the page from becoming an application:
+
+- **A shelf is still a URL.** `?collection=` narrows the page to one
+  subtree and puts a breadcrumb above it. It is no longer reachable
+  from the library's own headings — those are folds now — but the
+  homepage's teaser shelves link to it, and it is what a reader shares.
+- **Only the fold is client-side.** The reading level stays a plain
+  link with a query string, because a level is a *view* someone would
+  send to someone else, where a fold is a per-reader convenience. The
+  page still renders on the server; the JavaScript only folds it.
+
+Each shelf renders the books filed **directly** on it. A parent carries
+its descendants by containing them on the page rather than by absorbing
+their books, so nothing is printed twice — which is a different rule
+from `?collection=`, where a parent genuinely does answer with its whole
+subtree because its children are not on screen to answer for
+themselves.
+
+---
+
+## 5.4 Two orders, on every shelf
+
+The **books** filed on a collection are ordered two ways:
+
+    alphabetical  by title                        the default
+    sequence      by the order id each book carries
+
+**The shelf decides, not the reader.** Every collection carries
+`childOrder`, and it defaults to alphabetical: a library nobody has
+curated reads A–Z, which is the order a reader can predict and scan. A
+curator switches one shelf to `sequence` when its contents have an
+order of their own — a ten-volume set, a reading path, a "start here" —
+and only that shelf changes.
+
+It was one global answer until 2026-08-25, chosen by the reader with
+`?sort=` and defaulting to `sequence`. One answer is wrong for a
+library where most shelves have no order of their own and a few have a
+strong one: the alphabet was something a reader had to ask for, and the
+volume set only read correctly by luck of the numbers it had been
+handed.
+
+**The shelves themselves are a separate question, and the answer is the
+admin's.** Where a shelf stands among its siblings — at every depth,
+the root included — is `sortOrder`, set by the reorder arrows in
+`/admin/collections`, and nothing re-sorts it afterwards. The public
+library renders the tree in exactly the order the editorial tree shows
+it. It did not until 2026-08-25: root shelves were alphabetized on the
+public page because they had no parent to carry a `childOrder`, so the
+arrows arranged a root order only an editor ever saw. `childOrder`
+governs a shelf's books; the arrows govern the shelves.
+
+The reader's toggle is **gone**, on 2026-08-25 — "As arranged / A–Z /
+Curated", and the `?sort=` override behind it that forced one rule
+across every shelf on the page. The argument for keeping it was that
+alphabetical is what you want when you are *looking for* a book rather
+than being shown one. That is true, and it is what search is for. How
+the library reads is an editorial judgement about where a reader should
+start, and handing a visitor a pill that overrules every shelf at once
+is handing back the curation the library exists to provide.
+
+The sequence is **a number the item carries**, not a position in a list.
+It is handed out one past the highest on the shelf when the item is
+filed, and an editor can change it — so `sequence` means "the order they
+arrived in" until somebody renumbers. Every filed item carries one
+whether or not any shelf consults it; `childOrder` decides that.
+
+**It need not be unique.** Two books on a shelf may both be 3 and then
+read alphabetically between themselves, so setting a number writes one
+row and moves nothing else. It used to *shift* the run of occupants
+along to keep the numbers unique, so one edit rewrote half a shelf and
+books nobody touched moved. Collections carry the same number among their own
+siblings; `sortOrder` has been exactly this idea for shelves since
+2026-08-21, and this makes it a number an editor types rather than only
+something the reorder arrows move.
+
+The numbers need not be contiguous either. Nothing renumbers a shelf
+because a book left it, so 1, 2, 5 is a normal state and the gap is not
+a bug to tidy: an order id an editor typed is a fact they stated, and
+closing a gap under them would move books nobody touched.
+
+Ordering a shelf's books happens **per shelf, in the page**, not in the
+catalog query. One SQL `ORDER BY` cannot be alphabetical for one shelf
+and by order id for the next, so the query returns a stable order and
+`books/page.tsx` sorts each shelf's own books with `shelfSortFor`. The
+admin tree does the same, from the same function, so an editor
+arranging a shelf is looking at what the shelf actually does. The
+shelves are not sorted in either page — they arrive from
+`getCollections()` in `sortOrder` order and stay in it.
+
+**Choosing a number is an administrator's.** Filing is not: an uploader
+picks their book's collection on their own book page, and the arrival
+hook gives it the next free number — a book joining the back of a
+queue. Typing a number is a statement about what a reader should meet
+first on a shelf that is not only theirs — it once moved the books
+already there as well, and the reason survives the shifting. Since
+2026-08-25 that is enforced as field-level write access on
+`collectionOrder` (and on a collection's own `sortOrder`), not merely by
+which screen offers the control: Payload's REST and GraphQL APIs are
+another door, `overrideAccess` is off there, and an unspecified access
+rule defaults to *any logged-in user* — so a signed-in reader could
+PATCH the field and walk their own upload to the front of a shelf.
+`ADMIN_ONLY_BOOK_FIELDS` in `domain/moderation.ts` is the list, and it
+is now wired into the collection rather than only asserted in tests.
+
+Since 2026-09-16 the number can be typed on **the book's own page**
+as well as in `/admin/library`, for an administrator, beside the shelf
+picker that was already there (`components/BookDetailsForm.tsx`). The
+two questions are asked where they are answered: an editor arranging a
+whole shelf does it from the library screen, where the neighbours are
+visible, while an editor who is on a book — having just corrected its
+title, or filed it — should not have to go and find it again on
+another screen to say where it sits. Nothing about who may do it
+changes. `saveBookDetails` in `app/(frontend)/actions/bookDetails.ts`
+reads the field only for an administrator, which is not belt and braces
+but the rule itself: that action writes with `overrideAccess: true`, so
+the field-level access on the collection is not consulted and the gate
+has to be in the action. An empty box leaves the number the book has,
+rather than clearing it, because the box is on a form somebody opens to
+change a title.
+
+`lib/shelfPlacement.ts` is gone with the shifting. A place is one field
+on one row now, written with the rest of the edit rather than in a
+second pass against the shelf the book ended up on, so the admin screen
+and the admin JSON API both just set the field. An editor sets a
+shelf's `childOrder` on the same card, beside the number.
+
+The hooks (`assignCollectionOrder`, `assignSiblingOrder`) therefore do
+one thing: give a number to something that has just arrived, or has just
+moved to another shelf — one past the highest already on it. There is a trap in them worth knowing about,
+because it bit once already — Payload hands a `beforeChange` hook the
+whole document with the update merged into it, so the order field is
+*always* present on an update. "The caller stated a number" has to mean
+"a number different from the stored one"; reading its mere presence as
+an instruction made every move to another shelf keep the number it had
+on the shelf it left.
+
+An unfiled book has no order id at all. The number is a position among a
+collection's own books, so off the shelf there is nothing for it to be a
+position in — and a book nobody has numbered sorts last, under the
+alphabetical fallback, which is the rule `sortOrder` has always had.
 
 ---
 
@@ -475,6 +1368,251 @@ For the conversion portal, distinguish:
 2. User-owned/private conversion content
 
 Private user uploads should not automatically become publicly accessible.
+
+## 6.1 The conversion portal
+
+A reader may upload a scanned PDF, an ordinary text-layer PDF, a DOCX,
+an **EPUB** or a plain text file. What each one needs is in section 3
+("Four sources"); what they share is the destination. A converted book
+gets everything the library offers — the EPUB, the PDF, delivery to an
+e-reader and the online reader — with no second-class path.
+
+A book published as it stands is the deliberate exception: its owner
+chose a faithful copy over a reflowable one, so it has a PDF and no
+EPUB. It is still delivered, still read from the book page, and still
+theirs.
+
+Such a book is **private by default**, visible only to its owner, and
+may stay that way forever. Publishing it to the public library is a
+separate act and takes two independent approvals:
+
+1. an administrator approves the submission, and
+2. the rights status permits public distribution.
+
+The second is not a formality the first can wave through. An admin
+approving a submission is saying "this belongs in the library"; it is not
+a finding that the material is legally distributable. `user_owned` is the
+status for "the uploader owns a copy", and it never clears public
+distribution — a reader owning a book confers no right to publish it to
+everyone else. `canPublishToLibrary` in `apps/web/src/domain/moderation.ts`
+enforces both gates, and `unknown` rights block submission entirely: the
+uploader is the only person who knows where their material came from, and
+that is the one moment in the flow when the question is easy to answer.
+
+**The two gates are two questions, not two buttons.** Since 2026-08-24
+approving a submission publishes it, in the same act: the review queue
+has one Approve control and no Publish control, and no visibility
+setting anywhere in the admin. Publishing was separate until then, on
+the argument that the questions differ — and they do — but the second
+one has exactly one person who can answer it and one moment at which
+they do. Approving without publishing produced a state nobody could
+explain to an uploader: an "Approved" chip on a book still invisible to
+every reader.
+
+So the rights gate moved in *front* of the approval rather than behind
+it. A submission whose rights do not permit distribution cannot be
+approved at all, and the queue says so with the control disabled rather
+than offering a button that would be refused. That is what the design
+draws, and `approveSubmission` in `app/(admin)/actions/review.ts`
+enforces it before the write — reading the review state **as stored**,
+not the `approved` it is about to write, because otherwise the
+`not_offered` gate would find every book offered.
+
+Nothing about the second gate itself changed and nothing about it can.
+`isPubliclyDistributable` is consulted by the action, by
+`canPublishToLibrary`, and a third time by `enforcePublicationReview` on
+the write, which is the rule for every writer, the REST API included.
+The
+invariant is still that a public owned book has an approved review;
+approval and publication being one act is what now makes it true by
+construction.
+
+Nothing about the second gate changed, and nothing about it can. An
+administrator publishing their own upload is refused exactly as a reader
+would be if its rights are not cleared.
+
+There is a third thing here, easy to mistake for the first: **the
+uploader offering the book**. The approval is an administrator's to give
+early; the offer is not theirs at all. A private upload that was never
+submitted stays private whoever is asking — section 6.2 promises it may
+stay private forever — unless the administrator is its uploader, in
+which case they are both parties and their own submission publishes
+itself rather than queueing for them to find.
+
+**Who uploaded a book is not public.** The `owner` field is readable by
+its own owner and by an administrator, and by nobody else — enforced as
+field-level read access in `collections/Books.ts`, so it is absent from
+the UI, from a populated relationship, and from `/api/books` and
+GraphQL alike. The uploader's *identity* was always protected by the
+Users collection's read rule; what this closes is the correlation, that
+a given set of books shares an uploader. Field access is skipped under
+`overrideAccess: true`, which is how every ownership check in the
+application still reads it.
+
+Rights status, visibility and reading level are administrator fields. An
+uploader who could set their own would walk their upload straight into
+the front of the library.
+
+**Tell the uploader who else will see their file, and let them decide.**
+
+This section forbade sending a private upload to a third party at all,
+until 2026-08-26. That rule could not survive the pipeline it was
+written for: reading a scan *is* a third-party call now (Adobe, section
+3), so the prohibition banned the portal's main path. Worse, it was a
+protection the person being protected never saw, could not weigh and
+could not consent to.
+
+The disclosure is on the upload screen, in the option that does the
+sending — `PLAN_COPY` in `components/BookDetailsForm.tsx` carries a
+`sends` line per source and plan, and it says plainly which services get
+the file. It sits inside the plan card rather than under the group, so
+it is read while the choice is being made and cannot drift onto the
+wrong option.
+
+**The two sends are two decisions, because they are two services.**
+
+- **Adobe** reads a scan's pages, and there is no version of converting
+  a scan that does not involve it. So it is disclosed on the plan card
+  and chosen by choosing to convert.
+- **The AI correction stage** is separate and optional, and since
+  2026-08-26 it is its own checkbox — off unless the uploader ticks it
+  (`conversion.aiCorrection`, section 4). Converting does not imply it,
+  and a book converted without it never reaches a third-party model at
+  all.
+
+Which means a DOCX or plain text upload can be converted with **nothing
+leaving NobleSee**, and the card says exactly that.
+
+Three things make disclosure sufficient here rather than a shrug:
+
+- **There is always a private alternative, and it is the default.**
+  Publishing as it stands sends the file nowhere (`defaultPlanFor`), and
+  the card says so in the same words.
+- **The choice is the owner's.** Rights, visibility and level are the
+  administrator's (above) precisely because they are claims about the
+  library. Who may hold a copy of your own book is not.
+- **Converting stays reversible in one direction only.** A book already
+  sent cannot be un-sent, which is why the sending option is the one
+  that has to be chosen deliberately rather than arrived at.
+
+---
+
+## 6.2 What the portal actually does
+
+Upload asks for **the file and nothing else**. Title, author, language
+and length are read out of it — `domain/metadata.ts` for the rules,
+`lib/extractMetadata.ts` for the I/O — and shown on an editable summary
+page. Asking someone to retype what their file already says is friction
+that stops uploads happening.
+
+Extraction is harder than it sounds and the difficulty is all encoding.
+A PDF's metadata carries no declared encoding, so the bytes may be
+UTF-16 (with a byte-order mark, in either the `<hex>` or the `(literal)`
+form), UTF-8, GBK or Big5. UTF-8 and a BOM are self-describing; GBK and
+Big5 are not and are told apart by whether the result reads as real
+Chinese, which needs a common-character check rather than a CJK-range
+check — "München" contains a legal GBK pair for a real but unused
+character. Two ordering rules are load-bearing: decode **before**
+tidying whitespace (复 is U+590D, whose low byte is a carriage return),
+and decode self-describing fields **individually** (joining UTF-16
+fields misaligns everything after the join).
+
+**A file that arrives half-written is refused, at intake.** The stored
+object's tail is read back and checked for the marker that says the file
+ends where it claims to — `%%EOF` for a PDF, the zip central directory
+for a DOCX or an EPUB (`domain/intake.ts`). Plain text has no such
+marker and is not checked, because any prefix of a text file still
+reads.
+
+That is not a precaution against something imagined. Book 60 was stored
+on 2026-09-16 as a clean 51,904,512-byte prefix of a 96,518,395-byte
+scan and published as a whole book. Nothing objected, because from the
+server's side nothing was wrong: the browser declared the short length
+and sent exactly that many bytes, so `FixedLengthStream` — which guards
+the other failure, a body that stops early — was satisfied. The file was
+still being written by `tools/clean-pdf.py` when the browser opened it.
+
+Extraction could not catch it either, and the reason is worth keeping:
+it reads the first 512 KB and the last, and `/Count 659` sits in the
+first. The book arrived priced and paginated for 659 pages while holding
+a little over half of them. The first thing that actually failed was the
+cover, minutes later and in somebody's browser. So the check belongs
+where the damage enters rather than wherever it happens to surface —
+which is also why it is one read of the tail we are fetching anyway, and
+a refusal, rather than a repair.
+
+A book then sits as a **draft**: private, owned, not converted, and not
+submitted. The draft is a workspace, not a form — it can be read, its
+DOCX master downloaded, corrected and re-uploaded, and it can be
+deleted.
+
+Since 2026-09-14 it can also gain **another file**. The upload route
+takes a `?book=` and files the new original beside the first as a second
+source; the panel on the book's own page lists what it holds and, when
+more than one of them could produce a master, offers the choice
+(section 3, `components/BookSources.tsx`). Adding costs nothing and
+changes nothing until the choice is made, which is what makes it worth
+offering to someone who is not yet sure.
+
+The panel sits on the book page rather than on the details form, and
+that placement is the argument: the details form confirms what a book
+*is*, once, before anything has happened to it, while this is a decision
+its owner takes with the results in front of them — they have read what
+Adobe made of the scan, seen what it got wrong, and now want the master
+built from the text instead. On the form the question would be asked at
+the one moment there is no evidence to answer it with.
+
+**Its owner can always delete it, and so can an administrator.**
+Ownership is the only gate `canDeleteUpload` has. An administrator
+deletes **any** book from the panel on `/admin/library` — the library's
+own withdrawal, and the one act on that screen that needs no ownership.
+
+Until 2026-08-30 there was a second gate: a book other readers had
+spent credits on could not be deleted by anyone, owner or
+administrator, because an entitlement never expires. Deleting such a
+book does break that promise, and it is still the reason not to do it
+casually — but as a *rule* it produced a book nobody at all could take
+down, which is the wrong answer for material that has to come down
+(misfiled, mis-scanned, or not distributable after all). The judgement
+is now the person's rather than the function's.
+
+That panel also names the uploader and the day the book arrived, as does
+every row of the tree beside it. `owner` is field-level restricted so a
+reader cannot correlate one uploader's books (section 6.1); an
+administrator is one of the two parties it is readable to, and this is
+where they read it.
+
+Submitting for review is a separate, optional act on a finished book,
+because asking someone to decide about publication before they have
+seen a converted page is asking them to guess. A book may stay private
+forever.
+
+### Conversion quota
+
+Three books and 1200 pages a month, administrators unlimited
+(`domain/uploadQuota.ts`). Counted at conversion, not upload: a draft
+costs nothing, so a refused conversion leaves the draft to convert next
+month rather than being thrown away. The page rule is "would this take
+the total past the limit", not "is there any room left".
+
+The quota needs a page count before anything is rendered, which is
+circular — so it runs on an estimate read from the file (the PDF page
+tree, Word's statistics, or characters of text), and the exact count
+replaces it once conversion finishes.
+
+### The uploader's share
+
+When a reader spends credits sending someone else's upload, the
+uploader earns a share: 33% for a public-domain text, 66% for one they
+wrote or hold a licence to (`domain/uploaderShare.ts`). Nothing else
+earns — `user_owned` never clears public distribution, and a staff-
+entered library book has no uploader.
+
+Shares accumulate in **hundredths of a credit**. This is not fussiness:
+a third of a 1-credit book is 0.33, so paying whole credits per delivery
+pays nothing at all for every book under four credits, which is most of
+them. A credit is paid each time the total crosses a hundred and the
+remainder carries.
 
 ---
 
@@ -569,21 +1707,75 @@ The system should support:
 
 Design OCR as an abstraction so it can be replaced later.
 
+**Settled: Adobe PDF Services' Export PDF operation**, which reads a
+scan and returns a DOCX in one call. Section 3 has the reasoning and the
+limits; what matters here is the requirements list above.
+
+It meets them. `ocrLang` accepts `zh-Hant` and `zh-CN`, so traditional
+Chinese — this library's centre of gravity — is read as traditional
+Chinese rather than through a simplified model. Mixed Chinese/English is
+sent under the CJK locale deliberately: Latin script reads well under a
+CJK locale and the reverse does not, so the asymmetric failure decides
+it. Layout, headings and paragraphs come back as Word structure.
+Footnotes do not survive reliably and are not claimed to.
+
+The abstraction survived the replacement twice, which is the point of
+having it, and then it moved and there is only one of it. It is
+`apps/web/src/domain/adobe.ts`, which holds every rule about the engine
+that is not an HTTP call, and `apps/web/src/lib/adobe/client.ts`, which
+is the HTTP call. Replacing Adobe means writing a new pair; nothing
+downstream of the master would know.
+
+**PaddleOCR is gone**, on 2026-08-26 — the engine, the `OcrEngine`
+protocol, the per-page OCR cache and the rasterizer that fed it. The
+service that held it went the same day (section 13), and not by
+coincidence: PaddleOCR was the last thing in the pipeline that needed a
+machine, so deleting it is what made a container optional. It had been kept as a self-hosted alternative to Adobe, and the
+question that retired it is the one worth recording: *what was it for?*
+Nothing called it. Every scan in production goes to Adobe, because a
+Worker cannot run a model and a container running one is a container to
+deploy. Its remaining arguments were Adobe's 500-transaction monthly free
+tier and keeping private uploads off a third party — the first is a
+billing decision rather than an architecture, and the second is now
+answered by disclosure and a private alternative (section 6.1) rather
+than by a second engine nobody ran.
+
+What it cost to keep was a gigabyte of models, a native toolchain, and a
+second answer to "how is a scan read" that could silently disagree with
+the first.
+
+**Nothing reads a PDF at all any more.** Between 2026-08-26 and the
+service's deletion later the same day, the converter read a PDF only
+when the PDF could read itself — a text layer extracted by PyMuPDF, with
+any page lacking one refusing the whole book. That path is gone with
+PyMuPDF, and nothing lost a capability production used: **every** PDF
+goes to Adobe, whether or not it has a text layer, because that is the
+one call that produces a master. A PDF therefore never reaches a
+`master` job (section 13).
+
+The judgement that path encoded is worth keeping even though the code
+is not. Reading a scan through a text-layer extractor "succeeds" — it
+returns a one-page book from the one born-digital title page and drops
+the other four hundred. Refusing was the honest answer then; sending
+every PDF to an engine that reads pixels is the honest answer now.
+
 ---
 
 # 9. DOCX GENERATION
 
-The conversion service should be able to generate a high-quality editable DOCX.
+The pipeline must generate a high-quality editable DOCX: the master is
+what a human corrects (section 5) and what a corrected book is rebuilt
+from.
 
-Potential Python libraries/tools may include:
+This section listed python-docx, LibreOffice and Pandoc while the
+pipeline was Python. `lib/conversion/docxWrite.ts` writes Word XML
+directly now and `docxRead.ts` reads it back — there was no third-party
+writer to choose from, since the Worker has no native library at all.
 
-- python-docx
-- LibreOffice
-- Pandoc
-
-Evaluate which combination provides the best output.
-
-Do not assume a library is suitable without testing.
+**Do not assume a library is suitable without testing** still holds, and
+is why the round trip is tested: `docx.test.ts`, against
+`fixtures/python-docx-master.docx`, which must never be regenerated
+(section 13).
 
 The generated DOCX should preserve:
 
@@ -622,32 +1814,59 @@ Validate generated EPUB files.
 
 # 11. PDF
 
-PDF should have several variants.
+**Nothing renders a PDF. A book has one only when the uploader
+uploaded one.**
 
-For example:
+    uploaded as a PDF     the upload itself — filed, never rendered
+    uploaded as a DOCX    no PDF
+    uploaded as text      no PDF
+    uploaded as an EPUB   no PDF
 
-- Standard
-- Large
-- Extra Large
+This section has now shed the same idea twice, and the second time it
+took the whole renderer with it.
 
-The exact typography should be configurable.
+It specified three variants first — Standard, Large and Extra Large,
+rendered from the master at different type sizes so a reader could pick
+their typography — until 2026-08-20. Three answers to a question section
+10 answers better: a reflowable EPUB lets the *device* set the type size.
+Two of the three were never opened.
 
-The user can choose:
+What survived was one PDF, rendered from the master when the book had
+none: WeasyPrint for a scan-built master, LibreOffice for a DOCX so the
+Word layout survived. That went on 2026-08-26, and the argument is the
+one this section already makes. A PDF's job here is **fidelity to the
+original**. A book whose original is a DOCX or a text file has no
+original page to be faithful to, so what the renderer produced was our
+own typography frozen flat — strictly worse than the EPUB beside it, on
+every device, for every reader. It was competing with the reading edition
+rather than preserving anything.
 
-Download PDF — Standard
-Download PDF — Large
-Download PDF — Extra Large
+The line that always mattered is the first one, because this library's
+material is scans: perfect fidelity, zero rendering time, and nothing
+that can drift from the original — by not trying to improve on it. That
+line needs no renderer.
 
-PDF generation should use a reliable HTML/CSS-to-PDF or equivalent rendering system.
+What deleting it bought is out of proportion to what it cost, and is the
+real point:
 
-Investigate:
+- The converter's `app/pdf/` went, both renderers with it — and on
+  2026-08-26 the whole service followed (section 13).
+- The converter image lost its **last apt layer**. WeasyPrint needed
+  Pango, Cairo, libffi and a CJK font set — a PDF rendered without a CJK
+  face is a document of empty boxes — and the DOCX path needed
+  `libreoffice-writer`. With both gone the image was plain
+  `python:slim`, which is an image with no reason to exist.
+- Nothing in the pipeline linked against a native library any more,
+  which is what made the remaining work (parse a DOCX, write an EPUB) a
+  candidate for the Worker itself — and, the same day, what moved it
+  there.
 
-- WeasyPrint
-- Playwright/Chromium
-- LibreOffice
-- Pandoc
-
-Choose the most reliable solution after evaluation.
+A page count went with it. `page_count` was WeasyPrint laying the book
+out and counting the pages that came out, which priced the book — and a
+page was always a fact about our typesetting rather than about the book.
+The web application prices from its own estimate instead: the PDF page
+tree for a scan, characters over a printed-page constant for everything
+else (`domain/uploadQuota.ts`, and the fallback in `collections/Books.ts`).
 
 ---
 
@@ -660,93 +1879,204 @@ EPUB should be primary.
 Support MOBI/AZW3 only if there is a concrete compatibility reason.
 
 Design the conversion layer so additional formats can be added later.
+`ArtifactFormat` in `domain/conversion.ts` is the list and
+`formatsToBuild` in `domain/pipeline.ts` decides what a book gets, so a
+new format is one case and one writer beside `epubWrite.ts`.
 
-For example:
-
-FormatGenerator interface:
-
-generate_epub()
-generate_pdf()
-generate_mobi()
+There is deliberately no `generate_pdf()`. A PDF is only ever the file
+that was uploaded (section 11); it has no generator and must not grow
+one back.
 
 ---
 
-# 13. CONVERSION SERVICE
+# 13. THE CONVERSION PIPELINE
 
-Create a standalone service.
+**It runs in the Worker. There is no conversion service and no
+container.**
 
-Suggested stack:
+This section specified a standalone Python/FastAPI service from the
+beginning, and one existed — `services/converter`, ~4,200 lines — until
+2026-08-26. Section 3 has why it went; the short version is that it had
+already lost every part that needed a machine, and what remained parsed
+a DOCX and wrote an EPUB.
 
-Python
-FastAPI
-Cloudflare Queues for the handoff from the Worker
-S3-compatible object storage (R2, over the S3 API — the converter is not
-a Worker and so has no binding; it is the one component that legitimately
-holds R2 credentials)
+The code is now:
 
-Celery + Redis were specified here until 2026-08-13. Cloudflare Queues
-replaced them for the *web → converter* handoff, because the enqueuing
-side is a Worker and a native queue keeps that to one bounded write with
-no Redis to run. An in-process queue inside the converter is still fine
-for its own pipeline stages.
+    domain/document.ts        Block, Document, Suggestion
+    domain/textSource.ts      plain text → Document
+    domain/bookHtml.ts        Document → HTML
+    domain/proofread.ts       the AI guardrails
+    domain/applySuggestions.ts what a reader adopted
+    domain/textDiff.ts        Python's difflib, ported exactly
+    lib/conversion/docxRead   DOCX → Document
+    lib/conversion/docxWrite  Document → DOCX
+    lib/conversion/epubWrite  Document → EPUB 3
+    lib/conversion/llm.ts     the OpenAI-compatible client
+    lib/conversion/runner.ts  claim one book, run it, report
 
-Built so far: PyMuPDF rendering, a PaddleOCR backend behind an
-interface, normalization/structure, and python-docx master generation —
-driven by a CLI (`app/cli.py`) rather than an API. The CLI came first
-deliberately: a book takes hours to OCR, and an editor needs to re-run
-the structure and DOCX stages against a cached read without paying for
-the OCR again. Not yet built: the FastAPI job API, the queue consumer,
-the vLLM correction stage, and EPUB/PDF generation.
+The split is the ordinary one: rules in `domain`, I/O in `lib`. The
+guardrails, the diff and the structure decisions are pure functions and
+are tested as such, which is what they were in Python too.
 
-Example:
+`textDiff.ts` deserves its own note. The guardrails compare a similarity
+ratio and an edit count against constants tuned on real OCR output, so
+`difflib.SequenceMatcher` had to be ported exactly rather than
+approximated — a "close enough" diff silently moves where the line
+between an OCR repair and a rewrite falls. It is checked against CPython
+by a fixture generated from CPython. Everything works on **code points**,
+because Python strings are code points and classical Chinese genuinely
+reaches past the BMP, where JavaScript's `.length` would count one
+character as two.
 
-services/
-  converter/
-    app/
-      api/
-      pipeline/
-      ocr/
-      llm/
-      docx/
-      epub/
-      pdf/
-      storage/
-      jobs/
-      models/
-    Dockerfile
-    requirements.txt
+## What replaced the poll
 
-The API should be asynchronous.
+The converter had no inbound port, so it *pulled*: it polled
+`GET /api/conversion` for work and reported back to `POST`. That poll
+was also the pipeline's clock — each one advanced at most one book's
+Adobe export before answering.
 
-Example:
+Both are gone. Work is driven by a **Cloudflare cron trigger**, every
+minute, declared in `wrangler.jsonc`. Each tick advances the Adobe
+export stages and then claims and runs **at most one job**.
 
-POST /api/v1/jobs
+One job per tick is deliberate. A cron invocation has a bounded CPU
+budget, and a loop that kept claiming would spend it all on whichever
+book happened to be first and then be killed mid-write. It is also
+faster than the container was in practice, because for most of any given
+day nothing was polling at all.
 
-returns:
+Nothing about the *claim* changed: it is still a compare-and-swap on the
+book's own `conversion.state`, conditional on the state we found it in.
+D1 has no row locking, and cron invocations do overlap — a slow tick is
+not cancelled when the next one fires — so a plain read-then-write would
+run the same job twice. For a `correct` job that means paying a third
+party twice for the same book.
 
-{
-  "job_id": "...",
-  "status": "queued"
-}
+The **export handle is released whenever a book re-enters the queue**,
+since 2026-09-14, and the reason is the mirror image of the claim above.
+`needsMasterRun` refuses to start phase 1 for a book already carrying an
+`exportJob`, so one book is never sent to Adobe twice — but the only
+thing that ever *cleared* that handle was `attachMaster`, which runs on
+success. Every failure path spread the stored conversion unchanged, so a
+book whose export failed after Adobe had accepted the job kept the job
+URL; "Try again" and any save from the details form then re-queued it
+with the handle still on. `advanceRunningMaster` only looks at `ocr`, so
+neither half of phase 1 owned it. The book sat at "Waiting to be
+converted" for ever, with no message and nothing in the log — the worst
+shape a bug can take, since everything about it looked fine.
 
-Then:
+`releasedExportHandle` in `domain/pipeline.ts` is the rule, and it is
+keyed on the destination state: only `queued` releases. That is
+correctness rather than caution. `startMasterFor` writes the state and
+the handle in one update, so a *live* export is always `ocr` and
+`queued` with a handle is always stale; clearing unconditionally would
+orphan a job already paid for the moment somebody corrected a title
+while the export was running. `npm run release-exports:remote` is the
+one-shot repair for rows stranded before the fix.
 
-GET /api/v1/jobs/{job_id}
+Cloudflare Queues is still not used, and the reasons are the ones this
+section always gave: it is a second durable record beside the Book row
+that can disagree with it, and the Book row is already the durable
+record of a conversion. What has changed is that the *pull* it was being
+compared against is gone too. Cron polls the database; nothing polls a
+queue.
 
-Possible states:
+## The route the cron calls
 
-queued
-ocr
-normalizing
-ai_processing
-docx_generation
-human_review
-format_generation
-completed
-failed
-cancelled
+`POST /api/conversion/tick`, authenticated with `CONVERTER_SECRET` and
+**failing closed** — with no secret configured it 404s as though it does
+not exist, so a Worker deployed ahead of the secret converts nothing
+rather than converting for anyone who asks.
 
-Do not make the HTTP request wait for a long-running OCR/LLM conversion.
+It is a route rather than the scheduled handler doing the work directly,
+and the reason is bundle size. `worker-entry.ts` wraps the OpenNext
+bundle and is compiled separately from it; importing the runner there
+would pull Payload, every collection config and the D1 adapter into a
+*second* bundle, in a Worker already at 6.9 MB of a 10 MB limit. So the
+scheduled handler makes a request to its own fetch handler, which runs
+inside the Next bundle where all of that already lives. The request
+never leaves the Worker.
+
+`CONVERTER_SECRET` is a historical name — there is no converter — and is
+deliberately not renamed. Renaming means a `wrangler secret put` that
+has to land before the deploy, and if it does not, the route fails
+closed and conversions stop silently. The name is the smaller problem.
+
+## Deploying the clock
+
+`opennextjs-cloudflare deploy` uploads the script and **does not attach
+cron triggers**. The schedule record can exist — `GET .../schedules`
+returns it, created at the deploy — while nothing ever fires, which is
+exactly as silent as it sounds: the site is up, the tick route answers,
+and no book ever converts.
+
+`wrangler triggers deploy` is what applies them, so `npm run deploy`
+ends with it. This was found the only way it can be: by putting a book
+in `master_ready` on production and watching it not move.
+
+## The four jobs
+
+    kind: "master"    source  → DOCX master
+    kind: "formats"   master  → EPUB
+    kind: "correct"   master  → suggestions, for a person to read
+    kind: "apply"     decisions → a master rewritten from what they adopted
+
+A **PDF never reaches a `master` job**: Adobe returns the master already
+built and `lib/masterPipeline.ts` attaches it, so the book goes straight
+to `master_ready`. Only a DOCX or a plain text upload needs a master
+built. That is why nothing in the pipeline reads a PDF, and why deleting
+PyMuPDF with the converter cost nothing.
+
+The last two are correction, and they are **not a third phase**. They
+queue off `conversion.correction.state`, a field of their own, and never
+touch `conversion.state` — because a book waiting on somebody's
+judgement is not converting, and putting it in the pipeline's state
+machine would both mislabel it and block phase 2 behind a decision that
+may never be made. `apply` finishing is an ordinary master edit: the
+book returns to `master_ready` and the reading edition is rebuilt from
+the corrected text by the path any corrected master takes.
+
+Correction is two jobs rather than one because section 7 says it must
+be. A single job that read a master and wrote a better one is precisely
+the silent rewrite that is forbidden; the human decision is what goes
+between them.
+
+The decisions file is the suggestions file with `approved` filled in,
+and it is read by `readDecisions`, **not** by `readSuggestions`. The two
+differ in exactly that field and the distinction is load-bearing:
+`readSuggestions` renders proposals nobody has judged yet and drops
+`approved` on purpose, so using it to read a decisions file makes every
+decision read as undecided. The port did that at first, and the apply
+job reported success having adopted nothing — a green tick over an
+unchanged book, which is the worst shape a bug can take.
+
+## What was lost
+
+Worth stating rather than discovering later:
+
+- **The CLI is gone.** `app/cli.py` ran a conversion from a local file
+  without touching the web application at all, which was genuinely
+  useful for one-off imports and for debugging a book in isolation.
+- **`pdf_in.py` is gone**, so nothing can read a born-digital PDF's text
+  layer locally any more. Production never used it — every PDF goes to
+  Adobe — but it was the tool for checking what a PDF actually contained.
+- **`ocr_json.py` is gone**, the reader for the Document AI handoff
+  documents still sitting in R2 from before 2026-08-19. Those files were
+  paid for once and are now unreadable.
+- **1,970 lines of Python tests** went with it. The ones that guarded
+  behaviour the Worker still has were ported case for case — the
+  guardrails, the round trip — and are in `domain/proofread.test.ts` and
+  `lib/conversion/docx.test.ts`. The ones covering OCR geometry and PDF
+  classification are gone with the code they covered.
+
+One fixture survives deliberately:
+`lib/conversion/fixtures/python-docx-master.docx`, generated by the
+retired builder before it was deleted. Every master already in R2 was
+written by that code and the reader has to keep reading them; the
+implementation that produced those bytes no longer exists, so the
+fixture is the only remaining evidence of what it produced. It must not
+be regenerated from the current builder — that would make the test agree
+with itself and prove nothing.
 
 ---
 
@@ -759,11 +2089,16 @@ Production:
 Cloudflare R2. Chosen over AWS S3 because the domain and DNS already
 live on Cloudflare and R2 has no egress fees.
 
-The web application reaches it through a Worker **binding**, not the S3
-API — so there is no access key in its environment. The converter, which
-is not a Worker, uses the S3 API with credentials. R2 being
-S3-compatible keeps a later move to S3 a configuration change on that
-side rather than a rewrite.
+Everything reaches it through a Worker **binding**, not the S3 API — so
+there is no access key anywhere in the environment.
+
+The converter used to be the exception, and was described here as "the
+one component that legitimately holds R2 credentials". It is gone
+(section 13), and with it the only long-lived S3 access key the system
+had. Nothing now holds one.
+
+R2 being S3-compatible still keeps a later move to S3 cheap, but it is
+no longer load-bearing for anything: the binding is the interface.
 
 Development:
 
@@ -774,8 +2109,8 @@ copies real artifacts into it. A local-disk path also remains in
 
 The download path must **stream artifacts through the application**,
 never redirect to a public object URL: protected artifacts must not be
-reachable without passing the server-side rights, limit and staged
-release checks.
+reachable without passing the server-side rights and credit
+checks.
 
 Short-lived signed URLs were the original design and are no longer
 available — presigning is an S3-API feature and the R2 binding has no
@@ -786,20 +2121,91 @@ it. Streaming is I/O, so it stays cheap on a Worker.
 Suggested structure:
 
 books/
-  {book_id}/
-    source/
-      master.docx
-    parts/
-      {part_id}/
-        master.docx
-        epub/
-        pdf/
-        metadata/
+  {stem}.pdf             the upload, kept as uploaded
+  {stem}.docx            the master
+  {stem}.epub            the reading edition
+  {stem}.txt             a text upload, kept as itself
+  {stem}-cover.jpg       the cover
+  {stem}-cover-2.jpg     the other rendered candidates, written by the
+  {stem}-cover-3.jpg     browser that rendered them (POST /covers/{id})
+  {stem}-suggestions.json  what the model proposed
+  {stem}-decisions.json    the same file with `approved` filled in
 
 conversion/
   {job_id}/
-    input/
-    intermediate/
-    output/
+    input/               where an upload lands before it is filed
 
-covers/
+**The stem is the name of the file that was uploaded**, and every
+variation of a book shares it, differing only in the type suffix. It is
+`domain/bookStorage.ts`.
+
+**The name of the *first* file, specifically**, which matters now that a
+book can be given a second one (section 3). A source added later is
+filed under the stem the book already has, never under its own name —
+including in the case that made the rule necessary, a file added to a
+book whose first upload has not been filed yet, where stemming each from
+its own name would give one book two of them and nothing would notice.
+
+This was `books/{book_id}/book/{filename}` until 2026-08-26, and for
+about an hour that day it was `books/{slug}` — which was wrong, and
+wrong in the way that matters: `adminApi.ts` lets an editor correct a
+slug, so a key built from one moves when a book is renamed. The name of
+the uploaded file does not change, ever.
+
+The path is not the link either way. A book reaches its objects through
+the keys it stores — `artifacts[].storageKey`, `conversion.sourceKey`,
+`generatedCover.key` — read back, never recomputed. Production had been
+proving that unnoticed for months: the two seed books record keys under
+`books/4/` and `books/18/` while being books 1 and 2, and everything
+about them works. The stem exists to give those keys a name a human can
+read in a bucket listing, not to find them.
+
+## The number belongs to the book
+
+Uploaded names are not unique — two readers both have a `scan.pdf` — so
+a name already taken gets an incrementing number: `scan`, `scan-2`,
+`scan-3`.
+
+It is reserved for the **whole book at once**, not per file. A stem
+counts as taken when *any* key it would occupy exists
+(`stemFootprint`), which is what stops a book ending up as `scan.docx`
+beside `scan-2.epub`. Naming variations after one original only means
+something if they keep agreeing, and agreeing at the first write is not
+the same as agreeing.
+
+The reservation happens once, when the first object is filed — that is
+`fileOriginal` in `lib/masterPipeline.ts`, which every source passes
+through before it is claimable. Afterwards the stem is read back off a
+key the book recorded (`bookStem`) rather than recomputed, so it cannot
+drift. The runner reserves too, for a book that somehow arrives with
+nothing filed; that is a can't-happen, and the failure it would cause —
+writing over another book's object, reporting success — is the one worth
+paying a redundant check for.
+
+**Nothing was migrated, and nothing needs to be.** A slot a book already
+fills keeps its key, so a rebuild overwrites the object the book points
+at rather than filing a second one; and a book stored under the old
+layout yields the stem `{id}/book/master`, so its next artifact is filed
+beside the ones it has instead of moving house. Cover candidates are
+found by suffixing the *stored* base key rather than rebuilding one
+(`coverCandidateKey`).
+
+Two things the old id-based path was still doing, and only one was real:
+
+- **Containment.** `acceptArtifacts` refused a key outside `books/{id}/`
+  because a converter running elsewhere reported the keys it had
+  written. There is no converter (section 13) and no reported keys, so
+  the check had nothing left to check and is deleted. What makes that
+  safe is not that the rule stopped mattering but that the untrusted
+  input it guarded no longer exists.
+- **Uniqueness by construction**, which is real, and is what the
+  numbering above replaces.
+
+`intermediate/` and `output/` under `conversion/` were the container's
+scratch space and are no longer written to at all — the pipeline runs in
+the Worker and holds a book in memory for the seconds it takes to build,
+so there is nothing to stage.
+
+An object under `conversion/` is swept by the R2 lifecycle rule after 30
+days, which is why every source is also filed under its own book
+(section 5) rather than left where it was uploaded.

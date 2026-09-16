@@ -1,42 +1,121 @@
 import React from 'react'
 
-import { BookCard } from '../../components/BookCard'
-import { getCatalog } from '../../lib/catalog'
+import { BookTile } from '../../components/BookTile'
+import { ShareCta } from '../../components/ShareCta'
+import { buildTree, subtreeIds } from '../../domain/collectionTree'
+import { getCatalog, getCollections } from '../../lib/catalog'
 
-// Rendered per-request: it queries the database, which is deliberately
-// not reachable during `next build`.
 export const dynamic = 'force-dynamic'
 
+const MAX_SHELVES = 2
+
+const PER_SHELF = 4
+
+const STEPS = [
+  {
+    n: '01',
+    title: 'Curated quality',
+    body: 'Every book is chosen for lasting value and reviewed by an editor.',
+  },
+  {
+    n: '02',
+    title: 'Read anywhere',
+    body: 'Clean EPUB and PDF on your phone, tablet, or Kindle.',
+  },
+  {
+    n: '03',
+    title: 'Send to Kindle',
+    body: 'One tap to your Kindle library — no cables, no fuss.',
+  },
+]
+
 export default async function HomePage() {
-  const { books } = await getCatalog({ limit: 8 })
+  const [{ books }, collections] = await Promise.all([
+    getCatalog({ limit: 48 }),
+    getCollections(),
+  ])
+
+  const shelves = buildTree(collections)
+    .map((node) => {
+      const ids = new Set(subtreeIds(collections, node.collection.id).map(String))
+      return {
+        collection: node.collection,
+        books: books
+          .filter((book) => {
+            const shelf = book.collection
+            return ids.has(String(typeof shelf === 'object' && shelf ? shelf.id : shelf))
+          })
+          .slice(0, PER_SHELF),
+      }
+    })
+    .filter((shelf) => shelf.books.length > 0)
+    .slice(0, MAX_SHELVES)
 
   return (
-    <main className="page">
-      <section className="hero">
-        <h1>Books worth reading, made comfortable to read.</h1>
-        <p>
-          Many valuable books — traditional Chinese classics, history, works on wisdom and living
-          well — survive online only as scanned pages. NobleSee rebuilds them as clean, reflowable
-          editions you can actually read: on a phone, on a Kindle, in the dark.
-        </p>
+    <>
+      <main className="page">
+        <section className="hero">
+          <div className="hero__lede">
+            <p className="eyebrow">A curated reading library</p>
+            <h1>
+              Books worth reading,
+              <br className="hero__break" /> made comfortable
+              <br className="hero__break" /> to read.
+            </h1>
+            <p>
+              Quality books in clean, reflowable editions — on your Kindle, phone, or any screen.
+            </p>
+            <a className="cta" href="/books">
+              Browse the library
+            </a>
+          </div>
+        </section>
+
+        {books.length === 0 ? (
+          <p className="empty">
+            No books published yet. Add one from the{' '}
+            <a href="/admin/library">library</a>.
+          </p>
+        ) : (
+          <div className="shelves">
+            {shelves.map(({ collection, books: shelfBooks }) => (
+              <section key={collection.id}>
+                <div className="shelf__head">
+                  <a href={`/books?collection=${encodeURIComponent(collection.slug)}`}>
+                    {collection.title}
+                  </a>
+                  <span className="shelf__rule" />
+                </div>
+                <ul className="shelf__books">
+                  {shelfBooks.map((book) => (
+                    <BookTile key={book.id} book={book} />
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <section className="band band--tint">
+        <div className="band__inner">
+          <p className="eyebrow">How it works</p>
+          <h2>Your book, on every device.</h2>
+          <ul className="steps">
+            {STEPS.map((step) => (
+              <li key={step.n}>
+                <span className="steps__num">{step.n}</span>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
-      <div className="section-head">
-        <h2>From the library</h2>
-        <a href="/books">All books →</a>
-      </div>
-
-      {books.length === 0 ? (
-        <p className="empty">
-          No books published yet. Add one in the <a href="/admin">admin</a>.
-        </p>
-      ) : (
-        <ul className="book-grid">
-          {books.map((book) => (
-            <BookCard key={book.id} book={book} />
-          ))}
-        </ul>
-      )}
-    </main>
+      <main className="page">
+        <ShareCta />
+      </main>
+    </>
   )
 }

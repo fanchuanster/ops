@@ -5,29 +5,25 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { revalidatePath } from 'next/cache'
 import { getPayload } from 'payload'
 
-import { checkKindleAddress, checkKindleDelivery } from '../../../domain/kindle'
+import {
+  checkKindleAddress,
+  checkKindleDelivery,
+  kindleSubject,
+  tooLargeMessage,
+} from '../../../domain/kindle'
 import { getCurrentUser } from '../../../lib/auth'
-import { authorizeDownload, recordDownload } from '../../../lib/authorizeDownload'
+import { authorizeDownload, chargeForDelivery } from '../../../lib/authorizeDownload'
 import { kindleTransport } from '../../../lib/kindle/transport'
 import { artifactBytes } from '../../../lib/storage'
 
-/**
- * Saving a delivery address, and sending a book to it.
- *
- * Both are server actions rather than route handlers because both are
- * form submissions from a page that already knows who the reader is.
- *
- * Sending deliberately goes through `authorizeDownload`: rights,
- * staged release and the per-reader limit are decided there for the
- * download path, and deciding them again here would create a second
- * answer free to drift from the first. Kindle delivery is a download
- * that happens to arrive by email, so it is authorized like one and
- * recorded in the same ledger — a reader who takes the EPUB and also
- * sends it to their Kindle has still read one book, and the limit
- * counts books.
- */
-
-export type KindleState = { error?: string; notice?: string }
+export type KindleState = {
+  error?: string
+  notice?: string
+  sent?: boolean
+  converted?: boolean
+  spent?: number
+  balance?: number
+}
 
 export async function saveKindleAddress(
   _prev: KindleState,
@@ -39,7 +35,6 @@ export async function saveKindleAddress(
   const raw = String(formData.get('kindleEmail') || '').trim()
   const payload = await getPayload({ config })
 
-  // Empty clears it, which is how a reader turns delivery off.
   if (!raw) {
     await payload.update({
       collection: 'users',
@@ -75,9 +70,10 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
   const user = await getCurrentUser()
   if (!user) return { error: 'Sign in to send books to your Kindle.' }
 
-  const partId = String(formData.get('partId') || '')
+  const bookId = String(formData.get('bookId') || '')
   const format = String(formData.get('format') || 'epub')
-  if (!partId) return { error: 'Nothing to send.' }
+  const convert = formData.get('convert') === '1'
+  if (!bookId) return { error: 'Nothing to send.' }
 
   const { env } = await getCloudflareContext({ async: true })
   const transport = kindleTransport(env as { RESEND_API_KEY?: string })
@@ -102,26 +98,25 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
 
   const payload = await getPayload({ config })
 
-  // The same decision the download button gets, for the same reasons —
-  // including consuming a slot, since this is a download.
   const decision = await authorizeDownload({
     payload,
-    partId,
+    bookId,
     format,
     userId: user.id,
   })
 
   if (!decision.allowed) {
-    switch (decision.refusal.reason) {
-      case 'limit_reached':
-        return { error: 'You have reached your download limit for now.' }
-      case 'part_not_released':
-        return { error: 'That part has not opened for you yet.' }
+    const refusal = decision.refusal
+    switch (refusal.reason) {
+      case 'insufficient_credits':
+        return {
+          error: refusal.isResend
+            ? `Sending this again costs ${refusal.cost} credit. You do not have one.`
+            : `This book costs ${refusal.cost} credits and you are ${refusal.short} short.`,
+        }
       case 'format_unavailable':
-        return { error: 'That format is not available for this part.' }
+        return { error: 'That format is not available for this book.' }
       default:
-        // Least-informative-first, matching the download route: a
-        // reader who may not see the book is not told it exists.
         return { error: 'That book is not available to you.' }
     }
   }
@@ -129,8 +124,6 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
   const bytes = await artifactBytes(decision.storageKey)
   if (!bytes) return { error: 'That file is missing from storage.' }
 
-  // Size is only knowable once the bytes are in hand, so it is checked
-  // here rather than in the eligibility pass above.
   const sizeCheck = checkKindleDelivery({
     kindleAddress: user.kindleEmail,
     format,
@@ -138,28 +131,33 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
     transportConfigured: true,
   })
   if (!sizeCheck.ok) {
-    return { error: 'That file is too large to email. Download it directly instead.' }
+    return { error: tooLargeMessage(bytes.byteLength) }
   }
 
   const result = await transport!.send({
     to: eligibility.address,
-    subject: decision.filename,
+    subject: kindleSubject({ filename: decision.filename, convert }),
     attachment: { filename: decision.filename, content: bytes },
   })
 
   if (!result.sent) {
-    // Not recorded against the limit: nothing was delivered, and
-    // charging a reader for our failure would be wrong.
     return { error: 'Could not send it just now. Try again in a moment.' }
   }
 
-  await recordDownload(payload, {
+  await chargeForDelivery(payload, {
     userId: user.id,
     bookId: decision.bookId,
-    partId: decision.partId,
     format,
+    cost: decision.cost,
+    isResend: decision.isResend,
   })
 
   revalidatePath('/account')
-  return { notice: `Sent to ${eligibility.address}. It may take a few minutes to appear.` }
+  revalidatePath('/account/history')
+  return {
+    sent: true,
+    converted: convert,
+    spent: decision.cost,
+    balance: Math.max(0, (user.credits ?? 0) - decision.cost),
+  }
 }

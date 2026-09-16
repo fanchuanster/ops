@@ -5,13 +5,6 @@ import { useActionState } from 'react'
 import type { AuthState } from '../app/(frontend)/actions/auth'
 import { MIN_PASSWORD_LENGTH } from '../domain/password'
 
-/**
- * Shared shell for the log-in and sign-up forms.
- *
- * A client component only because it renders the pending state and the
- * server action's error message; the credentials themselves are handled
- * entirely in the action.
- */
 export function AuthForm({
   action,
   mode,

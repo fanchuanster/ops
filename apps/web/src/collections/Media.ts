@@ -1,14 +1,15 @@
 import type { CollectionConfig } from 'payload'
 
-/** Covers and editorial imagery. Book artifacts are NOT media — see Parts. */
+import { COVER_MIME_TYPES } from '../domain/cover'
+
 export const Media: CollectionConfig = {
   slug: 'media',
   admin: { group: 'Content' },
   access: {
-    read: () => true,
+    read: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
   },
   upload: {
-    mimeTypes: ['image/*'],
+    mimeTypes: [...COVER_MIME_TYPES],
   },
   fields: [
     {

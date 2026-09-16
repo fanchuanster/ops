@@ -9,20 +9,32 @@ __pycache__/
 tmp/
 
 # Distribution / packaging
+#
+# ANCHORED to the Python service on purpose. This block comes from the
+# stock Python template, which assumes a repository that is only Python.
+# This one is not, and several of these names are ordinary words: `lib/`,
+# `parts/` and `downloads/` are all things a monorepo has. Unanchored,
+# `lib/` silently swallowed apps/web/src/lib — the download authorization
+# logic, the storage layer and the Kindle transport were never committed,
+# and nothing complained, because git says nothing about a file it has
+# been told to ignore.
+#
+# Keep these anchored. If a second Python service appears, add its path
+# rather than removing the prefix.
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+services/converter/build/
+services/converter/develop-eggs/
+services/converter/dist/
+services/converter/downloads/
+services/converter/eggs/
+services/converter/.eggs/
+services/converter/lib/
+services/converter/lib64/
+services/converter/parts/
+services/converter/sdist/
+services/converter/var/
+services/converter/wheels/
+services/converter/share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -52,6 +64,14 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+
+# ...but not the converter's own `cover` package, which renders a book's
+# first page as its default cover. The rule above is coverage.py's
+# output directory, from the standard Python template, and it catches
+# ours by name alone. The directory is re-included rather than the files
+# inside it: git does not descend into an excluded directory, so
+# unignoring a path within one has no effect.
+!services/converter/app/cover/
 
 # Translations
 *.mo
@@ -215,7 +235,16 @@ __marimo__/
 .diag2
 
 # Next.js / Payload
-apps/web/node_modules/
+#
+# `node_modules/` is the one rule here that is deliberately NOT anchored,
+# despite the block above. The reason that block anchors is that several
+# of its names — `lib/`, `parts/`, `downloads/` — are ordinary words a
+# monorepo uses for source. This one never is: nothing but a package
+# manager writes a directory by that name, and an install can land at the
+# root, in a workspace, or nested inside another package. Anchored to
+# apps/web alone, the root one showed up as untracked and was one
+# `git add -A` away from being committed.
+node_modules/
 apps/web/.next/
 apps/web/src/payload-types.ts
 apps/web/tsconfig.tsbuildinfo
@@ -227,3 +256,7 @@ infra/*.tfstate
 infra/*.tfstate.*
 infra/terraform.tfvars
 infra/*.tfplan
+infra/tfplan
+
+# Google Cloud credentials for the containerised gcloud (infra/gc).
+infra/.gcloud-home/

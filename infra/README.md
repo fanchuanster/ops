@@ -142,14 +142,28 @@ let the download limit under-count.
 
 ## State
 
-Local, and git-ignored: it holds resource ids and, for some resources, secret
-material.
+In R2, at `s3://noblesee/tf/terraform.tfstate` — see `backend.tf`. R2 speaks
+the S3 API, so the stock `s3` backend drives it with the AWS-specific checks
+turned off; `skip_s3_checksum` is the one you cannot omit, since Terraform
+otherwise sends integrity headers R2 rejects with an opaque 400.
 
-The Cloudflare-native answer is an S3-compatible backend on R2, but that has a
-bootstrapping problem — this configuration is what creates the buckets, so the
-state bucket cannot be one of them. When this moves beyond one operator, create
-a separate `noblesee-tfstate` bucket outside this config and add a backend
-block to `versions.tf`.
+Locking is native (`use_lockfile`), via a conditional PUT of
+`tf/terraform.tfstate.tflock`. There is no DynamoDB equivalent to arrange.
+
+`backend.tf` is a **partial** configuration: the endpoint embeds the Cloudflare
+account id and the keys are secrets, so `infra/tf` exports all three from the
+repo's `.env` as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+`AWS_ENDPOINT_URL_S3`. Bare `terraform` without those will fail to initialise
+rather than quietly fall back to a local file.
+
+State has held secret material — the Document AI service account key among
+it, until that key was destroyed on 2026-08-19 — so any local remnant
+(`terraform.tfstate.backup`) stays git-ignored.
+
+One hazard worth knowing: the state bucket is the artifacts bucket, which this
+same configuration manages. `terraform destroy` would therefore delete the
+bucket holding the state describing what it is deleting. Remove resources
+individually rather than destroying wholesale.
 
 ## Known drift
 
@@ -157,3 +171,45 @@ The apex `noblesee.com` record still points at the retired Cloudflare Tunnel
 and is **not** managed here. `cloudflare_workers_custom_domain` creates and
 owns that record, so it will be replaced at step 3 above. Until then the apex
 resolves to a tunnel with nothing behind it.
+
+
+## OCR — no longer here
+
+Nothing in this configuration touches OCR any more. Phase 1 runs on
+**Adobe PDF Services**, whose Export PDF operation OCRs a scan and
+returns a DOCX master in one call — see CLAUDE.md section 8.
+
+Adobe is not provisioned as infrastructure and never appears here. It has
+no resources to create: the Worker holds `ADOBE_CLIENT_ID` and
+`ADOBE_CLIENT_SECRET` as secrets, both issued by hand from the Adobe
+Developer Console, and there is nothing for Terraform to own.
+
+### What was decommissioned
+
+Google Document AI drove phase 1 from 2026-08-14 to 2026-08-19. On
+2026-08-19 all ten of its resources were destroyed: the `OCR_PROCESSOR`,
+the batch scratch bucket, the converter service account and its key, the
+Document AI service agent, and four IAM bindings. `documentai.tf`,
+`documentai-outputs.tf`, the `google`/`google-beta` providers and the
+`infra/gc` gcloud wrapper went with them; the files are in git history.
+
+The two APIs it enabled — `documentai.googleapis.com` and
+`storage.googleapis.com` on project `gen-lang-client-0021728111` — are
+still enabled. `disable_on_destroy = false` was set deliberately so that
+turning an API off would be a separate decision rather than a side effect
+of a destroy. Neither costs anything while unused.
+
+Two loose ends outside Terraform's reach:
+
+- The Worker still carries a `GOOGLE_SERVICE_ACCOUNT_KEY` secret. The key
+  it holds was deleted at Google and authenticates nothing, so this is
+  tidiness rather than exposure. Removing it redeploys the Worker:
+
+  ```bash
+  cd apps/web && ./cf npx wrangler secret delete GOOGLE_SERVICE_ACCOUNT_KEY
+  ```
+
+- Old state versions in R2 under `tf/` still contain the service-account
+  key as it was written. It is revoked, not redacted — which is the usual
+  outcome for a credential that has ever been in Terraform state, and the
+  reason state lives in the private bucket.

@@ -17,7 +17,18 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "noblesee",
-  "main": ".open-next/worker.js",
+  // Not `.open-next/worker.js` directly: that bundle has no `scheduled`
+  // handler and a Worker has only one entry point. `worker-entry.ts`
+  // re-exports OpenNext's `fetch` untouched and adds the cron tick.
+  "main": "worker-entry.ts",
+
+  // The other half of the `open-next-worker` indirection. tsconfig maps
+  // the same specifier to `types/openNextWorker.ts`, which is types
+  // only — importing the generated bundle directly makes `tsc` parse
+  // several megabytes of JavaScript and run out of heap.
+  "alias": {
+    "open-next-worker": "./.open-next/worker.js"
+  },
 
   // Recent enough for the Node compatibility surface Payload and the
   // Next server rely on.
@@ -27,6 +38,22 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+
+  // The conversion clock.
+  //
+  // Until 2026-08-26 there was no clock. The converter container polled
+  // `GET /api/conversion` every few seconds and that poll was the tick —
+  // which meant nothing advanced while nothing was polling, and for most
+  // of the day nothing was. The container is gone and the pipeline runs
+  // in this Worker (CLAUDE.md section 13), so the tick is a cron.
+  //
+  // Every minute, and one job per tick. A tick claims a book with a
+  // compare-and-swap before touching it, so an overrun — a slow tick is
+  // not cancelled when the next one fires — costs a wasted query rather
+  // than a book converted twice.
+  "triggers": {
+    "crons": ["* * * * *"]
   },
 
   "observability": {
@@ -51,6 +78,28 @@
   "vars": {
     // Payload scopes CSRF and CORS to this origin and builds absolute
     // URLs from it, so it must be the real public name, not a guess.
-    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com"
+    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com",
+
+    // Google Analytics 4. Not a secret — a measurement ID is served
+    // inside every page by design — so it is a var and not a
+    // `wrangler secret`. Unset means no tag is rendered at all, which
+    // is how `wrangler dev` and previews stay out of the property.
+    "GA_MEASUREMENT_ID": "G-794BNPG3ZJ"
+
+    // Adobe PDF Services needs no vars, only two secrets:
+    //
+    //   wrangler secret put ADOBE_CLIENT_ID
+    //   wrangler secret put ADOBE_CLIENT_SECRET
+    //
+    // Both come from a project in the Adobe Developer Console. Neither
+    // is derivable from Terraform, because Adobe is not provisioned as
+    // infrastructure — which is also why nothing here replaces the
+    // Document AI processor, location and bucket vars this block used to
+    // hold. Phase 1 is one HTTP call now; it needs no scratch bucket and
+    // no regional endpoint.
+    //
+    // With the secrets unset the export stages simply do not run
+    // (`lib/masterPipeline.ts`), so the Worker deploys fine ahead of
+    // them.
   }
 }

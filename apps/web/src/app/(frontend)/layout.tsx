@@ -1,10 +1,16 @@
+import { headers } from 'next/headers'
 import React from 'react'
 
-import { ThemeToggle } from '../../components/ThemeToggle'
+import { AccountLink } from '../../components/AccountLink'
+import { BrandMark } from '../../components/BrandMark'
+import { GoogleAnalytics } from '../../components/GoogleAnalytics'
+import { GoogleOneTap } from '../../components/GoogleOneTap'
+import { SiteNav } from '../../components/SiteNav'
+import { analyticsMeasurementId } from '../../lib/analytics'
 import { getCurrentUser } from '../../lib/auth'
+import { isGoogleSignInConfigured } from '../../lib/googleOAuth'
 import './styles.css'
 
-// The header reflects who is signed in, so the shell is per-request.
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
@@ -16,58 +22,59 @@ export const metadata = {
     'Digital preservation of traditional Chinese classics, history and works of wisdom, rebuilt as clean reflowable editions for modern devices and e-readers.',
 }
 
-/**
- * Applied before first paint, so a reader who chose dark never sees a
- * white flash. It is inline and synchronous for exactly that reason —
- * anything deferred runs after the browser has already painted.
- */
-const THEME_SCRIPT = `
-try {
-  var t = localStorage.getItem('noblesee-theme');
-  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-} catch (e) {}
-`
-
 export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser()
+  const measurementId = analyticsMeasurementId((await headers()).get('host'))
 
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-      </head>
+    <html lang="en">
       <body>
         <header className="site-header">
           <div className="site-header__inner">
             <a className="wordmark" href="/">
+              <BrandMark />
               Noble<span>See</span>
             </a>
-            <nav className="site-nav">
-              <a href="/books">Library</a>
-              <a href="/collections">Collections</a>
-              <a href="/about">About</a>
+            <SiteNav>
               {user ? (
-                <a href="/account">{user.displayName || 'Account'}</a>
+                <AccountLink
+                  identity={{
+                    email: user.email,
+                    displayName: user.displayName,
+                    avatarUrl: user.avatarUrl,
+                  }}
+                />
               ) : (
-                <a href="/login">Sign in</a>
+                <a className="site-nav__signin" href="/login">
+                  Sign in
+                </a>
               )}
-              <ThemeToggle />
-            </nav>
+            </SiteNav>
           </div>
         </header>
+
+        {!user && isGoogleSignInConfigured() ? <GoogleOneTap /> : null}
+
+        {measurementId ? <GoogleAnalytics measurementId={measurementId} /> : null}
 
         {children}
 
         <footer className="site-footer">
           <div className="page">
-            <p>
-              NobleSee preserves valuable books — traditional Chinese classics, history and works
-              of wisdom — as clean, reflowable editions that are genuinely pleasant to read.
-            </p>
-            <p>
-              Every book in the public library is published under a cleared rights status. Texts
-              are proofread against an authoritative source before release.
-            </p>
+            <div className="site-footer__bar">
+              <a className="wordmark" href="/">
+                <BrandMark />
+                Noble<span>See</span>
+              </a>
+              <p className="site-footer__note">
+                Reviewed by an editor before joining the public library.
+              </p>
+              <p className="site-footer__contact">
+                Contact us —{' '}
+                <a href="mailto:noblesee0077@gmail.com">noblesee0077@gmail.com</a>
+              </p>
+              <p style={{ margin: 0 }}>© {new Date().getFullYear()} NobleSee</p>
+            </div>
           </div>
         </footer>
       </body>

@@ -1,21 +1,14 @@
 'use server'
 
 import config from '@payload-config'
-import { cookies } from 'next/headers'
+import { cookies, headers as nextHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getPayload } from 'payload'
+import { getPayload, type Payload } from 'payload'
 
 import { checkPassword } from '../../../domain/password'
-import { safeNext } from '../../../lib/auth'
-
-/**
- * Sign-up and log-in as server actions.
- *
- * Credentials never reach a client component, and the session cookie is
- * set server-side with the flags Payload expects. Failures come back as
- * a message to render rather than a thrown error, so a mistyped
- * password is an ordinary form response and not an error page.
- */
+import { accrueMonthlyCredits, grantSignupCredits } from '../../../lib/credits'
+import { endSession, safeNext } from '../../../lib/auth'
+import { logError } from '../../../lib/logError'
 
 export type AuthState = { error?: string }
 
@@ -24,6 +17,14 @@ const COOKIE_OPTIONS = {
   secure: (process.env.NEXT_PUBLIC_SERVER_URL || '').startsWith('https://'),
   sameSite: 'lax' as const,
   path: '/',
+}
+
+async function setSessionCookie(payload: Payload, token: string) {
+  const { auth } = payload.collections['users']!.config
+  ;(await cookies()).set(`${payload.config.cookiePrefix}-token`, token, {
+    ...COOKIE_OPTIONS,
+    maxAge: auth.tokenExpiration,
+  })
 }
 
 export async function login(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -40,11 +41,10 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
       data: { email, password },
     })
     if (!result.token) return { error: 'Email or password is incorrect.' }
-    ;(await cookies()).set(`${payload.config.cookiePrefix}-token`, result.token, COOKIE_OPTIONS)
-  } catch {
-    // Deliberately identical whether the address is unknown or the
-    // password is wrong: distinguishing them tells an attacker which
-    // email addresses have accounts.
+    await setSessionCookie(payload, result.token)
+    if (result.user?.id) await accrueMonthlyCredits(payload, result.user.id)
+  } catch (error) {
+    logError('signIn: authenticate', error)
     return { error: 'Email or password is incorrect.' }
   }
 
@@ -58,25 +58,23 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   const next = safeNext(String(formData.get('next') || ''))
 
   if (!email) return { error: 'Enter an email address and a password.' }
-  // The collection hook enforces this too; checking here as well turns a
-  // thrown APIError into a message the form can render inline.
   const problem = checkPassword(password)
   if (problem) return { error: problem.message }
 
   const payload = await getPayload({ config })
+  let createdId: string | number | undefined
   try {
-    await payload.create({
+    const created = await payload.create({
       collection: 'users',
       data: {
         email,
         password,
         displayName: displayName || undefined,
-        // Readers cannot grant themselves anything else; the roles
-        // field rejects self-promotion at the field level too.
         roles: ['reader'],
       },
       overrideAccess: true,
     })
+    createdId = created.id
   } catch (error) {
     const message = error instanceof Error ? error.message : ''
     if (/duplicate|unique|already/i.test(message)) {
@@ -85,16 +83,19 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
     return { error: 'Could not create the account. Check the address and try again.' }
   }
 
+  if (createdId) await grantSignupCredits(payload, createdId)
+
   const result = await payload.login({ collection: 'users', data: { email, password } })
-  if (result.token) {
-    ;(await cookies()).set(`${payload.config.cookiePrefix}-token`, result.token, COOKIE_OPTIONS)
-  }
+  if (result.token) await setSessionCookie(payload, result.token)
 
   redirect(next)
 }
 
 export async function logout() {
   const payload = await getPayload({ config })
+  const { user } = await payload.auth({ headers: await nextHeaders() })
+  const sid = (user as { _sid?: string } | null)?._sid
+  if (user && sid) await endSession(payload, user.id, sid)
   ;(await cookies()).delete(`${payload.config.cookiePrefix}-token`)
   redirect('/')
 }

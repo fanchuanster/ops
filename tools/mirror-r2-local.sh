@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-#
-# Copies the artifacts in the real R2 bucket into the local Miniflare R2
-# that `wrangler dev` serves from.
-#
-# The seed writes real production storage keys into the catalog, because
-# the download path should have genuine files behind it rather than
-# dangling references. That leaves local development with a catalog
-# pointing at objects its own bucket does not have, so downloads and the
-# reader 502. Mirroring fixes that and — more usefully — lets the smoke
-# test exercise the R2 binding end to end on real bytes.
-#
-#   ./tools/mirror-r2-local.sh
-#
-# Reads only. Nothing here writes to the remote bucket.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,16 +29,10 @@ fi
 COUNT="$(printf '%s\n' "$KEYS" | wc -l)"
 echo "$COUNT objects. Mirroring into local R2..."
 
-# The key list goes through a file rather than a pipe. The container
-# script itself arrives on stdin, so a pipe would be read as part of the
-# script and the loop would silently mirror nothing.
 KEYFILE="$REPO/apps/web/.r2-mirror-keys"
 printf '%s\n' "$KEYS" >"$KEYFILE"
 trap 'rm -f "$KEYFILE"' EXIT
 
-# One container for the whole loop: each `npx wrangler` start-up costs
-# seconds, and paying container start-up per object on top of that turns
-# a minute into ten.
 "$REPO/apps/web/cf" bash -s <<'INNER'
 set -euo pipefail
 mkdir -p /tmp/mirror
