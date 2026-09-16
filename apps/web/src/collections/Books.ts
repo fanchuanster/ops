@@ -668,7 +668,7 @@ export const Books: CollectionConfig = {
       index: true,
       admin: {
         description:
-          'Where this book sits on its shelf, lowest first. Set from /admin/library rather than typed here; a number another book already has shifts that book down.',
+          'Where this book sits on its shelf, lowest first, on a shelf whose childOrder is sequence. Set from /admin/library or the book’s own page rather than typed here. Numbers need not be unique or contiguous: two books sharing one read alphabetically between themselves, and nothing else moves.',
       },
     },
   ],

@@ -9,6 +9,7 @@ import {
   defaultPlanFor,
   plansFor,
 } from '../domain/publication'
+import { FIRST_ORDER_ID, MAX_ORDER_ID } from '../domain/shelfOrder'
 
 const LANGUAGES = [
   { value: '', label: 'Not sure' },
@@ -26,6 +27,7 @@ export interface EditableBook {
   pageCount: number | null
   pagesAreEstimated: boolean
   collection: number | null
+  collectionOrder: number | null
   sourceKind: SourceKind
   plan: PublicationPlan
   aiCorrection: boolean
@@ -103,17 +105,20 @@ export function BookDetailsForm({
   collections,
   draft = false,
   submitLabel = 'Next',
+  canOrderShelf = false,
 }: {
   book: EditableBook
   collections: { id: number; title: string; depth: number }[]
   draft?: boolean
   submitLabel?: string
+  canOrderShelf?: boolean
 }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(saveBookDetails, {})
 
   const plans = plansFor(book.sourceKind)
 
   const [plan, setPlan] = useState<PublicationPlan>(book.plan)
+  const [shelf, setShelf] = useState<number | null>(book.collection)
 
   return (
     <form action={action} className="upload-form">
@@ -174,7 +179,8 @@ export function BookDetailsForm({
                 type="radio"
                 name="collection"
                 value=""
-                defaultChecked={book.collection === null}
+                checked={shelf === null}
+                onChange={() => setShelf(null)}
               />
               <span>Other</span>
             </label>
@@ -193,12 +199,34 @@ export function BookDetailsForm({
                   type="radio"
                   name="collection"
                   value={collection.id}
-                  defaultChecked={book.collection === collection.id}
+                  checked={shelf === collection.id}
+                  onChange={() => setShelf(collection.id)}
                 />
                 <span>{collection.title}</span>
               </label>
             ))}
           </div>
+
+          {canOrderShelf ? (
+            <label className="upload-form__order">
+              <span className="field-label">Order on shelf</span>
+              <input
+                type="number"
+                name="collectionOrder"
+                min={FIRST_ORDER_ID}
+                max={MAX_ORDER_ID}
+                step={1}
+                inputMode="numeric"
+                defaultValue={book.collectionOrder === null ? '' : String(book.collectionOrder)}
+                disabled={shelf === null}
+              />
+              <small>
+                {shelf === null
+                  ? 'A book has a place only once it is on a shelf.'
+                  : 'Lowest first, on a shelf an editor has set to read in order. Two books may share a number and then read alphabetically between themselves; leave it empty to keep the place it has.'}
+              </small>
+            </label>
+          ) : null}
         </fieldset>
       ) : null}
 

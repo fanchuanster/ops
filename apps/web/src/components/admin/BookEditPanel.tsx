@@ -211,7 +211,7 @@ export function BookEditPanel({
           <p className="admin-quiet">
             {draft.collectionId === null
               ? 'A book has a place only once it is on a shelf.'
-              : 'Where readers meet it on this shelf. A number another book has shifts that book down.'}
+              : 'Where readers meet it on this shelf, lowest first. A number another book has is fine — they read alphabetically between themselves, and nothing else moves.'}
           </p>
         </div>
 

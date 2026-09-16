@@ -21,6 +21,7 @@ import {
   statusOnQueue,
 } from '../../../domain/pipeline'
 import { isUploaderSelectableRights, type RightsStatus } from '../../../domain/rights'
+import { orderIdFrom } from '../../../domain/shelfOrder'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import {
   needsConverter,
@@ -69,6 +70,13 @@ export async function saveBookDetails(
   const rawCollection = Number(formData.get('collection'))
   const collectionId = Number.isInteger(rawCollection) && rawCollection > 0 ? rawCollection : null
 
+  const ordersShelves = isAdmin(user)
+  const rawOrder = ordersShelves ? String(formData.get('collectionOrder') ?? '').trim() : ''
+  const statedOrder = rawOrder === '' ? null : Number(rawOrder)
+  if (statedOrder !== null && !Number.isInteger(statedOrder)) {
+    return { error: 'An order is a whole number.' }
+  }
+
   const language = String(formData.get('language') || '')
 
   const alreadyConverting = book.conversion?.state !== 'draft'
@@ -115,6 +123,16 @@ export async function saveBookDetails(
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collection: collectionId,
+        ...(ordersShelves
+          ? {
+              collectionOrder:
+                collectionId === null
+                  ? null
+                  : statedOrder === null
+                    ? undefined
+                    : orderIdFrom(statedOrder),
+            }
+          : {}),
         ...(staysPut
           ? {}
           : { status: statusOnQueue((book.artifacts ?? []).map((a) => a.format)) }),

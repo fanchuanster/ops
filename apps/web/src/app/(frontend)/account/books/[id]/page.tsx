@@ -170,6 +170,8 @@ export default async function BookDetailsPage({
               : typeof book.collection === 'number'
                 ? book.collection
                 : null,
+          collectionOrder:
+            typeof book.collectionOrder === 'number' ? book.collectionOrder : null,
           sourceKind,
           plan,
           aiCorrection: book.conversion?.aiCorrection === true,
@@ -181,6 +183,7 @@ export default async function BookDetailsPage({
         }))}
         draft={draft}
         submitLabel={draft ? 'Next' : 'Save changes'}
+        canOrderShelf={isAdmin}
       />
 
       {share && book.visibility === 'public' ? <p className="hint">{share}</p> : null}
