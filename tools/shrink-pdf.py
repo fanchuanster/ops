@@ -32,6 +32,14 @@ and then OCRs into noise has spent a document transaction and a
 proofreader's afternoon to produce something worse than nothing. Going
 lower is allowed, deliberately, and says so on the way past.
 
+RESOLUTION IS NOT ALWAYS THE LEVER. A rung below the scan's own
+resolution downsamples nothing, and a scan already compressed harder than
+--quality re-encodes to the size it started at. The tool measures this
+rather than assuming it: a rung that returns the file unchanged is
+reported as unchanged, and no estimate is ever extrapolated from it. When
+no rung moves the file, resolution is the wrong lever and --quality,
+--gray and --mono-dpi are the right ones.
+
 KEEP THE ORIGINAL. NobleSee preserves the file it is given: the upload
 *is* the book's PDF artifact and is what a reader is sent. Shrinking is
 how a book gets in, not an archival step — the full-resolution scan
@@ -40,8 +48,10 @@ belongs in your own storage either way.
 This is a maintainer utility and not part of the runtime stack.
 Ghostscript is a native binary, and nothing native runs in the Worker.
 
-Requires ghostscript. PyMuPDF (`pip install pymupdf`) is optional, and is
-used to report what is in a file and to confirm no page was lost.
+Requires ghostscript. PyMuPDF (`pip install pymupdf`) is strongly
+recommended: without it the ladder cannot be trimmed to the scan's own
+resolution, and the report falls back to counting compression filters in
+the raw bytes.
 """
 
 import argparse
@@ -68,14 +78,37 @@ re-encoding images a scanner wrote at quality 95.
 """
 
 DEFAULT_MIN_DPI = 200
-DEFAULT_QUALITY = 75
+DEFAULT_QUALITY = 60
 DEFAULT_MARGIN_MIB = 1
+DEFAULT_MONO_DPI = 300
 
-MONO_FLOOR_DPI = 300
-"""A bitonal page is already cheap and is destroyed by resampling.
+def qfactor(quality: int) -> float:
+    """Turn a 0-100 quality into the JPEG QFactor pdfwrite actually reads.
 
-It is held above the ladder rather than dragged down with it; the saving
-is in the colour and greyscale images regardless.
+    `-dJPEGQ` is inert here: it belongs to the jpeg output device, and
+    pdfwrite ignores it. Measured on a 5 MB scan at a resolution that
+    downsamples nothing, q75 and q30 produced byte-identical output —
+    which made --quality a placebo, and made the advice to lower it a
+    waste of somebody's afternoon. The knob pdfwrite reads is QFactor in
+    ColorImageDict/GrayImageDict, where *lower* means better, and on the
+    same file it is a real lever: 0.9 returned the input size, 1.3 took
+    10% off and 2.0 took 41% off, with no downsampling at all.
+
+    The scale is anchored so that the default, 60, is QFactor 0.9 —
+    Ghostscript's own default, and therefore what every result measured
+    before this mapping existed was produced with.
+    """
+    return max(0.1, min(2.4, 2.4 - quality * 0.025))
+
+
+RESPONSE_FLOOR = 0.97
+"""How much smaller an attempt must be before the rung counts as working.
+
+A rung that returns 97% of the input has not downsampled anything and has
+re-encoded into roughly the bytes it read. Treating that as a measurement
+is what broke a real run: two unchanged rungs were extrapolated into
+confident estimates, and the estimate skipped the one rung that might
+have helped.
 """
 
 SKIP_SLACK = 1.15
@@ -83,11 +116,28 @@ SKIP_SLACK = 1.15
 
 Each rung costs a full Ghostscript pass — a minute or more on a 100 MB
 book — so a rung the last result says cannot fit is not worth measuring.
-The prediction scales with image area, which is the right model only
-while both rungs actually downsample; where they do not, or where much of
-the file is not images, it under-predicts the shrink and the rung is
-tried anyway. The error runs towards trying, which is the safe direction.
+The prediction scales with image area, which holds only between two rungs
+that both actually downsample; it is therefore made only from a rung that
+demonstrably shrank the file, and is discarded the moment one does not.
 """
+
+GS_BINARIES = ("gs", "gswin64c", "gswin32c")
+"""What Ghostscript is called, in the order to try.
+
+Windows builds ship `gswin64c.exe` — the console variant — and no `gs`
+at all, so a portable Ghostscript unzipped into a directory on PATH is
+invisible to a tool that only looks for `gs`.
+"""
+
+FILTERS = (
+    b"/JPXDecode",
+    b"/DCTDecode",
+    b"/JBIG2Decode",
+    b"/CCITTFaxDecode",
+    b"/FlateDecode",
+    b"/RunLengthDecode",
+    b"/LZWDecode",
+)
 
 
 def human(n: float) -> str:
@@ -123,15 +173,20 @@ def upload_limit() -> tuple[int, str]:
 class Survey:
     """What is actually in a PDF, when PyMuPDF is here to say."""
 
-    def __init__(self, pages: int, images: int, dpi: list[float], colour: bool):
+    def __init__(self, pages: int, images: int, dpi: list[float], colour: bool, bitonal: int):
         self.pages = pages
         self.images = images
         self.dpi = dpi
         self.colour = colour
+        self.bitonal = bitonal
 
     @property
     def median_dpi(self) -> float | None:
         return statistics.median(self.dpi) if self.dpi else None
+
+    @property
+    def mostly_bitonal(self) -> bool:
+        return self.images > 0 and self.bitonal * 2 > self.images
 
 
 def survey(path: Path, sample: int = 40) -> Survey | None:
@@ -155,6 +210,7 @@ def survey(path: Path, sample: int = 40) -> Survey | None:
             step = max(1, pages // sample)
             dpi: list[float] = []
             images = 0
+            bitonal = 0
             colour = False
             for index in range(0, pages, step):
                 for info in doc[index].get_image_info():
@@ -162,11 +218,39 @@ def survey(path: Path, sample: int = 40) -> Survey | None:
                     width = info.get("bbox", (0, 0, 0, 0))[2] - info["bbox"][0]
                     if width > 1 and info.get("width"):
                         dpi.append(info["width"] / (width / 72))
+                    if info.get("bpc", 8) == 1:
+                        bitonal += 1
                     if info.get("cs-name", "") not in ("DeviceGray", ""):
                         colour = True
-            return Survey(pages, images, dpi, colour)
+            return Survey(pages, images, dpi, colour, bitonal)
     except Exception:
         return None
+
+
+def compression(path: Path) -> dict[str, int]:
+    """Tally the compression filters named in the raw bytes.
+
+    The fallback for a file PyMuPDF cannot open, or a machine where it is
+    not installed — which is where the diagnosis is needed most, since
+    without it nothing else can say why a scan will not shrink. A PDF that
+    keeps its object dictionaries in compressed object streams hides them
+    from this, so an empty tally means "cannot tell", never "no images".
+    """
+    found = {name.decode().lstrip("/"): 0 for name in FILTERS}
+    try:
+        with path.open("rb") as handle:
+            tail = b""
+            while True:
+                chunk = handle.read(4 * MIB)
+                if not chunk:
+                    break
+                window = tail + chunk
+                for name in FILTERS:
+                    found[name.decode().lstrip("/")] += window.count(name)
+                tail = window[-32:]
+    except OSError:
+        return {}
+    return {name: count for name, count in found.items() if count}
 
 
 def page_count(path: Path) -> int | None:
@@ -174,19 +258,37 @@ def page_count(path: Path) -> int | None:
     return found.pages if found else None
 
 
-def ghostscript(src: Path, dst: Path, dpi: int, quality: int, gray: bool) -> str | None:
+def ghostscript_binary() -> str | None:
+    for name in GS_BINARIES:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def ghostscript(
+    src: Path, dst: Path, dpi: int, quality: int, gray: bool, mono_dpi: int
+) -> str | None:
     """Re-encode `src` into `dst`. Returns an error message, or None.
 
-    Two of these flags are traps rather than tuning.
-    PassThroughJPEGImages defaults on, which hands an existing JPEG
-    through untouched and makes -dJPEGQ silently do nothing on precisely
-    the scans that need it most. And Ghostscript leaves an image alone
-    until it is half again over target, which makes the requested
-    resolution a suggestion and the resulting size unpredictable, so the
-    downsample thresholds are pinned to 1.0 to get what was asked for.
+    Three of these are traps rather than tuning. The two pass-through
+    switches default on, which hands an existing JPEG or JPEG 2000 image
+    through untouched; with passthrough left on, QFactor 2.0 returned a
+    5034 KB scan as 5041 KB, and with it off the same call returned
+    2981 KB, so the flag gates the whole quality lever rather than
+    trimming it. The JPX one matters on Ghostscript 10, where it is the
+    difference between a re-encoded scan and a copy. And Ghostscript
+    leaves an image alone until it is half again over target, which makes
+    the requested resolution a suggestion and the resulting size
+    unpredictable, so the downsample thresholds are pinned to 1.0 to get
+    what was asked for.
     """
+    binary = ghostscript_binary()
+    if not binary:
+        return f"ghostscript not found on PATH (looked for {', '.join(GS_BINARIES)})"
+
     args = [
-        "gs",
+        binary,
         "-q",
         "-dSAFER",
         "-dBATCH",
@@ -198,11 +300,11 @@ def ghostscript(src: Path, dst: Path, dpi: int, quality: int, gray: bool) -> str
         "-dCompressFonts=true",
         "-dSubsetFonts=true",
         "-dPassThroughJPEGImages=false",
+        "-dPassThroughJPXImages=false",
         "-dAutoFilterColorImages=false",
         "-dAutoFilterGrayImages=false",
         "-dColorImageFilter=/DCTEncode",
         "-dGrayImageFilter=/DCTEncode",
-        f"-dJPEGQ={quality}",
         "-dDownsampleColorImages=true",
         "-dColorImageDownsampleType=/Bicubic",
         f"-dColorImageResolution={dpi}",
@@ -211,19 +313,25 @@ def ghostscript(src: Path, dst: Path, dpi: int, quality: int, gray: bool) -> str
         f"-dGrayImageResolution={dpi}",
         "-dDownsampleMonoImages=true",
         "-dMonoImageDownsampleType=/Subsample",
-        f"-dMonoImageResolution={max(dpi, MONO_FLOOR_DPI)}",
+        f"-dMonoImageResolution={max(dpi, mono_dpi)}",
         "-dColorImageDownsampleThreshold=1.0",
         "-dGrayImageDownsampleThreshold=1.0",
         "-dMonoImageDownsampleThreshold=1.0",
     ]
     if gray:
         args += ["-sColorConversionStrategy=Gray", "-dProcessColorModel=/DeviceGray"]
-    args += [f"-sOutputFile={dst}", str(src)]
+
+    sampling = "/Blend 1 /HSamples [2 1 1 2] /VSamples [2 1 1 2]"
+    image_dict = (
+        f"<</ColorImageDict <</QFactor {qfactor(quality)} {sampling}>>"
+        f" /GrayImageDict <</QFactor {qfactor(quality)} {sampling}>>>> setdistillerparams"
+    )
+    args += [f"-sOutputFile={dst}", "-c", image_dict, "-f", str(src)]
 
     try:
         done = subprocess.run(args, capture_output=True, text=True)
-    except FileNotFoundError:
-        return "ghostscript is not installed (apt install ghostscript)"
+    except OSError as failure:
+        return f"could not run {binary}: {failure}"
 
     if done.returncode != 0:
         detail = (done.stderr or done.stdout or "").strip().splitlines()
@@ -238,7 +346,9 @@ def rungs_for(min_dpi: int, found: Survey | None) -> list[int]:
 
     Ghostscript will not invent detail, so a rung above the scan's own
     resolution is the same file written out again — minutes of work for a
-    result the next rung down beats on every axis.
+    result the next rung down beats on every axis. Without PyMuPDF there
+    is nothing to trim against and the whole ladder is walked, which is
+    why the unchanged-rung rule has to carry the same job empirically.
     """
     ladder = [d for d in DPI_LADDER if d >= min_dpi] or [min_dpi]
 
@@ -252,14 +362,25 @@ def rungs_for(min_dpi: int, found: Survey | None) -> list[int]:
 
 def describe(path: Path, found: Survey | None) -> None:
     print(f"{path.name}: {human(path.stat().st_size)}")
+    filters = compression(path)
+
     if not found:
-        print("  (install pymupdf for a look inside)")
+        print("  PyMuPDF is not installed, so the ladder cannot be trimmed to this")
+        print("  scan's own resolution — pip install pymupdf")
+        if filters:
+            print("  compression: " + ", ".join(f"{k} x{v}" for k, v in filters.items()))
         return
+
     plural = "" if found.pages == 1 else "s"
     print(f"  {found.pages} page{plural}, {found.images} images sampled", end="")
     if found.median_dpi:
         print(f", around {found.median_dpi:.0f} dpi", end="")
     print(", colour" if found.colour else ", greyscale or bitonal")
+    if filters:
+        print("  compression: " + ", ".join(f"{k} x{v}" for k, v in filters.items()))
+    if found.mostly_bitonal:
+        print("  Mostly bitonal pages, held at --mono-dpi rather than following the")
+        print("  ladder: resampling a 1-bit scan destroys it. Lower --mono-dpi to move them.")
     if found.images == 0:
         print("  No raster content — this is not a scan, and resampling has")
         print("  nothing to work on. Look at embedded fonts or attachments.")
@@ -270,9 +391,18 @@ def shrink(src: Path, dst: Path, target: int, args: argparse.Namespace) -> bool:
 
     Attempts are written beside the destination so the winner is a rename
     rather than a copy, and so a 200 MB attempt cannot fill a small /tmp.
-    Skipped rungs are kept as predictions, so a run that fits nothing can
-    still say how far down the ladder is worth going rather than
-    reporting only the rung it happened to measure.
+
+    A rung that does not shrink the file is recorded as unchanged and
+    poisons nothing: the predictor is dropped, so the next rung is
+    measured rather than guessed at. Skipping on an estimate is only
+    sound while the estimate comes from a rung that actually worked.
+
+    Two rungs returning the same size say the images are below both of
+    them and resolution is not engaging, which is said on the line rather
+    than left for somebody to notice in a column of identical numbers.
+    The ladder still descends one rung at a time, because the rung that
+    finally engages is the best one that can, and only PyMuPDF can say
+    where that is without measuring.
     """
     size = src.stat().st_size
     found = survey(src)
@@ -293,6 +423,8 @@ def shrink(src: Path, dst: Path, target: int, args: argparse.Namespace) -> bool:
     attempt = workdir / "attempt.pdf"
     tried: list[tuple[int, int, bool]] = []
     last: tuple[int, int] | None = None
+    previous: int | None = None
+    responded = False
 
     try:
         for dpi in ladder:
@@ -304,7 +436,7 @@ def shrink(src: Path, dst: Path, target: int, args: argparse.Namespace) -> bool:
                     continue
 
             started = time.monotonic()
-            error = ghostscript(src, attempt, dpi, args.quality, args.gray)
+            error = ghostscript(src, attempt, dpi, args.quality, args.gray, args.mono_dpi)
             if error:
                 print(f"  {dpi:>4} dpi  failed: {error}")
                 return False
@@ -312,43 +444,72 @@ def shrink(src: Path, dst: Path, target: int, args: argparse.Namespace) -> bool:
             made = attempt.stat().st_size
             elapsed = time.monotonic() - started
             fits = made <= target
-            print(
-                f"  {dpi:>4} dpi  {human(made):>9}  {elapsed:.0f}s"
-                f"  {'fits' if fits else 'still too big'}"
-            )
-            last = (dpi, made)
+            moved = made <= size * RESPONSE_FLOOR
+            note = "fits" if fits else "still too big" if moved else "unchanged by this rung"
+            if previous and abs(made - previous) < previous * 0.01:
+                note += ", same as the last rung"
+            print(f"  {dpi:>4} dpi  {human(made):>9}  {elapsed:.0f}s  {note}")
+            previous = made
             tried.append((dpi, made, True))
 
             if fits:
                 return finish(src, attempt, dst, dpi, made, size)
 
-        report_failure(tried, args)
+            responded = responded or moved
+            last = (dpi, made) if moved else None
+
+        report_failure(tried, args, found, responded, size)
         return False
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def report_failure(tried: list[tuple[int, int, bool]], args: argparse.Namespace) -> None:
+def report_failure(
+    tried: list[tuple[int, int, bool]],
+    args: argparse.Namespace,
+    found: Survey | None,
+    responded: bool,
+    size: int,
+) -> None:
     """Say how close the ladder got, and what is left to try.
 
     Only what is not already in play is offered: telling somebody to try
     the flag they just used is how a tool teaches you to stop reading it.
+    A file no rung moved needs different advice from one that shrank and
+    not enough, so the two are not given the same paragraph.
     """
     floor = min(tried, key=lambda rung: rung[1])
     measured = min((r for r in tried if r[2]), key=lambda rung: rung[1])
-    print(f"  Nothing on the ladder fits. Smallest was {human(measured[1])} at {measured[0]} dpi", end="")
-    if floor is not measured:
-        print(f", and {floor[0]} dpi would be around {human(floor[1])}.")
+
+    if not responded:
+        lowest = min(r[0] for r in tried if r[2])
+        print(f"  No rung changed the file, so resolution is not the lever here.")
+        print(f"  The images are at or below {lowest} dpi, or already compressed")
+        print(f"  harder than quality {args.quality}, so downsampling them does nothing.")
     else:
-        print(".")
+        print(
+            f"  Nothing on the ladder fits. Smallest was {human(measured[1])} at {measured[0]} dpi",
+            end="",
+        )
+        if floor is not measured:
+            print(f", and {floor[0]} dpi would be around {human(floor[1])}.")
+        else:
+            print(".")
 
     options = []
+    if args.quality > 50:
+        options.append(
+            f"--quality under {args.quality}, which recompresses the images even"
+            " when nothing downsamples"
+        )
     if not args.gray:
         options.append("--gray, if the book is black-and-white and the scan is not")
-    if args.min_dpi > min(DPI_LADDER):
+    if args.min_dpi > min(DPI_LADDER) and responded:
         options.append(f"--min-dpi under {args.min_dpi}, checking a page afterwards")
-    if args.quality > 50:
-        options.append(f"--quality under {args.quality}")
+    if (found is None or found.mostly_bitonal) and args.mono_dpi > min(DPI_LADDER):
+        options.append(f"--mono-dpi under {args.mono_dpi}, if the pages are bitonal")
+    if found is None:
+        options.append("pip install pymupdf, so the next run can say what is in the file")
     for option in options:
         print(f"    {option}")
     print("  A book too large for any of those wants rescanning, not splitting —")
@@ -389,7 +550,13 @@ def main() -> int:
         "--quality",
         type=int,
         default=DEFAULT_QUALITY,
-        help=f"JPEG quality for re-encoded images (default {DEFAULT_QUALITY})",
+        help=f"image quality, 0-100 (default {DEFAULT_QUALITY}, Ghostscript's own)",
+    )
+    parser.add_argument(
+        "--mono-dpi",
+        type=int,
+        default=DEFAULT_MONO_DPI,
+        help=f"resolution floor for bitonal pages (default {DEFAULT_MONO_DPI})",
     )
     parser.add_argument(
         "--gray",

@@ -179,10 +179,32 @@ the catalog gets books without uploading any.
 ### Shrinking an oversized scan
 
 ```bash
-sudo apt install ghostscript && pip install pymupdf   # pymupdf is optional
+sudo apt install ghostscript && pip install pymupdf   # install both
 python3 tools/shrink-pdf.py --inspect scan.pdf        # what is in it
 python3 tools/shrink-pdf.py scan.pdf                  # -> scan-small.pdf
 ```
+
+PyMuPDF is nominally optional and worth installing anyway: it is what trims
+the ladder to the scan's own resolution. Without it the tool walks rungs that
+cannot do anything, a minute each on a large book, and can only report which
+compression filters it found in the raw bytes.
+
+On Windows, `tools/shrink-pdf.ps1` arranges the three things that have to be
+right before any of this works — a portable Ghostscript on PATH under its
+Windows name `gswin64c.exe`, a UTF-8 console so a book named
+南怀瑾选集-典藏版-第05卷-扫描版.pdf prints instead of raising
+`UnicodeEncodeError`, and whichever of `python`/`python3`/`py` actually runs:
+
+```powershell
+.\tools\shrink-pdf.ps1 $env:USERPROFILE\Downloads\scan.pdf
+.\tools\shrink-pdf.ps1 --inspect C:\scans\book.pdf
+.\tools\shrink-pdf.ps1 C:\scans\book.pdf --quality 40 --gray
+```
+
+It passes every argument through, changes no directory (so relative paths still
+resolve), and looks for the portable build in
+`$env:USERPROFILE\ghostscript-portable\bin` unless `-GhostscriptDir` says
+otherwise.
 
 The upload limit is 100 MB, and it is not a number we chose: it is Adobe's
 ceiling for the Export PDF call and Cloudflare's request cap on this plan
@@ -198,9 +220,22 @@ than the smallest file it could make.
 The ladder stops at 200 dpi, because below that Adobe starts losing dense
 traditional Chinese glyphs and the book arrives as a master full of noise —
 a document transaction and a proofreader's afternoon spent on something worse
-than nothing. `--min-dpi` goes lower and says so on the way past. `--gray` is
-the bigger win for a black-and-white book photographed in colour, and takes
-the red seals with it.
+than nothing. `--min-dpi` goes lower and says so on the way past.
+
+**Resolution is not always the lever.** A rung below the scan's own resolution
+downsamples nothing, and a scan already compressed hard re-encodes to the size
+it started at — so a 225 MB book can come back 225 MB at every rung. The tool
+measures that rather than assuming it: a rung that returns the file unchanged
+says so, no estimate is ever extrapolated from one that did, and when no rung
+moves the file it says resolution is the wrong lever and names the right ones.
+`--quality` recompresses the images even when nothing downsamples, and `--gray`
+is the bigger win for a black-and-white book photographed in colour, though it
+takes the red seals with it.
+
+`--quality` is a 0-100 scale over Ghostscript's `QFactor`, defaulting to 60,
+which is Ghostscript's own default. It is deliberately not `-dJPEGQ`: that
+switch belongs to the jpeg output device and `pdfwrite` ignores it, so every
+value of it produced byte-identical output and the flag was a placebo.
 
 It reads the limit out of `domain/publication.ts` rather than keeping its own
 copy, which has already moved once (64 MB until 2026-08-24).
