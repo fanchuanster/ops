@@ -176,6 +176,39 @@ EPUB. It no longer stands in for anything — the pipeline runs in the Worker
 and builds real editions (CLAUDE.md section 13) — but the seed is still how
 the catalog gets books without uploading any.
 
+### Shrinking an oversized scan
+
+```bash
+sudo apt install ghostscript && pip install pymupdf   # pymupdf is optional
+python3 tools/shrink-pdf.py --inspect scan.pdf        # what is in it
+python3 tools/shrink-pdf.py scan.pdf                  # -> scan-small.pdf
+```
+
+The upload limit is 100 MB, and it is not a number we chose: it is Adobe's
+ceiling for the Export PDF call and Cloudflare's request cap on this plan
+(CLAUDE.md sections 3 and 14). A 400-page book scanned at 300dpi goes past it
+easily, and those are the books this library is for.
+
+`tools/shrink-pdf.py` re-encodes the page images at a lower resolution and
+changes nothing else — no pages dropped, no splitting, text and vectors carried
+through as text and vectors. It descends a resolution ladder and stops at the
+first rung under the limit, so the result is the best quality that fits rather
+than the smallest file it could make.
+
+The ladder stops at 200 dpi, because below that Adobe starts losing dense
+traditional Chinese glyphs and the book arrives as a master full of noise —
+a document transaction and a proofreader's afternoon spent on something worse
+than nothing. `--min-dpi` goes lower and says so on the way past. `--gray` is
+the bigger win for a black-and-white book photographed in colour, and takes
+the red seals with it.
+
+It reads the limit out of `domain/publication.ts` rather than keeping its own
+copy, which has already moved once (64 MB until 2026-08-24).
+
+Keep the original. NobleSee preserves the file it is given — the upload *is*
+the book's PDF artifact and what a reader is sent — so shrinking is how a book
+gets in, not an archival step.
+
 ## Layout
 
 ```
@@ -195,7 +228,7 @@ apps/web/                    the application — public site, API and admin
   src/lib/conversion/        the pipeline: DOCX, EPUB, the LLM client, the runner
 content/seed/                generated book artifacts (DOCX/EPUB/PDF)
 infra/                       Terraform: R2, D1, DNS, the www redirect
-tools/                       smoke test, seed-content generator, R2 mirror
+tools/                       smoke test, seed-content generator, R2 mirror, PDF shrinker
 docs/                        architecture decisions and roadmap
 ```
 
