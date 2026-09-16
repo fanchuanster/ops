@@ -33,8 +33,8 @@ ceiling tools/shrink-pdf.py enforces. Anything over it is handed to that
 tool's own re-encoding ladder and, by default, replaces the file in
 place -- one file at a clean name is what is left afterwards, not an
 original plus a "-small" copy sitting beside it. Pass --keep-original to
-divert the shrunk output to "<stem>-small.pdf" instead, matching
-shrink-pdf.py's own default.
+leave the input where it is and put the shrunk copy beside it, named for
+the size it came out at, the way shrink-pdf.py names its own results.
 
 Renaming never touches page content, and shrinking never touches the
 name -- the two passes are independent and either can be skipped.
@@ -115,6 +115,18 @@ def rename_clean(path: Path, dry_run: bool) -> Path:
 
 
 def shrink_if_needed(path: Path, args: argparse.Namespace, shrink_pdf) -> bool:
+    """Hand an oversized file to shrink-pdf.py's ladder and keep the result.
+
+    The ladder writes its winner where it is told and refuses to write
+    over its own input, so replacing the file in place is a shrink to a
+    scratch name beside it and then a rename -- which is what leaves one
+    file at one clean name rather than an original with a smaller copy
+    sitting next to it.
+
+    --keep-original names nothing itself: the destination is left to
+    shrink-pdf.py, so the copy is "<stem>-28MB.pdf", carrying the size it
+    came out at exactly as that tool's own runs do.
+    """
     limit, source = shrink_pdf.upload_limit()
     size = path.stat().st_size
     if size <= limit:
@@ -130,18 +142,16 @@ def shrink_if_needed(path: Path, args: argparse.Namespace, shrink_pdf) -> bool:
     shrink_args = argparse.Namespace(
         min_dpi=args.min_dpi,
         quality=args.quality,
+        mono_dpi=args.mono_dpi,
         gray=args.gray,
         force=False,
     )
 
     if args.keep_original:
-        dst = path.with_name(f"{path.stem}-small{path.suffix}")
-        return shrink_pdf.shrink(path, dst, target, shrink_args)
+        return shrink_pdf.shrink(path, path.parent, None, target, shrink_args)
 
-    # Shrink to a scratch file beside it, then replace in place so the
-    # clean name ends up pointing at the file that fits.
     scratch = path.with_name(f"{path.stem}.shrinking{path.suffix}")
-    ok = shrink_pdf.shrink(path, scratch, target, shrink_args)
+    ok = shrink_pdf.shrink(path, path.parent, scratch, target, shrink_args)
     if ok and scratch.exists():
         scratch.replace(path)
     elif scratch.exists():
@@ -158,10 +168,11 @@ def main() -> int:
     parser.add_argument(
         "--keep-original",
         action="store_true",
-        help="write shrunk output to <stem>-small.pdf instead of replacing in place",
+        help="leave the input alone and write the shrunk copy beside it, named for its size",
     )
     parser.add_argument("--min-dpi", type=int, default=None, help="passed through to shrink-pdf.py")
     parser.add_argument("--quality", type=int, default=None, help="passed through to shrink-pdf.py")
+    parser.add_argument("--mono-dpi", type=int, default=None, help="passed through to shrink-pdf.py")
     parser.add_argument("--gray", action="store_true", help="passed through to shrink-pdf.py")
     parser.add_argument("--margin", type=float, default=None, help="passed through to shrink-pdf.py")
     args = parser.parse_args()
@@ -171,6 +182,8 @@ def main() -> int:
         args.min_dpi = shrink_pdf.DEFAULT_MIN_DPI
     if args.quality is None:
         args.quality = shrink_pdf.DEFAULT_QUALITY
+    if args.mono_dpi is None:
+        args.mono_dpi = shrink_pdf.DEFAULT_MONO_DPI
     if args.margin is None:
         args.margin = shrink_pdf.DEFAULT_MARGIN_MIB
 

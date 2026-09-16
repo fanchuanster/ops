@@ -14,28 +14,21 @@
     whatever shrink-pdf.py says they are and the two cannot drift apart.
     Run -Help to read them from the tool itself.
 
-    Three things have to be arranged before any of this runs on Windows,
-    and getting one wrong looks like a different fault:
+    This is the size half on its own. A file downloaded from an archive
+    mirror usually wants tools/clean-pdf.ps1 instead, which strips the
+    database ids off the filename and then does exactly this to what is
+    left.
 
-    Ghostscript is called gswin64c.exe there and is not on PATH when it
-    has been unzipped rather than installed, so this prepends the
-    portable directory; the Python tool looks for gs, gswin64c and
-    gswin32c in that order and says what it looked for when it finds
-    none.
+    The Windows plumbing -- portable Ghostscript under its Windows name
+    gswin64c.exe, a UTF-8 console so a book named
+    南怀瑾选集-典藏版-第05卷-扫描版.pdf prints instead of raising
+    UnicodeEncodeError, and whichever of python/python3/py actually runs
+    -- is in tools/pdf-tools.ps1 and shared with tools/clean-pdf.ps1.
+    Missing Ghostscript is an error here rather than a warning: there is
+    nothing this script does without it.
 
-    The console is code page 1252 by default, so a book named
-    南怀瑾选集-典藏版-第05卷-扫描版.pdf prints as question marks and a
-    UnicodeEncodeError can end the run before any work happens.
-    PYTHONIOENCODING, PYTHONUTF8 and the console encoding are all set to
-    UTF-8.
-
-    Python is called python, python3 or py depending on how it was
-    installed, and on a machine carrying the Store stub, python3 exists
-    and does nothing. Each is tried until one reports a version.
-
-    The tool is found from this script's own location, under either name
-    it goes by, and nothing changes directory -- so a PDF path relative
-    to wherever you are still resolves.
+    The tool is found from this script's own location and nothing changes
+    directory, so a PDF path relative to wherever you are still resolves.
 
     This file is saved with a UTF-8 byte order mark, because Windows
     PowerShell 5.1 reads a .ps1 as ANSI without one and turns the Chinese
@@ -113,7 +106,7 @@ param(
     [string] $OutDir,
     [switch] $Help,
 
-    [string] $GhostscriptDir = (Join-Path $env:USERPROFILE 'ghostscript-portable\bin'),
+    [string] $GhostscriptDir,
 
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]] $Extra
@@ -121,39 +114,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if (Test-Path -LiteralPath $GhostscriptDir) {
-    $env:PATH = "$GhostscriptDir;$env:PATH"
-}
-elseif (-not (Get-Command 'gswin64c', 'gswin32c', 'gs' -ErrorAction SilentlyContinue)) {
-    Write-Error "No Ghostscript found. Unzip the portable build into $GhostscriptDir, or pass -GhostscriptDir."
-}
+. (Join-Path $PSScriptRoot 'pdf-tools.ps1')
 
-$env:PYTHONIOENCODING = 'utf-8'
-$env:PYTHONUTF8 = '1'
-try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
-if (Get-Command chcp.com -ErrorAction SilentlyContinue) { $null = chcp.com 65001 }
-
-$tool = @('shrink-pdf.py', 'clean-pdf.py') |
-    ForEach-Object { Join-Path $PSScriptRoot $_ } |
-    Where-Object { Test-Path -LiteralPath $_ } |
-    Select-Object -First 1
-if (-not $tool) {
-    Write-Error "Neither shrink-pdf.py nor clean-pdf.py is in $PSScriptRoot."
-}
-
-$python = $null
-foreach ($candidate in @('python', 'python3', 'py')) {
-    $found = Get-Command $candidate -ErrorAction SilentlyContinue
-    if (-not $found) { continue }
-    & $found.Source '--version' 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) { $python = $found.Source; break }
-}
-if (-not $python) {
-    Write-Error 'No working Python found. Install it from python.org, not the Microsoft Store stub.'
-}
+$run = Initialize-PdfTool -Tool 'shrink-pdf.py' -GhostscriptDir $GhostscriptDir -RequireGhostscript
 
 if ($Help) {
-    & $python $tool '--help'
+    & $run.Python $run.Tool '--help'
     exit $LASTEXITCODE
 }
 
@@ -161,24 +127,7 @@ if (-not $Path) {
     Write-Error 'Give me a PDF. Run with -Help for the options.'
 }
 
-$files = @()
-foreach ($item in $Path) {
-    if (Test-Path -LiteralPath $item) {
-        $files += (Resolve-Path -LiteralPath $item).Path
-        continue
-    }
-    $matched = @(Resolve-Path -Path $item -ErrorAction SilentlyContinue)
-    if ($matched) {
-        $files += $matched.Path
-        continue
-    }
-    Write-Error "No such file: $item"
-}
-
-& $python '-c' 'import pymupdf' 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Warning "PyMuPDF is missing, so the ladder cannot be trimmed to the scan's own resolution: $python -m pip install pymupdf"
-}
+$files = @(Resolve-PdfInput -Path $Path)
 
 $flags = @()
 if ($PSBoundParameters.ContainsKey('Quality')) { $flags += @('--quality', $Quality) }
@@ -192,5 +141,5 @@ if ($Inspect) { $flags += '--inspect' }
 if ($Force)   { $flags += '--force' }
 if ($Extra)   { $flags += $Extra }
 
-& $python $tool @flags '--' @files
+& $run.Python $run.Tool @flags '--' @files
 exit $LASTEXITCODE

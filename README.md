@@ -176,35 +176,70 @@ EPUB. It no longer stands in for anything — the pipeline runs in the Worker
 and builds real editions (CLAUDE.md section 13) — but the seed is still how
 the catalog gets books without uploading any.
 
-### Shrinking an oversized scan
+### Preparing a downloaded scan
 
 ```bash
 sudo apt install ghostscript && pip install pymupdf   # install both
+python3 tools/clean-pdf.py --dry-run *.pdf            # what would happen
+python3 tools/clean-pdf.py 619294728-13230487-南怀瑾选集-第9卷-2013-03-P699.pdf
+```
+
+A file pulled from an archive mirror arrives with two unrelated problems, and
+`tools/clean-pdf.py` answers both in one pass at the point of intake. The
+filename is a database id and a byte-range suffix wrapped around the title that
+actually matters, so any leading or trailing run of digits and `-` is stripped
+and the file renamed in place — `南怀瑾选集-第9卷-2013-03-P.pdf`. The strip is
+literal, so a trailing letter stops it: this is a filename cleanup, not a guess
+at where the title really ends. The scan is then measured against the same
+100 MB ceiling as below and, if it is over, handed to the ladder — replacing the
+file in place, so what is left is one file at one clean name rather than an
+original with a smaller copy beside it. `--keep-original` leaves the input alone
+and names the copy for its size instead.
+
+Either pass can be skipped (`--skip-rename`, `--skip-shrink`): renaming never
+touches page content and shrinking never touches the name.
+
+### Shrinking an oversized scan
+
+```bash
 python3 tools/shrink-pdf.py --inspect scan.pdf        # what is in it
 python3 tools/shrink-pdf.py scan.pdf                  # -> scan-28MB.pdf
 ```
+
+This is the size half on its own, for a file whose name is already what you
+want.
 
 PyMuPDF is nominally optional and worth installing anyway: it is what trims
 the ladder to the scan's own resolution. Without it the tool walks rungs that
 cannot do anything, a minute each on a large book, and can only report which
 compression filters it found in the raw bytes.
 
-On Windows, `tools/shrink-pdf.ps1` arranges the three things that have to be
-right before any of this works — a portable Ghostscript on PATH under its
-Windows name `gswin64c.exe`, a UTF-8 console so a book named
+On Windows, `tools/clean-pdf.ps1` and `tools/shrink-pdf.ps1` arrange the three
+things that have to be right before any of this works — a portable Ghostscript
+on PATH under its Windows name `gswin64c.exe`, a UTF-8 console so a book named
 南怀瑾选集-典藏版-第05卷-扫描版.pdf prints instead of raising
 `UnicodeEncodeError`, and whichever of `python`/`python3`/`py` actually runs:
 
 ```powershell
-.\tools\shrink-pdf.ps1 $env:USERPROFILE\Downloads\scan.pdf
-.\tools\shrink-pdf.ps1 --inspect C:\scans\book.pdf
-.\tools\shrink-pdf.ps1 C:\scans\book.pdf --quality 40 --gray
+.\tools\clean-pdf.ps1 $env:USERPROFILE\Downloads\619294728-南怀瑾选集-第9卷-P699.pdf
+.\tools\clean-pdf.ps1 C:\scans\*.pdf -DryRun
+.\tools\shrink-pdf.ps1 C:\scans\book.pdf -Inspect
+.\tools\shrink-pdf.ps1 C:\scans\book.pdf -Quality 40 -Gray
 ```
 
-It passes every argument through, changes no directory (so relative paths still
-resolve), and looks for the portable build in
-`$env:USERPROFILE\ghostscript-portable\bin` unless `-GhostscriptDir` says
-otherwise.
+`clean-pdf.ps1` is the one to reach for after a download: it does the rename and
+the shrink. `shrink-pdf.ps1` is the size half alone, and keeps `-Inspect`,
+`-Force`, `-Output` and `-OutDir`, which belong to that tool. Both pass only the
+switches you actually gave, so the defaults stay the Python tool's own and the
+two cannot drift apart; `-Help` prints them from the tool itself.
+
+Neither changes directory, so relative paths still resolve, and both look for
+the portable build in `$env:USERPROFILE\ghostscript-portable\bin` unless
+`-GhostscriptDir` says otherwise. Missing Ghostscript stops `shrink-pdf.ps1`,
+which can do nothing without it, and only warns `clean-pdf.ps1`, which can still
+rename. The plumbing itself is in `tools/pdf-tools.ps1`, dot-sourced by both —
+all three are saved with a UTF-8 byte order mark, because Windows PowerShell 5.1
+reads a `.ps1` as ANSI without one and turns the Chinese in them into mojibake.
 
 The upload limit is 100 MB, and it is not a number we chose: it is Adobe's
 ceiling for the Export PDF call and Cloudflare's request cap on this plan
