@@ -4,6 +4,7 @@ import {
   ADD_SOURCE_ERRORS,
   canAddSource,
   canMasterFrom,
+  planIntake,
   hasSourceKind,
   masterSources,
   offersMasterChoice,
@@ -195,5 +196,55 @@ describe('reconciling a source against where the file actually is', () => {
       { format: 'pdf', storageKey: 'books/tao.pdf', bytes: 999 },
     ])
     expect(sources[0]!.bytes).toBe(120)
+  })
+})
+
+describe('planIntake', () => {
+  const file = (name: string, kind: 'pdf' | 'docx' | 'epub' | 'text' | null) => ({ name, kind })
+
+  it('puts a DOCX first, because a Word file is already the master', () => {
+    const plan = planIntake([file('scan.pdf', 'pdf'), file('typed.docx', 'docx')])
+    expect(plan.ok && plan.ordered.map((entry) => entry.name)).toEqual([
+      'typed.docx',
+      'scan.pdf',
+    ])
+  })
+
+  it('puts the scan ahead of a transcription when there is no master', () => {
+    const plan = planIntake([file('typed.txt', 'text'), file('scan.pdf', 'pdf')])
+    expect(plan.ok && plan.ordered.map((entry) => entry.name)).toEqual([
+      'scan.pdf',
+      'typed.txt',
+    ])
+  })
+
+  it('takes one file of each kind at once', () => {
+    const plan = planIntake([
+      file('book.epub', 'epub'),
+      file('typed.txt', 'text'),
+      file('scan.pdf', 'pdf'),
+      file('master.docx', 'docx'),
+    ])
+    expect(plan.ok && plan.ordered.map((entry) => entry.kind)).toEqual([
+      'docx',
+      'pdf',
+      'text',
+      'epub',
+    ])
+  })
+
+  it('refuses a second file of a kind, naming the one it refused', () => {
+    const plan = planIntake([file('scan.pdf', 'pdf'), file('other.pdf', 'pdf')])
+    expect(plan).toEqual({ ok: false, reason: 'duplicate_kind', name: 'other.pdf' })
+  })
+
+  it('refuses a file it cannot place', () => {
+    const plan = planIntake([file('scan.pdf', 'pdf'), file('notes.rtf', null)])
+    expect(plan).toEqual({ ok: false, reason: 'unsupported', name: 'notes.rtf' })
+  })
+
+  it('leaves a single file alone', () => {
+    const plan = planIntake([file('scan.pdf', 'pdf')])
+    expect(plan.ok && plan.ordered).toHaveLength(1)
   })
 })

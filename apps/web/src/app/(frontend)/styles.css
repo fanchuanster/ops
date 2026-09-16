@@ -2788,6 +2788,22 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.dropzone__files {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+
+.dropzone__files li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
 .formats-row {
   display: flex;
   flex-wrap: wrap;

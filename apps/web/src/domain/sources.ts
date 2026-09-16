@@ -86,6 +86,39 @@ export function readSources(
   })
 }
 
+export const MASTER_FIRST: readonly SourceKind[] = ['docx', 'pdf', 'text', 'epub']
+
+export type IntakeRefusal = 'unsupported' | 'duplicate_kind'
+
+export interface IntakeFile {
+  name: string
+  kind: SourceKind | null
+}
+
+export type IntakePlan<T extends IntakeFile> =
+  | { ok: true; ordered: (T & { kind: SourceKind })[] }
+  | { ok: false; reason: IntakeRefusal; name: string }
+
+export function planIntake<T extends IntakeFile>(files: readonly T[]): IntakePlan<T> {
+  const seen = new Set<SourceKind>()
+  for (const file of files) {
+    if (!file.kind) return { ok: false, reason: 'unsupported', name: file.name }
+    if (seen.has(file.kind)) return { ok: false, reason: 'duplicate_kind', name: file.name }
+    seen.add(file.kind)
+  }
+
+  const ordered = ([...files] as (T & { kind: SourceKind })[]).sort(
+    (a, b) => MASTER_FIRST.indexOf(a.kind) - MASTER_FIRST.indexOf(b.kind),
+  )
+  return { ok: true, ordered }
+}
+
+export const INTAKE_ERRORS: Record<IntakeRefusal, string> = {
+  unsupported: 'is not a PDF, a DOCX, an EPUB or a plain text file.',
+  duplicate_kind:
+    'is a second file of a type this book already has. A book holds one of each — a different scan or edition is a book of its own.',
+}
+
 export function canMasterFrom(kind: SourceKind): boolean {
   return kind !== 'epub'
 }

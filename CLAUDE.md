@@ -1552,6 +1552,34 @@ submitted. The draft is a workspace, not a form — it can be read, its
 DOCX master downloaded, corrected and re-uploaded, and it can be
 deleted.
 
+**Several files can arrive together.** The upload form takes more than
+one at a time, since 2026-09-16, and they become one book rather than
+several: the first creates it and the rest are added to it through the
+same `?book=` route the panel uses. `planIntake` in `domain/sources.ts`
+decides which goes first, and that order is the whole rule —
+`MASTER_FIRST` puts a DOCX ahead of everything, because a Word file *is*
+the master and the file that creates the book is the one the master is
+built from; then the PDF, because a scan is the book; then text, then an
+EPUB. Nothing about the choice is lost by arriving this way: every file
+is a source, and which one the master comes from stays changeable on the
+book's own page.
+
+A duplicate kind is refused before anything is sent, naming the file
+refused. A book holds one source of each kind (section 3), and finding
+that out after uploading 90 MB is the wrong moment to be told.
+
+The server stopped trusting the same question to the wrong record on the
+same day. `canAddSource` was asked about the book's *artifacts* — its
+filed originals — and a book whose first upload has not been filed yet
+has none, so for the minute between the upload and the tick that files
+it, every slot read as empty. Two PDFs sent in that window would both
+have been accepted, and the second would have taken the `pdf` slot the
+first was going to be filed into: `fileOriginal` returns early when the
+slot is occupied, so the first file would have stayed at its
+`conversion/` key and been swept after 30 days. `addSourceToBook` now
+counts the book's sources as well as its artifacts, which is the record
+that can answer immediately.
+
 Since 2026-09-14 it can also gain **another file**. The upload route
 takes a `?book=` and files the new original beside the first as a second
 source; the panel on the book's own page lists what it holds and, when
