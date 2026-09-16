@@ -4,6 +4,7 @@ import {
   COVER_IMAGE_MAX_WIDTH,
   COVER_JPEG_QUALITY,
 } from '../../domain/cover'
+import { logError } from '../logError'
 
 export type CoverSource = 'pdf' | 'epub'
 
@@ -14,16 +15,25 @@ export function coverSourceFor(fileName: string, type: string): CoverSource | nu
   return null
 }
 
+export type CoverFailure = 'unreadable' | 'empty' | 'store'
+
+export type CoverAttempt = { ok: true; images: Blob[] } | { ok: false; reason: CoverFailure }
+
 export async function coverImagesFor(
   file: Blob,
   source: CoverSource,
   pages: number = COVER_CANDIDATE_PAGES,
-): Promise<Blob[]> {
+): Promise<CoverAttempt> {
+  let images: Blob[]
   try {
-    return source === 'pdf' ? await fromPdf(file, pages) : await fromEpub(file)
-  } catch {
-    return []
+    images = source === 'pdf' ? await fromPdf(file, pages) : await fromEpub(file)
+  } catch (error) {
+    logError('cover: render pages', error)
+    return { ok: false, reason: 'unreadable' }
   }
+
+  if (images.length === 0) return { ok: false, reason: 'empty' }
+  return { ok: true, images }
 }
 
 async function fromPdf(file: Blob, pages: number): Promise<Blob[]> {
@@ -103,17 +113,19 @@ export async function makeCoversFor(
   bookId: number | string,
   file: Blob,
   source: CoverSource,
-): Promise<boolean> {
-  const images = await coverImagesFor(file, source)
-  if (images.length === 0) return false
+): Promise<CoverAttempt> {
+  const attempt = await coverImagesFor(file, source)
+  if (!attempt.ok) return attempt
 
   const body = new FormData()
-  for (const image of images) body.append('pages', image, 'page.jpg')
+  for (const image of attempt.images) body.append('pages', image, 'page.jpg')
 
   try {
     const response = await fetch(`/covers/${bookId}`, { method: 'POST', body })
-    return response.ok
-  } catch {
-    return false
+    if (!response.ok) return { ok: false, reason: 'store' }
+    return attempt
+  } catch (error) {
+    logError('cover: store pages', error)
+    return { ok: false, reason: 'store' }
   }
 }

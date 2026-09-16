@@ -1,7 +1,13 @@
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
+import {
+  SOURCE_TAIL_BYTES,
+  TRUNCATED_SOURCE_ERROR,
+  looksTruncated,
+} from '../../../../domain/intake'
 import { DEFAULT_BOOK_LEVEL, LEVEL_IDS } from '../../../../domain/levels'
+import { bytesToBinaryString } from '../../../../domain/metadata'
 import {
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_LABEL,
@@ -99,6 +105,13 @@ export async function POST(request: Request): Promise<Response> {
     return fail(500, 'Could not store that file. Please try again.')
   }
 
+  const source = r2Source(sourceKey, { name: filename, type: declaredType, size })
+  const tail = await source.read(Math.max(0, size - SOURCE_TAIL_BYTES), size)
+  if (looksTruncated(kind, bytesToBinaryString(tail))) {
+    await bucket.delete(sourceKey).catch(() => {})
+    return fail(422, TRUNCATED_SOURCE_ERROR)
+  }
+
   if (target) {
     const refusal = await addSourceToBook(payload, target, {
       kind,
@@ -110,9 +123,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ bookId: target.id })
   }
 
-  const suggested = await extractMetadata(
-    r2Source(sourceKey, { name: filename, type: declaredType, size }),
-  )
+  const suggested = await extractMetadata(source)
 
   const title = (suggested.title || filename.replace(/\.[^.]+$/, '')).trim()
   const slug = `${slugify(suggested.title ?? '') || 'book'}-${jobId.slice(0, 8)}`

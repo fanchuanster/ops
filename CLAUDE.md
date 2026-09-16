@@ -1031,6 +1031,16 @@ book to photograph its first page**, which for a 60 MB scan is a real
 wait on a slow connection; the button says so rather than pretending
 otherwise.
 
+**When it fails, the screen says which way it failed**, since
+2026-09-16 (`components/MakeCoverButton.tsx`). A file that could not be
+opened at all is reported as one that may be incomplete; a file that
+opened and yielded no page keeps the old sentence. Until then
+everything — a 404 on the source, a damaged file, a render that
+produced nothing, a failed store — was "No cover could be made from
+this book", and `coverImagesFor` swallowed the error that would have
+said which. That one sentence was the only symptom a truncated upload
+ever produced (section 6.2).
+
 The Worker was never a candidate for this. pdf.js is a megabyte of
 JavaScript against a bundle already at 7.7 MB of a 10 MB limit, and
 rasterizing is exactly the CPU-shaped work section 3 says does not
@@ -1272,8 +1282,9 @@ shelves are not sorted in either page — they arrive from
 **Choosing a number is an administrator's.** Filing is not: an uploader
 picks their book's collection on their own book page, and the arrival
 hook gives it the next free number — a book joining the back of a
-queue. Typing a number shifts the books already there, so it moves
-other people's books and states what a reader should meet first. Since
+queue. Typing a number is a statement about what a reader should meet
+first on a shelf that is not only theirs — it once moved the books
+already there as well, and the reason survives the shifting. Since
 2026-08-25 that is enforced as field-level write access on
 `collectionOrder` (and on a collection's own `sortOrder`), not merely by
 which screen offers the control: Payload's REST and GraphQL APIs are
@@ -1282,6 +1293,22 @@ rule defaults to *any logged-in user* — so a signed-in reader could
 PATCH the field and walk their own upload to the front of a shelf.
 `ADMIN_ONLY_BOOK_FIELDS` in `domain/moderation.ts` is the list, and it
 is now wired into the collection rather than only asserted in tests.
+
+Since 2026-09-16 the number can be typed on **the book's own page**
+as well as in `/admin/library`, for an administrator, beside the shelf
+picker that was already there (`components/BookDetailsForm.tsx`). The
+two questions are asked where they are answered: an editor arranging a
+whole shelf does it from the library screen, where the neighbours are
+visible, while an editor who is on a book — having just corrected its
+title, or filed it — should not have to go and find it again on
+another screen to say where it sits. Nothing about who may do it
+changes. `saveBookDetails` in `app/(frontend)/actions/bookDetails.ts`
+reads the field only for an administrator, which is not belt and braces
+but the rule itself: that action writes with `overrideAccess: true`, so
+the field-level access on the collection is not consulted and the gate
+has to be in the action. An empty box leaves the number the book has,
+rather than clearing it, because the box is on a form somebody opens to
+change a title.
 
 `lib/shelfPlacement.ts` is gone with the shifting. A place is one field
 on one row now, written with the rest of the edit rather than in a
@@ -1477,6 +1504,30 @@ character. Two ordering rules are load-bearing: decode **before**
 tidying whitespace (复 is U+590D, whose low byte is a carriage return),
 and decode self-describing fields **individually** (joining UTF-16
 fields misaligns everything after the join).
+
+**A file that arrives half-written is refused, at intake.** The stored
+object's tail is read back and checked for the marker that says the file
+ends where it claims to — `%%EOF` for a PDF, the zip central directory
+for a DOCX or an EPUB (`domain/intake.ts`). Plain text has no such
+marker and is not checked, because any prefix of a text file still
+reads.
+
+That is not a precaution against something imagined. Book 60 was stored
+on 2026-09-16 as a clean 51,904,512-byte prefix of a 96,518,395-byte
+scan and published as a whole book. Nothing objected, because from the
+server's side nothing was wrong: the browser declared the short length
+and sent exactly that many bytes, so `FixedLengthStream` — which guards
+the other failure, a body that stops early — was satisfied. The file was
+still being written by `tools/clean-pdf.py` when the browser opened it.
+
+Extraction could not catch it either, and the reason is worth keeping:
+it reads the first 512 KB and the last, and `/Count 659` sits in the
+first. The book arrived priced and paginated for 659 pages while holding
+a little over half of them. The first thing that actually failed was the
+cover, minutes later and in somebody's browser. So the check belongs
+where the damage enters rather than wherever it happens to surface —
+which is also why it is one read of the tail we are fetching anyway, and
+a refusal, rather than a repair.
 
 A book then sits as a **draft**: private, owned, not converted, and not
 submitted. The draft is a workspace, not a form — it can be read, its
