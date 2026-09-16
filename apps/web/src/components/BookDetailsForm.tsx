@@ -21,7 +21,6 @@ const LANGUAGES = [
 export interface EditableBook {
   id: number
   title: string
-  originalTitle: string
   author: string
   language: string
   pageCount: number | null
@@ -126,21 +125,6 @@ export function BookDetailsForm({
           <ReadFromFile show={draft && Boolean(book.title)} />
         </span>
         <input type="text" name="title" defaultValue={book.title} required maxLength={200} />
-      </label>
-
-      <label>
-        <span className="field-label">
-          Original title
-          <ReadFromFile show={draft && Boolean(book.originalTitle)} />
-        </span>
-        <input
-          type="text"
-          name="originalTitle"
-          defaultValue={book.originalTitle}
-          maxLength={200}
-          lang="zh"
-        />
-        <small>The title in its own script, if the one above is a translation — 道德經.</small>
       </label>
 
       <label>

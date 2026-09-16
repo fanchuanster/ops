@@ -112,7 +112,6 @@ export async function saveBookDetails(
       data: {
         title,
         author: String(formData.get('author') || '').trim() || null,
-        originalTitle: String(formData.get('originalTitle') || '').trim() || null,
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collection: collectionId,

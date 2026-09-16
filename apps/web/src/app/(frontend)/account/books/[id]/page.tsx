@@ -160,7 +160,6 @@ export default async function BookDetailsPage({
         book={{
           id: Number(book.id),
           title: book.title,
-          originalTitle: book.originalTitle ?? '',
           author: book.author ?? '',
           language: book.language ?? '',
           pageCount: book.pageCount ?? book.estimatedPages ?? null,

@@ -897,6 +897,18 @@ until 2026-08-21. The credit reads better in the description, which is
 where both seed books already carried it, so the byline on a book page
 lost nothing a reader was relying on.
 
+`originalTitle` survives that cut, but the **uploader is no longer
+asked for it**, since 2026-09-16. It was the same box: extraction
+cannot fill it either, and an uploader confirming a Chinese scan whose
+title is already Chinese has nothing to put in a field asking for the
+title "in its own script" — so it sat empty on the one form whose whole
+argument is that it shows people what their file already says. It stays
+on the admin edit panel, where the person filling it in is the person
+who has decided the catalogue title is a translation, and it is still
+what a book page prints as its heading. Removing it from the form meant
+removing it from the save as well: a form that no longer posts a field
+would otherwise clear it every time an uploader saved.
+
 A book is whole. It was split into Parts until 2026-08-14, each
 separately released and separately downloadable; that is gone, and the
 `parts` table with it. A book is one record, one DOCX master, one set of
