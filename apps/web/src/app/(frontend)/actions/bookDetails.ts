@@ -22,6 +22,7 @@ import {
 } from '../../../domain/pipeline'
 import { isUploaderSelectableRights, type RightsStatus } from '../../../domain/rights'
 import { orderIdFrom } from '../../../domain/shelfOrder'
+import { renamedSlug } from '../../../domain/slug'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import {
   needsConverter,
@@ -60,6 +61,8 @@ export async function saveBookDetails(
 
   const title = String(formData.get('title') || '').trim()
   if (!title) return { error: 'Give the book a title.' }
+
+  const nextSlug = title === book.title ? null : renamedSlug(book.slug ?? '', title)
 
   const rightsStatus = String(formData.get('rightsStatus') || '')
 
@@ -119,6 +122,7 @@ export async function saveBookDetails(
       id: bookId,
       data: {
         title,
+        ...(nextSlug ? { slug: nextSlug } : {}),
         author: String(formData.get('author') || '').trim() || null,
         ...(language ? { language: language as 'zh-Hant' } : {}),
         ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
@@ -158,6 +162,11 @@ export async function saveBookDetails(
 
   revalidatePath('/account/books')
   revalidatePath(`/account/books/${bookId}`)
+  if (nextSlug) {
+    revalidatePath('/books')
+    revalidatePath(`/books/${book.slug}`)
+    revalidatePath(`/books/${nextSlug}`)
+  }
   redirect(`/account/books/${bookId}`)
 }
 

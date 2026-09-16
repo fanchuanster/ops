@@ -21,7 +21,7 @@ import {
   coverAltFor,
   coverCandidatePages,
   coverImageUrl,
-  coverSourceFormat,
+  coverSourceFrom,
   hasRenderedPages,
   uploadedCoverId,
 } from '../../../../../domain/cover'
@@ -92,8 +92,7 @@ export default async function BookDetailsPage({
     bookId: book.id,
     generated: generatedCover,
   })
-  const canMakeCover =
-    coverSourceFormat((book.artifacts ?? []).map((a) => a.format)) !== null
+  const canMakeCover = coverSourceFrom(book.artifacts ?? []) !== null
 
   return (
     <>

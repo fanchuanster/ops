@@ -117,3 +117,15 @@ export function readingFormat(formats: readonly string[]): 'epub' | 'pdf' | 'txt
   if (formats.includes('txt')) return 'txt'
   return null
 }
+
+export function isReadingFormat(value: unknown): value is 'epub' | 'pdf' | 'txt' {
+  return value === 'epub' || value === 'pdf' || value === 'txt'
+}
+
+export function requestedReadingFormat(
+  formats: readonly string[],
+  wanted: unknown,
+): 'epub' | 'pdf' | 'txt' | null {
+  if (isReadingFormat(wanted) && formats.includes(wanted)) return wanted
+  return readingFormat(formats)
+}

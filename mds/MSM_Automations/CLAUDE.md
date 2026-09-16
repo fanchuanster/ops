@@ -14,7 +14,10 @@ apply — the split is for editing and review, not scope. Each file is one area,
 change to how commits are written touches one file rather than being hunted for in a
 long document.
 
-- `CLAUDE-coding.md` — early returns, logging, reuse, and where scratch files go
+- `CLAUDE-coding.md` — early returns, logging, reuse, and where scratch files go.
+  Repo-agnostic, and imported by the NobleSee repo too, so keep it free of anything
+  Python- or MSM-specific
+- `CLAUDE-python.md` — what those rules mean here: `libs/`, Groovy, the `tmp/` prefix
 - `CLAUDE-git.md` — commit messages, Octane IDs, merge requests
 - `CLAUDE-octane.md` — what to record on a story versus a subtask, and how
 - `CLAUDE-environment.md` — Kiosk, Jenkins, kubeconfigs, GitLab access
@@ -29,6 +32,7 @@ matches the `CL*.md` gitignore pattern both repos already carry, so a synced sub
 stays untracked exactly as `CLAUDE.md` does.
 
 @./CLAUDE-coding.md
+@./CLAUDE-python.md
 @./CLAUDE-git.md
 @./CLAUDE-octane.md
 @./CLAUDE-environment.md

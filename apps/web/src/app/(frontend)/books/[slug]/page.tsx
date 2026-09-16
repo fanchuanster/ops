@@ -118,9 +118,14 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
               {artifacts
                 .filter((a) => isKindleDeliverableFormat(a.format))
                 .map((a) => (
-                  <span className={`fmt fmt--${a.format}`} key={a.format}>
+                  <a
+                    className={`fmt fmt--${a.format}`}
+                    href={`/read/${book.slug}?format=${a.format}`}
+                    key={a.format}
+                    title={`Read this book as ${a.format.toUpperCase()}`}
+                  >
                     {a.format}
-                  </span>
+                  </a>
                 ))}
 
               {artifacts.length === 0 ? (

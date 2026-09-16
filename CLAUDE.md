@@ -190,14 +190,19 @@ happens to arrive by email.
 
 ## 2.1 Next.js + Payload is the main website platform
 
-This section previously mandated WordPress, and briefly Django. The
-rebuild was specified in `docs/MODERNIZATION.md` and justified in
-`docs/MODERNIZATION_ASSESSMENT.md` — with no users and no data to
-preserve, the platform was rebuilt greenfield rather than migrated.
+This section previously mandated WordPress, and briefly Django. With no
+users and no data to preserve, the platform was rebuilt greenfield in
+August 2026 rather than migrated.
 
-Both of those are now historical records with status banners, and the
-platform decisions in them have moved on. **This section and
-`docs/CLOUDFLARE_ARCHITECTURE.md` are the current direction**;
+The specification that drove that rebuild and the assessment that
+justified it were `docs/MODERNIZATION.md` and
+`docs/MODERNIZATION_ASSESSMENT.md`, deleted on 2026-09-16. Both had
+carried "historical, not current state" banners for a month and every
+platform decision in them had been superseded, so what they mostly did
+was offer a reader two thousand lines of stale direction next to the
+live one. They are in git history if the reasoning is ever wanted.
+**This section and `docs/CLOUDFLARE_ARCHITECTURE.md` are the current
+direction**;
 `docs/ROADMAP.md` says what is built.
 
 Use **Next.js + React + TypeScript with Payload CMS on Cloudflare D1**
@@ -312,32 +317,35 @@ The conditions on that are the ordinary ones, not obstacles:
 
 ## 2.3 Coding standards
 
-House rules, shared with this author's other repositories and kept in
-step with `mds/MSM_Automations/CLAUDE.md`.
+House rules, shared with this author's other repositories. The shared
+core is imported rather than restated, so the two copies cannot drift —
+which is what "kept in step with `mds/`" used to mean by hand, and did
+not reliably achieve.
 
-- **Early returns.** Guard clauses first, main logic unindented.
-- **Reuse before writing.** Look in `domain/` for rules and `lib/` for
-  I/O before adding a function; extend rather than duplicate, and put a
-  shared helper in the shared module, not beside its first caller.
-- **No comments in code.** Names and structure carry the meaning; a
-  block that needs a comment to be understood gets renamed or split out
-  instead. The reasoning belongs here, in this document, where it is
-  read once rather than re-read beside every function. The codebase was
-  stripped to this rule on 2026-09-16 — ~5,900 comments across 226
-  files. Only machine-read directives survive: `@ts-*`, `eslint-*`,
-  `/// <reference>`, `# shellcheck`, `# noqa`.
-- **Log through `lib/logError.ts`**, not bare `console.*`, and leave no
-  debugging output behind.
+@mds/MSM_Automations/CLAUDE-coding.md
+
+Those rules are deliberately repo-agnostic. What they mean here:
+
+- **The logger is `lib/logError.ts`.** Never bare `console.*`.
+- **Reuse means `domain/` for rules and `lib/` for I/O.** Look there
+  before adding a function.
 - **Rules are pure functions.** `domain/` imports no framework;
   `npm run verify` enforces it. Test the case, name the test after it.
+- **The machine-read directives that survive** the no-comments rule are
+  `@ts-*`, `eslint-*`, `/// <reference>`, `# shellcheck`, `# noqa`.
+
+The codebase was stripped to the comment rule on 2026-09-16 — ~5,900
+comments across 226 files.
+
+Anything Python- or MSM-specific belongs in
+`mds/MSM_Automations/CLAUDE-python.md`, not in the imported core. The
+core is read by both repos, so a rule that names `libs/aws.py` or a
+Jenkinsfile would arrive here as wrong guidance.
 
 ---
 
 ## 2.4 Working in this repo
 
-- **Scratch files go in `tmp/`** (gitignored), never the repo root,
-  prefixed with whoever made them — `tmp/<agent>_<description>.<ext>`.
-  Disposable: never referenced from committed code, deleted when done.
 - **Branches.** `master` is default, `wen_dev` is the working branch.
   Single maintainer, no review gate: merge `wen_dev` into `master`
   locally, push, then `bash .reset.sh`, which recreates `wen_dev` off
@@ -758,8 +766,7 @@ is the module layout that keeps it now.
 The NobleSee frontend is a Next.js (App Router) application in React
 and TypeScript, with Payload embedded in the same application, deployed
 as a Cloudflare Worker. It was previously specified as WordPress +
-Kadence, then briefly Django + Astro; see section 2.1 and
-`docs/MODERNIZATION.md` section 14.
+Kadence, then briefly Django + Astro; see section 2.1.
 
 Next.js is required by Payload 3, which is Next-native, and gives
 server-side and static rendering where each page needs it — the catalog
@@ -788,6 +795,24 @@ whole site as a client-side SPA.
 
 The in-browser EPUB reader is the one place where meaningful client-side
 JavaScript is justified.
+
+**A book's name goes to the book, not to the reader.** The tiles and
+lines in the catalog linked straight to `/read/<slug>` whenever a
+readable edition existed, which skipped the page carrying the cover, the
+description, the rights, the price and the send control — everything a
+reader decides with. Since 2026-09-17 `BookTile` and `BookLine` always
+link to `/books/<slug>`; reading is a choice made on that page.
+
+**The format chips on it are how that choice is made.** Each is a link
+to `/read/<slug>?format=<fmt>`, and the reader opens that edition rather
+than the one it would have picked — so a book with both an EPUB and a
+PDF can be read either way. `requestedReadingFormat` in
+`domain/publication.ts` is the rule: it honours a format the book
+actually has and the reader can open, and otherwise falls back to
+`readingFormat`'s own order rather than refusing. The query string is
+threaded through `authorizeReading` to the `edition` route as well, so
+the bytes served match the reader that was opened; a reader who edits it
+to something absent gets the best edition, never someone else's file.
 
 ---
 
@@ -2203,6 +2228,23 @@ about an hour that day it was `books/{slug}` — which was wrong, and
 wrong in the way that matters: `adminApi.ts` lets an editor correct a
 slug, so a key built from one moves when a book is renamed. The name of
 the uploaded file does not change, ever.
+
+That warning became load-bearing on 2026-09-17, when the slug started
+moving on its own: **a corrected title now renames the book's link**
+(`renamedSlug` in `domain/slug.ts`, applied by `saveBookDetails`). A
+slug is built once at upload from the extracted title, and nothing
+updated it afterwards — so a book whose embedded PDF metadata gave its
+title as the filename kept that filename in its URL for ever, even
+after its owner fixed the title on the very next screen. That is what
+`/books/746400367-參禪日記2024-a9da0a77` was.
+
+Two rules bound it. **Only a generated slug is rebuilt** — the eight hex
+characters of the job id are what marks one, so a slug an editor wrote
+by hand, or a seed book's, is never touched. And **the suffix is kept**,
+so uniqueness survives a rename that collides with another book's title.
+A renamed book's old URL stops resolving, which is the honest cost and
+the reason this is keyed on the title actually changing rather than run
+on every save.
 
 The path is not the link either way. A book reaches its objects through
 the keys it stores — `artifacts[].storageKey`, `conversion.sourceKey`,

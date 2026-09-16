@@ -17,6 +17,18 @@ export function coverSourceFormat(formats: readonly unknown[]): ArtifactFormat |
   return null
 }
 
+export function coverSourceFrom<T extends { format?: unknown; storageKey?: unknown }>(
+  artifacts: readonly T[],
+): T | null {
+  const usable = artifacts.filter(
+    (artifact) => typeof artifact.storageKey === 'string' && artifact.storageKey.length > 0,
+  )
+
+  const format = coverSourceFormat(usable.map((artifact) => artifact.format))
+  if (!format) return null
+  return usable.find((artifact) => artifact.format === format) ?? null
+}
+
 export { coverCandidateKey, coverKey } from './bookStorage'
 
 export const COVER_CANDIDATE_PAGES = 3
