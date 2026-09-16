@@ -310,6 +310,47 @@ The conditions on that are the ordinary ones, not obstacles:
 
 ---
 
+## 2.3 Coding standards
+
+House rules, shared with this author's other repositories and kept in
+step with `mds/MSM_Automations/CLAUDE.md`.
+
+- **Early returns.** Guard clauses first, main logic unindented.
+- **Reuse before writing.** Look in `domain/` for rules and `lib/` for
+  I/O before adding a function; extend rather than duplicate, and put a
+  shared helper in the shared module, not beside its first caller.
+- **Comments say why, never what.** The other repos forbid comments
+  outright; here they are kept, because what they record is the
+  reasoning — this document, at the scale of a function. One that
+  restates the code is still a rename waiting to happen.
+- **Log through `lib/logError.ts`**, not bare `console.*`, and leave no
+  debugging output behind.
+- **Rules are pure functions.** `domain/` imports no framework;
+  `npm run verify` enforces it. Test the case, name the test after it.
+
+---
+
+## 2.4 Working in this repo
+
+- **Scratch files go in `tmp/`** (gitignored), never the repo root,
+  prefixed with whoever made them — `tmp/<agent>_<description>.<ext>`.
+  Disposable: never referenced from committed code, deleted when done.
+- **Branches.** `master` is default, `wen_dev` is the working branch.
+  Single maintainer, no review gate: merge `wen_dev` into `master`
+  locally, push, then `bash .reset.sh`, which recreates `wen_dev` off
+  the fresh `master` — never delete it as part of the merge. Keep real
+  merge commits, with a message describing the diff.
+- **After a push, say what was pushed and stop.** No PR reminders or
+  links unless asked.
+- **Nothing enters Cloudflare except through Terraform.** `infra/` is
+  the record; a hand-made resource is in no state file and no diff. Use
+  the CLI and dashboard to read.
+- **Verify the assumption, especially in a hurry.** Measure a limit from
+  the thing that has it. "It can't do X" and "my change can't have
+  caused this" are hypotheses until a command proves them.
+
+---
+
 # 3. HIGH-LEVEL ARCHITECTURE
 
 Target architecture:
@@ -414,11 +455,11 @@ added:
   int64 offsets encoded as strings and indexed in code points. Slicing
   that back into pages was `domain/ocr.ts`, and it is gone.
 - **No running-head removal.** Adobe puts running heads and folios in
-  Word's header and footer parts, which the converter's `docx.paragraphs`
-  walk does not read. They are excluded by *where they are* rather than
-  by inferring position from normalized vertices across the book.
+  Word's header and footer parts, which `lib/conversion/docxRead.ts`
+  does not walk. They are excluded by *where they are* rather than by
+  inferring position from normalized vertices across the book.
 - **No heading classification, and no paying for style information.**
-  Adobe returns `Heading 1` / `Heading 2`, which `sources/docx_in.py`
+  Adobe returns `Heading 1` / `Heading 2`, which the DOCX reader
   already maps — because a corrected master had to be readable back
   anyway. Document AI only offered type sizes to reason from, and only
   as a premium per-page extra.
@@ -477,22 +518,17 @@ it further means a Business plan *and* an answer for scans Adobe
 refuses, which is a product decision rather than a constant.
 
 Because of all that, **the pipeline is split at the master**, not at
-OCR. The web application produces the DOCX master for a PDF and the
-converter renders everything downstream of it. This is the one place the
-rule above ("do not turn the web application into the conversion
-pipeline") is deliberately bent, and only because mastering a scan
-stopped being computation and became a fetch. Everything that is still
-computation is still the converter's — including phase 1 for a DOCX or
-plain text upload, which needs no export and reaches the converter as
-itself.
+OCR. Phase 1 turns a source into the master — an Adobe call for a PDF, a
+parse for a DOCX or text — and phase 2 renders everything downstream.
+Both run in the Worker (section 13): the split is about what may be
+re-run, not about which machine runs it. Mastering a scan is a fetch
+now, so section 2.1's rule against computation in the Worker is not bent
+by it.
 
-Nothing schedules the export stages. The converter already polls
-`GET /api/conversion` for work, and that poll is used as the clock —
-each one advances at most one book before answering
-(`apps/web/src/lib/masterPipeline.ts`). No cron, no queue consumer, and
-nothing fires when no converter is running. The cost is that a scan does
-not progress while nothing is polling, which is harmless: nothing
-downstream could act on it if it did.
+The export stages are advanced by the same **cron tick** that claims
+jobs — once a minute, at most one book, before any job is claimed
+(`apps/web/src/lib/masterPipeline.ts`). The converter's poll was the
+clock until 2026-08-26.
 
 Credentials are `ADOBE_CLIENT_ID` and `ADOBE_CLIENT_SECRET`, from a
 project in the Adobe Developer Console. **An Acrobat Pro subscription is
@@ -518,7 +554,7 @@ already read, and would discard the correction that prompted it.
 
 The states are in `apps/web/src/domain/pipeline.ts`, and every rule that
 follows from the split is a function there rather than a condition in a
-route: what a converter may claim, where a phase lands when it finishes,
+route: what a tick may claim, where a phase lands when it finishes,
 where a failure restarts from. That last one is keyed on whether a DOCX
 artifact exists rather than on the state, because the state is what a
 failure loses and the artifact is the evidence that survived.
@@ -526,8 +562,8 @@ failure loses and the artifact is the evidence that survived.
 ## Phase 2 does not wait for review
 
 Phase 2 runs as soon as a master exists. Every book that reaches
-`master_ready` is offered to the next converter that polls, whoever owns
-it and whatever its review state — `claimFor` in
+`master_ready` is offered to the next tick that claims work, whoever
+owns it and whatever its review state — `claimFor` in
 `apps/web/src/domain/pipeline.ts` consults neither.
 
 Between 2026-08-15 and 2026-08-17 it did wait: a reader's upload sat at
@@ -584,8 +620,8 @@ stands is publishing a text file. True, and not a reason to refuse: a
 text file **reflows**, which is the whole property the pipeline exists
 to give a scan. What converting adds is *structure* — chapters, a
 contents list, a navigable EPUB — and that is worth offering rather than
-imposing, especially while it means waiting for a converter that may not
-be running.
+imposing, especially while it means waiting a tick for something the
+reader can already read.
 
 So a text upload can be read, reviewed, published and sent to a Kindle
 as itself. `txt` is an artifact format
@@ -662,9 +698,9 @@ above: the words already reflow.)
 **Since 2026-08-25 the default is the other one**: publish it as it
 stands, convert nothing, ready immediately. The reasoning above is still
 right about the finished book and was wrong about this moment.
-Converting is the expensive path — an Adobe export, a converter that may
-not be polling, minutes to hours before the uploader sees anything — and
-it was being taken on behalf of someone who had done nothing yet but
+Converting is the expensive path — an Adobe export, a queue, minutes
+before the uploader sees anything and longer if the export is retried —
+and it was being taken on behalf of someone who had done nothing yet but
 choose a file.
 
 What makes the fast default safe is that it is the one that cannot be
@@ -694,7 +730,7 @@ back; the owner watches the state change on their book page
 
 That is why a book with nothing to convert — an EPUB upload, or a PDF
 published as it stands — still passes through `queued`. It is filed by
-the same poll, just without a job at the end of it.
+the same tick, just without a job at the end of it.
 
 Phase 2 builds everything the source can give it, on the first run.
 `requestFormat`, `conversion.pendingFormats` and the on-demand button
@@ -707,9 +743,10 @@ formats, every one of them is rebuilt. That is a master edit, and
 regenerating only what is missing would leave the existing EPUB behind,
 still carrying the errors the edit removed.
 
-The conversion service is
-deliberately standalone and platform-agnostic — it talks to the web
-application over HTTP and knows nothing about the frontend.
+The pipeline knows nothing about the frontend, and is reached only
+through `domain/pipeline.ts` and `lib/conversion/runner.ts`. That
+boundary was a separate HTTP service until 2026-08-26 (section 13); it
+is the module layout that keeps it now.
 
 ---
 
@@ -1660,17 +1697,19 @@ every PDF to an engine that reads pixels is the honest answer now.
 
 # 9. DOCX GENERATION
 
-The conversion service should be able to generate a high-quality editable DOCX.
+The pipeline must generate a high-quality editable DOCX: the master is
+what a human corrects (section 5) and what a corrected book is rebuilt
+from.
 
-Potential Python libraries/tools may include:
+This section listed python-docx, LibreOffice and Pandoc while the
+pipeline was Python. `lib/conversion/docxWrite.ts` writes Word XML
+directly now and `docxRead.ts` reads it back — there was no third-party
+writer to choose from, since the Worker has no native library at all.
 
-- python-docx
-- LibreOffice
-- Pandoc
-
-Evaluate which combination provides the best output.
-
-Do not assume a library is suitable without testing.
+**Do not assume a library is suitable without testing** still holds, and
+is why the round trip is tested: `docx.test.ts`, against
+`fixtures/python-docx-master.docx`, which must never be regenerated
+(section 13).
 
 The generated DOCX should preserve:
 
@@ -1744,16 +1783,17 @@ line needs no renderer.
 What deleting it bought is out of proportion to what it cost, and is the
 real point:
 
-- The converter's `app/pdf/` was gone, both renderers with it — and on
+- The converter's `app/pdf/` went, both renderers with it — and on
   2026-08-26 the whole service followed (section 13).
-- The converter image has **no apt layer at all** any more. WeasyPrint
-  needed Pango, Cairo, libffi and a CJK font set — a PDF rendered
-  without a CJK face is a document of empty boxes — and the DOCX path
-  needed `libreoffice-writer`. Both are gone; the image is plain
-  `python:slim`.
-- Nothing in the pipeline links against a native library, which is what
-  makes the remaining work (parse a DOCX, write an EPUB) a plausible
-  candidate for the Worker itself.
+- The converter image lost its **last apt layer**. WeasyPrint needed
+  Pango, Cairo, libffi and a CJK font set — a PDF rendered without a CJK
+  face is a document of empty boxes — and the DOCX path needed
+  `libreoffice-writer`. With both gone the image was plain
+  `python:slim`, which is an image with no reason to exist.
+- Nothing in the pipeline linked against a native library any more,
+  which is what made the remaining work (parse a DOCX, write an EPUB) a
+  candidate for the Worker itself — and, the same day, what moved it
+  there.
 
 A page count went with it. `page_count` was WeasyPrint laying the book
 out and counting the pages that came out, which priced the book — and a
@@ -1773,14 +1813,13 @@ EPUB should be primary.
 Support MOBI/AZW3 only if there is a concrete compatibility reason.
 
 Design the conversion layer so additional formats can be added later.
+`ArtifactFormat` in `domain/conversion.ts` is the list and
+`formatsToBuild` in `domain/pipeline.ts` decides what a book gets, so a
+new format is one case and one writer beside `epubWrite.ts`.
 
-For example:
-
-FormatGenerator interface:
-
-generate_epub()
-generate_pdf()
-generate_mobi()
+There is deliberately no `generate_pdf()`. A PDF is only ever the file
+that was uploaded (section 11); it has no generator and must not grow
+one back.
 
 ---
 
