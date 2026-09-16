@@ -1523,6 +1523,24 @@ tidying whitespace (复 is U+590D, whose low byte is a carriage return),
 and decode self-describing fields **individually** (joining UTF-16
 fields misaligns everything after the join).
 
+When a file carries no title of its own, the **filename** is the last
+source, and since 2026-09-16 it is read the way `tools/clean-pdf.py`
+reads one: a leading or trailing run of digits and `-` comes off, and
+the space, `.` or `_` the digits were hanging off comes with them
+(`titleFromStem`). A book downloaded from an archive mirror arrives as
+`619294728-13230487-南怀瑾选集-第9卷-2013-03-P699.pdf`, and proposing
+that whole string as a title is worse than proposing nothing: it is the
+one field on the summary page the uploader must then delete by hand.
+
+Two rules keep it from eating real titles. One run from each edge, not
+repeatedly — `book.2013.03` yields `book.2013`, because past that the
+rule stops cleaning an edge and starts guessing where a title ends. And
+**a name is judged before it is stripped**: `scan001.pdf` says nothing,
+and stripping first would leave `scan`, which reads like a title to the
+junk list and is not one. A stem that is nothing but digits is kept as
+it stands, which is also what the file tool does rather than renaming a
+book to nothing.
+
 **A file that arrives half-written is refused, at intake.** The stored
 object's tail is read back and checked for the marker that says the file
 ends where it claims to — `%%EOF` for a PDF, the zip central directory

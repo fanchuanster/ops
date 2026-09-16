@@ -5,6 +5,7 @@ import {
   fromAppXml,
   fromCoreXml,
   fromFilename,
+  titleFromStem,
   fromPdfText,
   fromPlainText,
   mergeMetadata,
@@ -136,6 +137,27 @@ describe('filename fallback', () => {
     for (const name of ['scan001.pdf', 'untitled.docx', 'document.pdf']) {
       expect(fromFilename(name).title).toBeUndefined()
     }
+  })
+
+  it('drops the archive ids a mirror wraps a title in', () => {
+    expect(fromFilename('619294728-13230487-南怀瑾选集-第9卷-2013-03-P699.pdf').title).toBe(
+      '南怀瑾选集 第9卷 2013 03 P',
+    )
+  })
+
+  it('takes the separator the digits were hanging off', () => {
+    expect(fromFilename('南怀瑾著作诗词辑录.练性乾编.复旦大学出版社.19.pdf').title).toBe(
+      '南怀瑾著作诗词辑录.练性乾编.复旦大学出版社',
+    )
+  })
+
+  it('strips one run from each edge, not repeatedly', () => {
+    expect(titleFromStem('book.2013.03')).toBe('book.2013')
+  })
+
+  it('keeps a number a title needs', () => {
+    expect(fromFilename('第9卷.pdf').title).toBe('第9卷')
+    expect(fromFilename('1984.pdf').title).toBe('1984')
   })
 })
 
