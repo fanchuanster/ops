@@ -24,9 +24,19 @@ is renamed in place:
 
 The strip is literal -- only digits and '-' -- so a trailing letter such
 as the "P" above stops it and is kept; this is a filename cleanup, not a
-guess at where the title "really" ends. Leftover whitespace at either
-edge, which naturally appears once the surrounding digits are gone, is
-also trimmed.
+guess at where the title "really" ends.
+
+What the strip exposes at the edge is then trimmed with it: the space,
+'.' or '_' that was separating the digits from the title, which is
+nobody's idea of a name once the digits are gone.
+
+    南怀瑾著作诗词辑录.练性乾编.复旦大学出版社.19.pdf
+    -> 南怀瑾著作诗词辑录.练性乾编.复旦大学出版社.pdf
+
+That trim runs once, after the digits, and does not send the strip round
+again -- so "book.2013.03" comes back as "book.2013" rather than "book".
+An edge is cleaned here; where the title ends is still the uploader's
+judgement.
 
 The (possibly renamed) file is then checked against the same 100 MB
 ceiling tools/shrink-pdf.py enforces. Anything over it is handed to that
@@ -51,6 +61,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 
 LEADING = re.compile(r"^[0-9\-]+")
 TRAILING = re.compile(r"[0-9\-]+$")
+SEPARATORS = " \t._"
 
 
 def _load_shrink_pdf():
@@ -74,9 +85,14 @@ def clean_stem(stem: str) -> str:
     repeatedly and not token-by-token -- so a title that legitimately
     starts or ends with a number in the middle of other characters is
     left alone.
+
+    The separator the digits were hanging off goes with them, or the
+    tidied name ends in the dot that used to introduce a volume number
+    and "...出版社.19.pdf" becomes "...出版社..pdf". A leading one matters
+    for a second reason: a name starting with '.' is a hidden file.
     """
     cleaned = TRAILING.sub("", LEADING.sub("", stem))
-    return cleaned.strip()
+    return cleaned.strip(SEPARATORS)
 
 
 def unique_path(path: Path) -> Path:

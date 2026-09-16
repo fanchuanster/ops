@@ -190,7 +190,10 @@ filename is a database id and a byte-range suffix wrapped around the title that
 actually matters, so any leading or trailing run of digits and `-` is stripped
 and the file renamed in place — `南怀瑾选集-第9卷-2013-03-P.pdf`. The strip is
 literal, so a trailing letter stops it: this is a filename cleanup, not a guess
-at where the title really ends. The scan is then measured against the same
+at where the title really ends. The space, `.` or `_` the digits were hanging
+off goes with them — `...复旦大学出版社.19.pdf` ends up as
+`...复旦大学出版社.pdf`, not with the dot left dangling — and that trim runs
+once rather than sending the strip round again. The scan is then measured against the same
 100 MB ceiling as below and, if it is over, handed to the ladder — replacing the
 file in place, so what is left is one file at one clean name rather than an
 original with a smaller copy beside it. `--keep-original` leaves the input alone
