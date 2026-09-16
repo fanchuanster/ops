@@ -262,7 +262,29 @@ class Survey:
         return not self.mostly_colour or self.saturated is False
 
 
-def saturation(doc, xrefs: list[int]) -> bool | None:
+def pymupdf_module():
+    """PyMuPDF under either name it goes by, or None if it is not installed.
+
+    Asked rather than assumed, because "not installed" and "installed and
+    could not open the file" are the same missing survey downstream and
+    want opposite advice: one is a pip install, the other is a file
+    Ghostscript may well rewrite anyway.
+    """
+    try:
+        import pymupdf
+
+        return pymupdf
+    except ImportError:
+        pass
+    try:
+        import fitz
+
+        return fitz
+    except ImportError:
+        return None
+
+
+def saturation(doc, xrefs: list[int], pymupdf) -> bool | None:
     """Whether the pages actually have colour in them, or None if unreadable.
 
     Decoding is the only way to know, so a handful of images are decoded
@@ -270,8 +292,6 @@ def saturation(doc, xrefs: list[int]) -> bool | None:
     --gray has anything to take away, and a book that carries colour
     carries it on more pages than four.
     """
-    import pymupdf
-
     checked = 0
     for xref in xrefs:
         if checked >= COLOUR_SAMPLES:
@@ -315,15 +335,12 @@ def survey(path: Path, sample: int = 40) -> Survey | None:
 
     A file too broken to survey may still be one Ghostscript can rewrite,
     and rewriting is often what repairs it — so an unreadable file costs
-    the report rather than the run.
+    the report rather than the run. Which of the two Nones this is, a
+    caller settles with pymupdf_module().
     """
-    try:
-        import pymupdf
-    except ImportError:
-        try:
-            import fitz as pymupdf
-        except ImportError:
-            return None
+    pymupdf = pymupdf_module()
+    if not pymupdf:
+        return None
 
     try:
         with pymupdf.open(path) as doc:
@@ -349,7 +366,9 @@ def survey(path: Path, sample: int = 40) -> Survey | None:
             found = Survey(pages, images, dpi, multichannel, bitonal)
             if not found.mostly_colour:
                 return found
-            return Survey(pages, images, dpi, multichannel, bitonal, saturation(doc, xrefs))
+            return Survey(
+                pages, images, dpi, multichannel, bitonal, saturation(doc, xrefs, pymupdf)
+            )
     except Exception:
         return None
 
@@ -501,8 +520,13 @@ def describe(path: Path, found: Survey | None) -> None:
     filters = compression(path)
 
     if not found:
-        print("  PyMuPDF is not installed, so the ladder cannot be trimmed to this")
-        print("  scan's own resolution — pip install pymupdf")
+        if pymupdf_module():
+            print("  PyMuPDF is installed and could not open this file, so the ladder")
+            print("  cannot be trimmed to the scan's own resolution. Ghostscript rewrites")
+            print("  a file this broken often enough that the run is still worth making.")
+        else:
+            print("  PyMuPDF is not installed, so the ladder cannot be trimmed to this")
+            print("  scan's own resolution — pip install pymupdf")
         if filters:
             print("  compression: " + ", ".join(f"{k} x{v}" for k, v in filters.items()))
         return
@@ -692,7 +716,7 @@ def report_failure(
         options.append(f"--min-dpi under {args.min_dpi}, checking a page afterwards")
     if (found is None or found.mostly_bitonal) and args.mono_dpi > min(DPI_LADDER):
         options.append(f"--mono-dpi under {args.mono_dpi}, if the pages are bitonal")
-    if found is None:
+    if found is None and not pymupdf_module():
         options.append("pip install pymupdf, so the next run can say what is in the file")
     for option in options:
         print(f"    {option}")
