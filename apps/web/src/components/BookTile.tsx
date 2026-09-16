@@ -7,7 +7,6 @@ export interface BookTileData {
   id: string | number
   slug: string
   title: string
-  originalTitle?: string | null
   author?: string | null
   cover?: { url?: string | null; alt?: string | null } | string | number | null
   generatedCover?: {
@@ -25,7 +24,7 @@ export function BookTile({ book }: { book: BookTileData }) {
     bookId: book.id,
     generated: book.generatedCover ?? {},
   })
-  const face = (book.originalTitle || book.title).trim()
+  const face = book.title.trim()
 
   const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
 

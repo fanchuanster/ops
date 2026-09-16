@@ -109,7 +109,6 @@ function serialize(book: {
   title: string
   slug: string
   subtitle?: string | null
-  originalTitle?: string | null
   author?: string | null
   language?: string | null
   description?: string | null
@@ -125,7 +124,6 @@ function serialize(book: {
     title: book.title,
     slug: book.slug,
     subtitle: book.subtitle ?? null,
-    originalTitle: book.originalTitle ?? null,
     author: book.author ?? null,
     language: book.language ?? null,
     description: book.description ?? null,

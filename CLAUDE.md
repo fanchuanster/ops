@@ -897,17 +897,23 @@ until 2026-08-21. The credit reads better in the description, which is
 where both seed books already carried it, so the byline on a book page
 lost nothing a reader was relying on.
 
-`originalTitle` survives that cut, but the **uploader is no longer
-asked for it**, since 2026-09-16. It was the same box: extraction
-cannot fill it either, and an uploader confirming a Chinese scan whose
-title is already Chinese has nothing to put in a field asking for the
-title "in its own script" — so it sat empty on the one form whose whole
-argument is that it shows people what their file already says. It stays
-on the admin edit panel, where the person filling it in is the person
-who has decided the catalogue title is a translation, and it is still
-what a book page prints as its heading. Removing it from the form meant
-removing it from the save as well: a form that no longer posts a field
-would otherwise clear it every time an uploader saved.
+`originalTitle` went the same way later the same day, column included
+(`20260916_220000_drop_original_title`). It came off the upload form
+first, on the argument that extraction cannot fill it and an uploader
+confirming a Chinese scan whose title is already Chinese has nothing to
+put in a box asking for the title "in its own script" — and once it was
+off the one form the field is for, what was left was a second title
+that only an administrator could type and only a book page rendered.
+Two fields for one book's name is a question every editor has to answer
+twice and a fallback (`originalTitle || title`) that every glyph, tile
+and search had to carry. A book has one title, in whatever script it is
+in; a translated edition says so in its description, which is prose and
+reads better for it.
+
+What that cost is small and worth stating: the two seed books carried
+道德經 and 論語 there, so their pages print the catalogue title alone
+and their tiles fall back to the first letter of it. The fix, if it is
+wanted, is the title itself rather than a second field.
 
 A book is whole. It was split into Parts until 2026-08-14, each
 separately released and separately downloadable; that is gone, and the

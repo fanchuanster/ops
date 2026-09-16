@@ -8,7 +8,6 @@ type FormatKey = 'docx' | 'epub' | 'pdf'
 interface SeedBook {
   slug: string
   title: string
-  originalTitle: string
   author: string
   language: 'zh-Hant' | 'zh-Hans' | 'en' | 'zh-en'
   description: string
@@ -67,7 +66,6 @@ const BOOKS: SeedBook[] = [
   {
     slug: 'tao-te-ching',
     title: 'Tao Te Ching',
-    originalTitle: '道德經',
     author: 'Laozi (老子)',
     language: 'zh-en',
     description:
@@ -80,7 +78,6 @@ const BOOKS: SeedBook[] = [
   {
     slug: 'analects',
     title: 'The Analects',
-    originalTitle: '論語',
     author: 'Confucius (孔子)',
     language: 'zh-en',
     description:
@@ -136,7 +133,6 @@ async function seed() {
     const data = {
       title: spec.title,
       slug: spec.slug,
-      originalTitle: spec.originalTitle,
       author: spec.author,
       language: spec.language,
       description: spec.description,

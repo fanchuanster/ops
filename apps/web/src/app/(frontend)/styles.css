@@ -1905,12 +1905,6 @@ h3 {
   margin: 0 0 0.35rem;
 }
 
-.book-head .original-title {
-  font-size: 1.375rem;
-  color: var(--ink-soft);
-  margin: 0 0 0.75rem;
-}
-
 .byline {
   font-family: var(--font-sans);
   font-size: 0.9375rem;

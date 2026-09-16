@@ -211,7 +211,7 @@ export default async function BookDetailsPage({
                 />
               ) : (
                 <span className="cover-panel__img cover-panel__img--empty cjk" aria-hidden="true">
-                  {Array.from((book.originalTitle || book.title).trim())[0] ?? '·'}
+                  {Array.from(book.title.trim())[0] ?? '·'}
                 </span>
               )}
               <div>

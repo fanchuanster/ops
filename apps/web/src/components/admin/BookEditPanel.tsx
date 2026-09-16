@@ -16,7 +16,6 @@ import { useOnSaved } from './useOnSaved'
 export interface BookEditValues {
   id: number
   title: string
-  originalTitle: string
   author: string
   description: string
   level: BookLevel
@@ -66,7 +65,6 @@ export function BookEditPanel({
 
   const EDITED = [
     'title',
-    'originalTitle',
     'author',
     'description',
     'level',
@@ -75,7 +73,7 @@ export function BookEditPanel({
   ] as const
   const dirty = EDITED.some((key) => draft[key] !== book[key])
 
-  const face = Array.from((book.originalTitle || book.title).trim())[0] ?? '·'
+  const face = Array.from(book.title.trim())[0] ?? '·'
 
   return (
     <aside className="admin-panel">
@@ -133,18 +131,6 @@ export function BookEditPanel({
             value={draft.title}
             required
             onChange={(event) => set('title', event.target.value)}
-          />
-        </div>
-
-        <div className="admin-field">
-          <label htmlFor="book-original">Original title</label>
-          <input
-            id="book-original"
-            name="originalTitle"
-            className="cjk"
-            placeholder="道德經"
-            value={draft.originalTitle}
-            onChange={(event) => set('originalTitle', event.target.value)}
           />
         </div>
 

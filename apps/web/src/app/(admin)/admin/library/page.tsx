@@ -54,7 +54,7 @@ export default async function AdminLibraryPage({
   const needle = query.toLowerCase()
   const matches = (book: (typeof books)[number]) =>
     needle === '' ||
-    [book.title, book.originalTitle, book.author]
+    [book.title, book.author]
       .some((field) => (field ?? '').toLowerCase().includes(needle))
 
   const direct = new Map<number, typeof books>()
@@ -85,7 +85,7 @@ export default async function AdminLibraryPage({
     id: book.id,
     title: book.title,
     author: book.author ?? '',
-    face: Array.from((book.originalTitle || book.title).trim())[0] ?? '·',
+    face: Array.from(book.title.trim())[0] ?? '·',
     level: levelFromId(book.level),
     published: book.visibility === 'public',
     sent: deliveries.get(book.id) ?? 0,
@@ -146,7 +146,6 @@ export default async function AdminLibraryPage({
     ? {
         id: selected.id,
         title: selected.title,
-        originalTitle: selected.originalTitle ?? '',
         author: selected.author ?? '',
         description: selected.description ?? '',
         level: levelFromId(selected.level),
