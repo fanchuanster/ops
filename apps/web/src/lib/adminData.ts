@@ -55,7 +55,6 @@ export async function getLibrary({ query, collectionId }: LibraryFilter) {
     filters.push({
       or: [
         { title: { like: query } },
-        { originalTitle: { like: query } },
         { author: { like: query } },
       ],
     })

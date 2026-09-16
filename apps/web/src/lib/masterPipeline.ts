@@ -331,7 +331,10 @@ export async function addSourceToBook(
   const conversion = (book.conversion ?? {}) as Record<string, unknown>
   const decision = canAddSource({
     kind,
-    existingFormats: (book.artifacts ?? []).map((artifact) => artifact.format),
+    existingFormats: [
+      ...(book.artifacts ?? []).map((artifact) => artifact.format),
+      ...readSources(conversion, book.artifacts).map((source) => originalArtifact(source.kind)),
+    ],
   })
   if (!decision.allowed) return ADD_SOURCE_ERRORS[decision.reason]
 

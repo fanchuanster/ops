@@ -111,7 +111,7 @@ export default async function ReviewQueuePage({
                   const rights = (book.rightsStatus ?? 'unknown') as RightsStatus
                   const owner = typeof book.owner === 'object' ? book.owner : null
                   const kind = readSourceKind(book.conversion ?? {})
-                  const face = Array.from((book.originalTitle || book.title).trim())[0] ?? '·'
+                  const face = Array.from(book.title.trim())[0] ?? '·'
 
                   return (
                     <tr

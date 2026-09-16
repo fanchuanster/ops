@@ -67,7 +67,6 @@ export async function saveBookDetails(
       id: bookId,
       data: {
         title,
-        originalTitle: optional('originalTitle'),
         author: optional('author'),
         description: optional('description'),
         level: levelId(level),

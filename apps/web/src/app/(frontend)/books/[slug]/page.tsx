@@ -79,18 +79,13 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
               <img src={cover} alt={coverAltFor(book.title)} />
             ) : (
               <span className="book-card__cover--empty cjk" aria-hidden="true">
-                {book.originalTitle || book.title}
+                {book.title}
               </span>
             )}
           </div>
 
           <div>
             <h1>{book.title}</h1>
-            {book.originalTitle ? (
-              <p className="original-title cjk" lang="zh">
-                {book.originalTitle}
-              </p>
-            ) : null}
             <p className="byline">{book.author}</p>
             {book.description ? <p className="description">{book.description}</p> : null}
 
