@@ -2,12 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { analyticsMeasurementId } from './analytics'
 
-/**
- * The rule worth a test is not "reads an env var" — it is which
- * requests are measured, because getting that wrong is silent: a
- * developer's own clicking shows up as readers and nobody finds out
- * from the code.
- */
 describe('which requests are measured', () => {
   const env = { ...process.env }
   afterEach(() => {
@@ -29,8 +23,6 @@ describe('which requests are measured', () => {
   })
 
   it('does not measure local development', () => {
-    // `wrangler dev` reads the same `vars` block, so the id IS set
-    // here. The host is the only thing telling the two apart.
     expect(configured('localhost:8787')).toBeNull()
   })
 

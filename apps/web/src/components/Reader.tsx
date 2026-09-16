@@ -3,19 +3,6 @@
 import ePub, { type Book, type Rendition } from 'epubjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/**
- * The in-browser reflowable reader.
- *
- * This is the product thesis made concrete: the same text the reader
- * could only pan around in a scanned PDF, reflowed and under their
- * control. Everything exposed here — size, spacing, measure, theme — is
- * a knob a paper book doesn't have and a scan actively denies.
- *
- * epub.js renders into an iframe it owns, so the page's own stylesheet
- * cannot reach the text. Themes are registered with epub.js instead,
- * and re-registered whenever the settings change.
- */
-
 const FONT_SIZES = [90, 100, 112, 125, 140, 160, 185] as const
 const SPACING = { snug: 1.5, normal: 1.75, loose: 2.1 } as const
 
@@ -72,9 +59,6 @@ export function Reader({
           ? '"Noto Serif TC", "Source Han Serif TC", "Songti TC", Georgia, serif'
           : '"Noto Sans TC", "PingFang TC", system-ui, sans-serif',
         'line-height': String(SPACING[s.spacing]),
-        // A measure cap is the single biggest legibility win on a wide
-        // screen: without it lines run the full window width and the
-        // eye loses its place returning to the left margin.
         'max-width': s.measure ? '34rem' : 'none',
         margin: '0 auto',
         padding: '0 1.25rem',
@@ -87,32 +71,12 @@ export function Reader({
     rendition.themes.fontSize(`${FONT_SIZES[s.fontIndex]}%`)
   }, [])
 
-  // Mount the book once. Settings changes re-theme the existing
-  // rendition rather than tearing it down, so the reader's position is
-  // never lost by nudging the font size.
   useEffect(() => {
     if (!viewerRef.current) return
 
-    // `openAs` is not optional here, however redundant it looks.
-    //
-    // Given a bare URL, epub.js guesses what it is *from the file
-    // extension* (`determineType` in epubjs/src/book.js). Our URL is
-    // `/read/<slug>/edition` — authorization is a route, not a file, so
-    // there is no `.epub` on the end. epub.js reads the empty extension
-    // as `DIRECTORY` and goes looking for
-    // `/read/<slug>/edition/META-INF/container.xml`, which is a 404.
-    //
-    // What made this hard to see is how it fails. epub.js catches that
-    // rejection, emits `openFailed` and swallows it, so `book.opened`
-    // never settles — `display()` below neither resolves nor rejects,
-    // and the page sits on "Opening…" with an empty frame forever. No
-    // error, no console message, no content.
     const book = ePub(epubUrl, { openAs: 'epub' })
     bookRef.current = book
 
-    // Belt and braces for the above: anything that stops the book
-    // opening should reach the reader as a message rather than as an
-    // empty page that never resolves.
     book.on('openFailed', () => setError('This edition could not be opened.'))
 
     const rendition = book.renderTo(viewerRef.current, {
@@ -163,9 +127,6 @@ export function Reader({
     return (
       <div className="reader__error">
         <p>{error}</p>
-        {/* Not "try the download": there is none, by design (CLAUDE.md
-            section 1). What the book page can still offer is sending
-            the book to a device, which does not go through epub.js. */}
         <p className="hint">
           You can still send this book to your e-reader from the book page.
         </p>

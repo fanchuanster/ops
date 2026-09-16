@@ -1,13 +1,3 @@
-/**
- * The correction guardrails, ported case for case from
- * `services/converter/tests/test_correct.py`.
- *
- * Kept as a direct port rather than rewritten, because the value of
- * these cases is that they are the ones that were already protecting the
- * text. A guardrail suite written fresh against the new implementation
- * would agree with whatever the new implementation happens to do.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import { type Document, makeBlock } from './document'
@@ -41,8 +31,6 @@ describe('the guardrails', () => {
   })
 
   it('accepts a character repair but flags it as a content change', () => {
-    // 説 -> 說 is a real OCR confusion, and it changes what the reader
-    // reads, so it must not be filed under punctuation.
     const { suggestion, refused } = vetOk('子曰:學而時習之,不亦說乎?')
     expect(refused).toBeNull()
     expect(suggestion?.category).toBe('characters')
@@ -79,8 +67,6 @@ describe('the guardrails', () => {
   })
 
   it('refuses completing a truncated line', () => {
-    // The model "helpfully" finishing a printed line that legitimately
-    // continues overleaf is the failure mode this limit exists for.
     expect(vetOk(`${LINE}有朋自遠方來，不亦樂乎？`).refused).toContain('length changed')
   })
 
@@ -89,7 +75,6 @@ describe('the guardrails', () => {
   })
 
   it('refuses traditional-to-simplified conversion', () => {
-    // Same length, so only the content-edit budget catches it.
     expect(vetOk('子曰:学而时习之,不亦説乎?').refused).toContain('content characters changed')
   })
 
@@ -137,7 +122,6 @@ describe('what is sent to the model', () => {
   })
 
   it('never sends chapter headings', () => {
-    // They come from the source's own structure, not from OCR.
     const texts = collectCandidates(doc()).map((c) => c.text)
     expect(texts).not.toContain('第一章')
   })

@@ -5,16 +5,6 @@ import { useActionState } from 'react'
 import { saveKindleAddress, type KindleState } from '../app/(frontend)/actions/kindle'
 import { KINDLE_SENDER_ADDRESS } from '../domain/kindle'
 
-/**
- * Where a reader turns Kindle delivery on.
- *
- * The Amazon approved-sender step is given the same weight as the
- * address field rather than tucked into small print, because skipping
- * it produces the worst possible failure: Amazon accepts the message,
- * discards it silently, and the reader waits for a book that is never
- * going to arrive. There is no bounce and no error to show them, so the
- * only place this can be prevented is here, before they press send.
- */
 export function KindleSettings({ current }: { current: string | null }) {
   const [state, action, pending] = useActionState<KindleState, FormData>(saveKindleAddress, {})
 

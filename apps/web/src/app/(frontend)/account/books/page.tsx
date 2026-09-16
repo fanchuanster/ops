@@ -7,13 +7,6 @@ import { getBooksOwnedBy } from '../../../../lib/catalog'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'My books' }
 
-/**
- * Where an upload is in the pipeline, in the uploader's words.
- *
- * Every state in `domain/pipeline.ts`, because anything missing here
- * falls through to the raw stored value — and the two-phase states are
- * exactly the ones a book now spends its visible minutes in.
- */
 const CONVERSION_LABEL: Record<string, string> = {
   none: 'Ready',
   draft: 'Draft',
@@ -51,10 +44,6 @@ export default async function MyBooksPage() {
         <ul className="my-books">
           {books.map((book) => {
             const state = book.conversion?.state ?? 'none'
-            // What was uploaded, badged the way the drop zone badges the
-            // formats it accepts — so the row and the upload screen name
-            // the same thing the same way. `text` is badged "txt"
-            // because that is what the reader dropped on it.
             const kind = readSourceKind(book.conversion ?? {})
             const badge = kind === 'text' ? 'txt' : kind
             const ready = state === 'none' || state === 'ready'
@@ -67,9 +56,6 @@ export default async function MyBooksPage() {
               <li key={book.id} className="my-books__item">
                 <div>
                   <span className={`fmt fmt--${badge}`}>{badge}</span>
-                  {/* Always its own page: that is where editing,
-                      converting, submitting and deleting live, whatever
-                      state the book is in. */}
                   <h3>
                     <a href={`/account/books/${book.id}`}>{book.title}</a>
                   </h3>
@@ -82,13 +68,6 @@ export default async function MyBooksPage() {
                       .filter(Boolean)
                       .join(' — ')}
                   </p>
-                  {/* A failure the uploader can do nothing about is still
-                      a failure they are entitled to see the reason for —
-                      and so is a wait. The pipeline writes a message on a
-                      book it cannot start (`lib/masterPipeline.ts`), which
-                      was shown nowhere while this read `state === 'failed'`:
-                      a book stopped for want of a credential looked exactly
-                      like one waiting its turn. */}
                   {book.conversion?.message ? (
                     <p className={state === 'failed' ? 'form-error' : 'hint'}>
                       {book.conversion.message}

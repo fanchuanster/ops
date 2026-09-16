@@ -1,47 +1,7 @@
-/**
- * What a machine may change about a book or a shelf, and how it says so.
- *
- * The admin API (`app/(frontend)/api/admin/…`) exists so the library can
- * be curated by something other than a person with a browser — a
- * migration script, a bulk re-shelving, an editor's own tooling. This
- * module is the part of it with rules rather than plumbing: which
- * fields are writable, what each one accepts, and what a refusal says.
- *
- * Three principles, and the first is the one that matters:
- *
- * **An unknown field is an error, not a shrug.** Silently dropping
- * `{ levl: 'essential' }` would answer 200 having changed nothing,
- * which is the worst possible outcome for a script — it reports success
- * and the library is untouched. Every key is either understood or
- * named in the refusal.
- *
- * **The allowlist is the boundary, not the collection's access rules.**
- * Access control says *who* may write; this says *what*. `owner`,
- * `review`, `conversion`, `artifacts`, `priceCredits` and `pageCount`
- * are absent on purpose: they are the pipeline's, the review queue's,
- * or derived, and a curation API that could set them would be a way to
- * fabricate a book's history rather than describe it.
- *
- * **Vocabulary in, storage out.** A caller names a level
- * (`"essential"`), never its stored id — `domain/levels.ts` owns that
- * table, and an API that took ids would freeze them into every client.
- *
- * What this module deliberately does *not* enforce: the rights gate on
- * publication, and the nesting rules for a shelf's parent. Both are
- * collection hooks (`enforcePublicationReview`, and the cycle/depth
- * check on `book-collections`), which means they hold for every writer
- * — the admin UI, the REST API, this API, and anything added later.
- * Checking
- * them here as well would be a second copy that could drift.
- *
- * Framework-independent, like everything in `src/domain`.
- */
-
 import { BOOK_LEVELS, isBookLevel, levelId } from './levels'
 import { RIGHTS_STATUSES, type RightsStatus } from './rights'
 import { SHELF_SORTS, orderIdFrom } from './shelfOrder'
 
-/** The languages a book may be filed under, mirroring the select. */
 export const BOOK_LANGUAGES = ['zh-Hans', 'zh-Hant', 'en', 'zh-en'] as const
 
 export const BOOK_VISIBILITIES = ['public', 'private'] as const
@@ -55,17 +15,6 @@ export type Parsed =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; errors: FieldError[] }
 
-/**
- * Everything the API will write to a book, and nothing else.
- *
- * `slug` is here and it is the one worth justifying. Changing a slug
- * breaks every link to the book, which is normally reason enough to
- * refuse — but slugs are minted from the title at upload and are never
- * regenerated when the title is corrected, so a book whose PDF carried
- * a download site's slogan keeps that slogan in its URL forever. The
- * only way to fix that today is a hand-written script. It is uniquely
- * indexed, so a collision fails loudly rather than silently merging.
- */
 export const BOOK_WRITABLE = [
   'title',
   'slug',
@@ -92,8 +41,6 @@ export const COLLECTION_WRITABLE = [
 export function parseBookUpdate(body: unknown): Parsed {
   return parse(body, BOOK_WRITABLE, {
     title: required('title', text),
-    // Not `required`: a slug may be corrected but never emptied, and an
-    // empty one would make the book unreachable rather than untitled.
     slug: required('slug', slugText),
     subtitle: nullable(text),
     originalTitle: nullable(text),
@@ -102,10 +49,6 @@ export function parseBookUpdate(body: unknown): Parsed {
     description: nullable(text),
     level: parseLevel,
     collection: nullableId,
-    // A place on the shelf, clamped to something storable. Null is a
-    // real instruction — "unplace it" — and lands the book at the back
-    // of its shelf with everything else nobody has curated, reading
-    // alphabetically (`domain/shelfOrder.ts`).
     collectionOrder: shelfPlace,
     rightsStatus: oneOf('rightsStatus', RIGHTS_STATUSES as readonly RightsStatus[]),
     visibility: oneOf('visibility', BOOK_VISIBILITIES),
@@ -116,23 +59,12 @@ export function parseCollectionUpdate(body: unknown): Parsed {
   return parse(body, COLLECTION_WRITABLE, {
     title: required('title', text),
     description: nullable(text),
-    // Null is a real instruction — "make this a root shelf" — and not a
-    // missing value, so it clears rather than being ignored.
     parent: nullableId,
     sortOrder: shelfPlace,
-    // Whether this shelf's children read A–Z or by their order ids.
     childOrder: oneOf('childOrder', SHELF_SORTS),
   })
 }
 
-/**
- * A place among siblings: a whole number in range, or null to clear it.
- *
- * A number out of range is clamped rather than refused: it is a slip,
- * and a position is not the kind of field worth failing a whole PATCH
- * over. Whether the number is ever *consulted* is the shelf's
- * `childOrder` (`domain/shelfOrder.ts`), not this field.
- */
 const shelfPlace: Reader = (value, field) => {
   if (value === null) return { ok: true, value: null }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -140,8 +72,6 @@ const shelfPlace: Reader = (value, field) => {
   }
   return { ok: true, value: orderIdFrom(value) }
 }
-
-// ── the machinery ────────────────────────────────────────────────────
 
 type Reader = (value: unknown, field: string) => { ok: true; value: unknown } | { ok: false; message: string }
 
@@ -180,7 +110,6 @@ function parse(
   return { ok: true, data }
 }
 
-/** A trimmed string, or null for anything blank. */
 function text(value: unknown): { ok: true; value: unknown } | { ok: false; message: string } {
   if (typeof value !== 'string') return { ok: false, message: 'Expected a string.' }
   const trimmed = value.trim()
@@ -197,12 +126,10 @@ function slugText(value: unknown): { ok: true; value: unknown } | { ok: false; m
   return read
 }
 
-/** A field that may be set or cleared, but whose type is fixed when set. */
 function nullable(read: (value: unknown) => ReturnType<Reader>): Reader {
   return (value) => (value === null ? { ok: true, value: null } : read(value))
 }
 
-/** A field that must have a value: null and blank are both refusals. */
 function required(field: string, read: (value: unknown) => ReturnType<Reader>): Reader {
   return (value) => {
     const result = read(value)
@@ -219,13 +146,6 @@ function oneOf(field: string, allowed: readonly string[]): Reader {
   }
 }
 
-/**
- * A level by name, stored as its id.
- *
- * Names have no order and ids do; `domain/levels.ts` owns the table
- * between them. Taking the name at the boundary is what keeps the ids
- * out of every client that ever calls this.
- */
 const parseLevel: Reader = (value) => {
   if (!isBookLevel(value)) {
     return { ok: false, message: `level must be one of: ${BOOK_LEVELS.join(', ')}.` }
@@ -233,13 +153,6 @@ const parseLevel: Reader = (value) => {
   return { ok: true, value: levelId(value) }
 }
 
-/**
- * The shelves a book stands on, replacing whatever it stood on before.
- *
- * A replace and not an append, and an empty array is the real
- * instruction "take it off every shelf" — which is why it is accepted
- * rather than treated as a missing value.
- */
 const nullableId: Reader = (value) => {
   if (value === null) return { ok: true, value: null }
   if (!Number.isInteger(value) || (value as number) < 1) {

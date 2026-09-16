@@ -1,14 +1,3 @@
-/**
- * The generated EPUB.
- *
- * Ported from `services/converter/tests/` on 2026-08-26, when ebooklib
- * was replaced by a template and a zip. Two of these assertions are
- * about bytes rather than content, and they are the ones worth keeping:
- * `mimetype` first and stored is what a strict reader — Kindle's
- * converter among them — checks before it will open the file at all, and
- * it is exactly the sort of thing a hand-written packer gets wrong.
- */
-
 import { unzipSync, strFromU8 } from 'fflate'
 import { describe, expect, it } from 'vitest'
 
@@ -38,10 +27,6 @@ describe('the archive', () => {
   })
 
   it('stores mimetype uncompressed', () => {
-    // A deflated mimetype is why a reader rejects an otherwise valid
-    // book. `zipSync` was given `level: 0` for this one entry; if that
-    // is ever dropped the bytes still unzip and the file still fails on
-    // a device, which is the failure this test exists to catch early.
     const header = built.subarray(0, 30)
     const method = header[8] | (header[9] << 8)
     expect(method).toBe(0)
@@ -60,14 +45,10 @@ describe('the package document', () => {
   })
 
   it('declares traditional Chinese', () => {
-    // Getting this wrong makes a reader pick Japanese glyph forms for
-    // shared characters, which looks subtly wrong on every page.
     expect(read('EPUB/content.opf')).toContain('<dc:language>zh-Hant</dc:language>')
   })
 
   it('opens on the text rather than the table of contents', () => {
-    // Landing a reader on a contents page is a small insult repeated
-    // every time they open the book.
     const spine = /<spine[^>]*>(.*?)<\/spine>/s.exec(read('EPUB/content.opf'))?.[1] ?? ''
     expect(spine).toBe('<itemref idref="ch1"/><itemref idref="ch2"/>')
   })
@@ -83,8 +64,6 @@ describe('navigation', () => {
   })
 
   it('nests section heads under their chapter', () => {
-    // So a reader navigating a four-hundred page classic lands on the
-    // passage rather than at the top of the chapter containing it.
     expect(read('EPUB/nav.xhtml')).toContain(
       '<ol><li><a href="chapter-1.xhtml#sec-1">一、打坐</a></li></ol>',
     )

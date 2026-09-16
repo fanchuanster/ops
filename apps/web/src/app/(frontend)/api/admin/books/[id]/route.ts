@@ -7,40 +7,6 @@ import { adminFromRequest, unauthorized } from '../../../../../../lib/apiAuth'
 import { logError } from '../../../../../../lib/logError'
 import { revalidateCuration } from '../../shared'
 
-/**
- * One book, for a machine.
- *
- * `GET` to read it, `PATCH` to change it. Curation from a script — a
- * bulk re-shelving, a levelling pass, an editor's own tooling — without
- * a browser and without reimplementing any of the rules.
- *
- * ## What it is not
- *
- * Not a second way to publish. `visibility` is writable, but
- * `enforcePublicationReview` runs on the write exactly as it does for
- * the admin UI and for the REST API, so a book whose rights do not permit
- * distribution is refused here too. That hook is the guarantee; this
- * route does not re-check it, because a second copy of the rule is a
- * second thing to keep in step.
- *
- * Not a way to fabricate history either. `owner`, `review`,
- * `conversion`, `artifacts` and the derived `priceCredits` /
- * `pageCount` are absent from the allowlist in `domain/adminApi.ts` —
- * they belong to the uploader, the review queue, or the pipeline.
- *
- * ## Authentication
- *
- * A per-user API key (`Authorization: users API-Key …`) or an ordinary
- * session, resolved by Payload either way, and then the `admin` role.
- * Per-user rather than one shared secret because publishing records
- * *who* approved a book, and a token with no owner has no answer.
- *
- * The write itself runs with `overrideAccess: true` and the resolved
- * administrator as `user`. That pairing is deliberate: the role check
- * above has already answered "may this caller write", and passing the
- * user is what lets the collection hooks see whose act it is.
- */
-
 export const dynamic = 'force-dynamic'
 
 export async function GET(
@@ -81,13 +47,6 @@ export async function PATCH(
   const parsed = parseBookUpdate(body)
   if (!parsed.ok) return Response.json({ error: 'Invalid update.', fields: parsed.errors }, { status: 400 })
 
-  // `title` and `slug` are both uniquely indexed, and the constraint
-  // surfaces from D1 as a raw failed-query error with no marker in it —
-  // no field, no code, nothing to branch on. Left to the catch below it
-  // becomes a 500, which tells a script the server broke when in fact
-  // the script asked for something taken. So the collision is looked up
-  // first, which costs one indexed query and buys a 409 that names the
-  // field.
   const taken = await occupiedBy(payload, id, parsed.data)
   if (taken) {
     return Response.json(
@@ -102,18 +61,12 @@ export async function PATCH(
       id,
       data: parsed.data,
       overrideAccess: true,
-      // Whose act this is. The hooks read it — `enforcePublicationReview`
-      // to decide whether an administrator is publishing, and to record
-      // the approval that implies.
       user: admin,
     })
 
     await revalidateCuration()
     return Response.json({ book: serialize(updated) })
   } catch (error) {
-    // A hook's refusal is the caller's fault and carries a sentence
-    // worth passing on — the rights gate in particular. Anything else
-    // is ours and says nothing useful to a client.
     if (error instanceof APIError) {
       return Response.json({ error: error.message }, { status: error.status || 400 })
     }
@@ -122,16 +75,6 @@ export async function PATCH(
   }
 }
 
-/**
- * Whether another book already holds the unique values being claimed.
- *
- * One query for both fields rather than one each: they are separately
- * indexed, so an `or` still uses them, and a PATCH setting both should
- * not cost two round trips to D1 — which on a Worker is two waits.
- *
- * Scoped with `not_equals` on the book itself, or writing a book's own
- * title back to it unchanged would report a collision with itself.
- */
 async function occupiedBy(
   payload: Payload,
   id: number,
@@ -161,14 +104,6 @@ async function occupiedBy(
   return { field, message: `Book ${clash.id} already has this ${field}.` }
 }
 
-/**
- * What a caller gets back.
- *
- * Narrowed on purpose rather than returning the document. A book row
- * carries `conversion.sourceKey`, artifact storage keys and the review
- * note, none of which a curation client needs — and a response shaped
- * like the allowlist is one a client can send straight back as a PATCH.
- */
 function serialize(book: {
   id: number | string
   title: string
@@ -194,7 +129,6 @@ function serialize(book: {
     author: book.author ?? null,
     language: book.language ?? null,
     description: book.description ?? null,
-    // The name, not the stored id — the same vocabulary the PATCH takes.
     level: levelFromId(book.level),
     visibility: book.visibility ?? null,
     rightsStatus: book.rightsStatus ?? null,

@@ -1,26 +1,5 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-d1-sqlite'
 
-/**
- * Let a reader actually delete their own book.
- *
- * `downloads` and `reading_progress` both declared `ON DELETE set null`
- * on columns that are `NOT NULL` — a contradiction SQLite only notices
- * at the moment of deletion, when it refuses. So deleting a book worked
- * right up until someone had opened it in the reader or had it
- * delivered, and then failed with a constraint error the reader could
- * do nothing about.
- *
- * The same shape as the entitlements fix in the credits migration. It
- * recurs because Payload generates `set null` for every relationship
- * regardless of whether the column is nullable.
- *
- * Cascade is also the right answer on the merits: a delivery record or a
- * reading position for a book that no longer exists describes nothing.
- * `credit_ledger.book_id` keeps `set null` deliberately — the credits
- * were really spent, and that history outlives the book.
- *
- * Both tables are rebuilt because SQLite cannot alter a foreign key.
- */
 export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   await db.run(sql`PRAGMA foreign_keys=OFF;`)
 
@@ -79,6 +58,4 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
-  // Deliberately not reversed. Restoring `set null` on a NOT NULL column
-  // would only restore the bug, and nothing depends on the old rule.
 }

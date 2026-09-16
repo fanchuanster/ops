@@ -12,25 +12,6 @@ import { shortDate } from "../../../../lib/adminFormat";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Readers" };
 
-/**
- * Who is here, and what they have contributed.
- *
- * A list and a panel, selected with `?reader=`, as the Library and the
- * review queue are. The panel changes two things — the email and the
- * admin role — and both moved here from the CMS on 2026-08-24, which is
- * what made deleting `/cms` possible at all.
- *
- * Credits are shown and not editable, here or anywhere: the field
- * refuses writes at field level and only `lib/credits.ts` moves a
- * balance, against a ledger. See `actions/readers.ts` for what else is
- * deliberately absent.
- *
- * Still no Suspend / Restore, though the design carries one. There is
- * no account state behind it — adding one is a migration plus a refusal
- * at sign-in plus a decision about what a suspended reader is told —
- * and a button that only *looks* like it suspends someone is worse than
- * no button. It is a separate change, not a corner of this screen.
- */
 export default async function AdminUsersPage({
   searchParams,
 }: {
@@ -47,8 +28,6 @@ export default async function AdminUsersPage({
     ? (rows.find((row) => row.user.id === selectedId) ?? null)
     : null;
 
-  // Keeps the search when a row is opened or closed, so an editor who
-  // filtered to find somebody does not lose the filter by clicking them.
   const href = (reader: number | null) => {
     const next = new URLSearchParams();
     if (query) next.set("q", query);

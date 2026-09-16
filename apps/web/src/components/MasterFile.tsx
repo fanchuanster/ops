@@ -4,15 +4,6 @@ import { useActionState } from 'react'
 
 import { replaceMaster, type DetailsState } from '../app/(frontend)/actions/bookDetails'
 
-/**
- * Downloading and replacing a draft's DOCX master.
- *
- * The master is normally not a reader download at all — it is the
- * source of truth every other format is generated from. Its owner is
- * the exception, and the reason is the whole point of a draft: a
- * conversion from a scan is a first pass, and the person who uploaded
- * the book is the one who can see what the OCR misread.
- */
 export function MasterFile({ bookId, hasMaster }: { bookId: number; hasMaster: boolean }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(replaceMaster, {})
 
@@ -31,9 +22,6 @@ export function MasterFile({ bookId, hasMaster }: { bookId: number; hasMaster: b
         <p className="hint">No master yet — it appears after conversion.</p>
       )}
 
-      {/* Only once there is one to replace. Offering the form before
-          then invites an upload the action can only refuse — there is
-          nothing yet for the formats to be rebuilt from. */}
       {hasMaster ? (
         <form action={action} className="master__replace">
           <input type="hidden" name="bookId" value={bookId} />

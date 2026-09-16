@@ -9,14 +9,6 @@ import {
 import { LEVEL_IDS } from './levels'
 import { FIRST_ORDER_ID, MAX_ORDER_ID } from './shelfOrder'
 
-/**
- * What the admin API will and will not accept.
- *
- * The suite that matters most here is the refusals. A curation script
- * gets one signal — the response — and the whole design rests on a
- * mistyped field being an error rather than a silent no-op.
- */
-
 const ok = (result: ReturnType<typeof parseBookUpdate>) => {
   if (!result.ok) throw new Error(`expected success, got: ${JSON.stringify(result.errors)}`)
   return result.data
@@ -28,14 +20,10 @@ const fields = (result: ReturnType<typeof parseBookUpdate>) => {
 
 describe('the admin API, on a book', () => {
   it('refuses a field it does not write, rather than dropping it', () => {
-    // The point of the whole module: answering 200 to `{ levl: … }`
-    // would report success having changed nothing.
     expect(fields(parseBookUpdate({ levl: 'essential' }))).toEqual(['levl'])
   })
 
   it('refuses the fields that belong to somebody else', () => {
-    // Owner is the uploader's, review is the queue's, and the rest are
-    // the pipeline's or derived. None may be set by curation.
     for (const field of ['owner', 'review', 'conversion', 'artifacts', 'priceCredits', 'pageCount']) {
       expect(fields(parseBookUpdate({ [field]: 1 }))).toEqual([field])
       expect(BOOK_WRITABLE).not.toContain(field)
@@ -43,8 +31,6 @@ describe('the admin API, on a book', () => {
   })
 
   it('takes a level by name and stores its id', () => {
-    // Names have no order; ids do. Taking the name at the boundary is
-    // what keeps stored ids out of every client.
     expect(ok(parseBookUpdate({ level: 'essential' })).level).toBe(LEVEL_IDS.essential)
     expect(ok(parseBookUpdate({ level: 'extensive' })).level).toBe(LEVEL_IDS.extensive)
     expect(fields(parseBookUpdate({ level: LEVEL_IDS.normal }))).toEqual(['level'])
@@ -72,13 +58,9 @@ describe('the admin API, on a book', () => {
 
   it('takes one shelf, and null is a real instruction', () => {
     expect(ok(parseBookUpdate({ collection: 3 })).collection).toBe(3)
-    // "Take it off the shelf" — not a missing value.
     expect(ok(parseBookUpdate({ collection: null })).collection).toBe(null)
     expect(fields(parseBookUpdate({ collection: 0 }))).toEqual(['collection'])
     expect(fields(parseBookUpdate({ collection: '3' }))).toEqual(['collection'])
-    // A list is what this took until 2026-08-24. It is refused rather
-    // than read as its first element, so a client written against the
-    // old shape is told, not silently half-obeyed.
     expect(fields(parseBookUpdate({ collection: [3] }))).toEqual(['collection'])
     expect(fields(parseBookUpdate({ collections: [3] }))).toEqual(['collections'])
   })
@@ -86,8 +68,6 @@ describe('the admin API, on a book', () => {
   it('takes a place on the shelf, and null for the back of it', () => {
     expect(ok(parseBookUpdate({ collectionOrder: 3 })).collectionOrder).toBe(3)
     expect(ok(parseBookUpdate({ collectionOrder: null })).collectionOrder).toBe(null)
-    // Uniqueness is nobody's business now: two books may share a
-    // number and read alphabetically between themselves.
     expect(ok(parseBookUpdate({ collectionOrder: 2.5 })).collectionOrder).toBe(2)
     expect(ok(parseBookUpdate({ collectionOrder: 0 })).collectionOrder).toBe(FIRST_ORDER_ID)
     expect(ok(parseBookUpdate({ collectionOrder: 50_000 })).collectionOrder).toBe(MAX_ORDER_ID)
@@ -104,8 +84,6 @@ describe('the admin API, on a book', () => {
   })
 
   it('reports every bad field at once, not just the first', () => {
-    // A script fixing one error at a time across six round trips is a
-    // worse API than one that says everything wrong in a single answer.
     expect(fields(parseBookUpdate({ level: 'deep', visibility: 'hidden', nope: 1 })).sort()).toEqual(
       ['level', 'nope', 'visibility'],
     )
@@ -128,7 +106,6 @@ describe('the admin API, on a collection', () => {
       'sortOrder',
       'childOrder',
     ])
-    // The slug is a shelf's identity in a URL and is not curation.
     expect(fields(parseCollectionUpdate({ slug: 'x' }))).toEqual(['slug'])
   })
 
@@ -148,16 +125,12 @@ describe('the admin API, on a collection', () => {
   })
 
   it('takes a sort order, including zero and null', () => {
-    // Zero is first, not absent — a falsy check here would silently
-    // refuse the one value that means "put it at the front".
     expect(ok(parseCollectionUpdate({ sortOrder: 0 })).sortOrder).toBe(FIRST_ORDER_ID)
     expect(ok(parseCollectionUpdate({ sortOrder: null })).sortOrder).toBe(null)
     expect(ok(parseCollectionUpdate({ sortOrder: 1.5 })).sortOrder).toBe(1)
   })
 
   it('does not decide nesting — that is the collection hook, for every door', () => {
-    // A shelf standing on itself parses fine and is refused on the
-    // write. One copy of the rule, not two.
     expect(parseCollectionUpdate({ parent: 7 }).ok).toBe(true)
   })
 })

@@ -10,9 +10,6 @@ describe('describing what was thrown', () => {
   })
 
   it('follows the cause chain', () => {
-    // The interesting half of an Adobe or D1 failure is usually one
-    // level down, so a description that stops at the top is the same as
-    // no description.
     const inner = new Error('403 from /operation/exportpdf')
     expect(describeError(new Error('export failed', { cause: inner }))).toBe(
       'Error: export failed <- Error: 403 from /operation/exportpdf',
@@ -20,7 +17,6 @@ describe('describing what was thrown', () => {
   })
 
   it('handles what is thrown that is not an Error', () => {
-    // Payload rejects with validation objects and fetch with strings.
     expect(describeError('plain string')).toBe('plain string')
     expect(describeError({ status: 413 })).toBe('{"status":413}')
   })

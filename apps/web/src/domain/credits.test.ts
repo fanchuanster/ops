@@ -1,13 +1,3 @@
-/**
- * The credit economy.
- *
- * Two things here are worth testing hard. Pricing, because it decides
- * what readers are charged. And accrual, because it is lazy — nothing
- * runs on a schedule, grants are worked out when a reader signs in —
- * and the failure mode of getting that wrong is either paying someone
- * twice on every page load or quietly never paying them at all.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -42,14 +32,12 @@ describe('what a book costs', () => {
   })
 
   it('never charges more than the maximum, however long the book', () => {
-    // 7 credits is reached at 421 pages and never exceeded.
     expect(priceInCredits(MAX_BOOK_PRICE * PAGES_PER_CREDIT)).toBe(MAX_BOOK_PRICE)
     expect(priceInCredits(MAX_BOOK_PRICE * PAGES_PER_CREDIT + 1)).toBe(MAX_BOOK_PRICE)
     expect(priceInCredits(100_000)).toBe(MAX_BOOK_PRICE)
   })
 
   it('charges the minimum when the page count is unknown', () => {
-    // Our missing metadata is not the reader's problem.
     for (const unknown of [null, undefined, NaN, Infinity]) {
       expect(priceInCredits(unknown as number)).toBe(MIN_BOOK_PRICE)
     }
@@ -86,8 +74,6 @@ describe('monthly accrual', () => {
   })
 
   it('grants nothing twice in the same month', () => {
-    // The one that must never break: this runs on sign-in, and a reader
-    // may sign in twenty times a day.
     expect(accrualFor({ grantedThrough: '2026-08', now })).toEqual([])
   })
 
@@ -96,8 +82,6 @@ describe('monthly accrual', () => {
   })
 
   it('pays the inactive rate for months that went by unvisited', () => {
-    // A sign-in always grants for its own month, so a month with no
-    // grant is by construction a month with no sign-in.
     const grants = accrualFor({ grantedThrough: '2026-05', now })
     expect(grants).toEqual([
       { month: '2026-06', credits: INACTIVE_MONTH_GRANT, reason: 'monthly_inactive' },
@@ -117,7 +101,6 @@ describe('monthly accrual', () => {
   it('caps the backlog for someone returning after years', () => {
     const grants = accrualFor({ grantedThrough: '2019-01', now })
     expect(grants).toHaveLength(MAX_BACKLOG_MONTHS)
-    // Still ends at the present month, at the active rate.
     expect(grants[grants.length - 1]).toEqual({
       month: '2026-08',
       credits: ACTIVE_MONTH_GRANT,
@@ -168,8 +151,6 @@ describe('paying for a delivery', () => {
   })
 
   it('refuses a resend at zero balance', () => {
-    // Owning the book is not a licence to keep sending it for free —
-    // the resend charge is what replaced the rolling delivery cap.
     expect(decideDelivery({ price: 3, balance: 0, alreadyOwned: true })).toMatchObject({
       allowed: false,
       isResend: true,

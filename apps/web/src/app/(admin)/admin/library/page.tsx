@@ -33,33 +33,6 @@ import type { User } from '../../../../payload-types'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Library' }
 
-/**
- * The library: the shelves and the books on them, on one screen.
- *
- * Books and Collections were two screens until 2026-08-24, and the
- * design merged them. It is the right merge. They were never two
- * subjects — a book's shelf was edited on the Books screen and the
- * shelf itself on the Collections screen, so the two questions an
- * editor actually asks ("what is on this shelf" and "is this shelf
- * right") lived one navigation apart from each other. Worse, neither
- * screen could answer the one question the tree exists for: what a
- * reader finds when they open a collection.
- *
- * So the tree is the spine and books are rows on it, which is also what
- * `/books` shows a reader. An editor now arranges the library while
- * looking at the thing they are arranging.
- *
- * Selection is `?book=` rather than client state, as on the review
- * queue: it renders on the server, survives a save, gives every book
- * row a real link, and means the tree needs client state only for the
- * things that genuinely are ephemeral — which collection card is open
- * for editing, and whether an inline form is showing.
- *
- * Search filters the *books*, not the shelves. A shelf with no match
- * stays on the page with nothing under it rather than disappearing,
- * because the shelves are the map: a map that rearranges itself when
- * you search is not a map.
- */
 export default async function AdminLibraryPage({
   searchParams,
 }: {
@@ -70,9 +43,6 @@ export default async function AdminLibraryPage({
   const query = (params.q ?? '').trim()
 
   const [books, collections] = await Promise.all([
-    // Every book, unfiltered: the search below runs over this list so
-    // that an empty shelf still draws. Bounded by `getLibrary`'s own
-    // page limit, which is what stops this being unbounded.
     getLibrary({ query: '', collectionId: null }),
     getAdminCollections(),
   ])
@@ -87,9 +57,6 @@ export default async function AdminLibraryPage({
     [book.title, book.originalTitle, book.author]
       .some((field) => (field ?? '').toLowerCase().includes(needle))
 
-  // Which books sit directly on which shelf. One shelf each, so this
-  // is a filing rather than a fan-out — a parent still shows the book,
-  // by containing the shelf it is on.
   const direct = new Map<number, typeof books>()
   const shelved = new Set<number>()
   for (const book of books) {
@@ -134,10 +101,6 @@ export default async function AdminLibraryPage({
     depth: depthOf(collections, collection.id),
   })
 
-  // Flattened in tree order — a parent immediately before its children
-  // — so the client renders one row per shelf and indents by depth,
-  // rather than nesting components. Every rule about where a shelf may
-  // be filed is decided here, on the server, where they already live.
   const tree = buildTree(collections)
   const rows: LibraryRow[] = flattenTree(tree).map((node) => {
     const siblings = collections.filter(
@@ -155,12 +118,7 @@ export default async function AdminLibraryPage({
       parentOptions: eligibleParents(collections, node.collection.id).map(asOption),
       first: siblings[0]?.id === node.collection.id,
       last: siblings[siblings.length - 1]?.id === node.collection.id,
-      // What the shelf-levelling form says it is about to touch: the
-      // whole subtree, counted once per book.
       booksInSubtree: subtreeBookCount(node, direct),
-      // In the order a reader will meet them: this shelf's own rule,
-      // not the query's. An editor arranging a shelf has to be looking
-      // at what the shelf actually does (`domain/shelfOrder.ts`).
       books: sortShelfItems(
         own.filter(matches).map((book) => ({ ...book, order: book.collectionOrder })),
         shelfSortFor({ childOrder: node.collection.childOrder }),
@@ -170,9 +128,6 @@ export default async function AdminLibraryPage({
     }
   })
 
-  // Every published book belongs to a shelf eventually, but not yet —
-  // and a book nobody has filed is exactly the one an editor is looking
-  // for. It goes last, under its own heading, rather than nowhere.
   const loose = books.filter((book) => !shelved.has(book.id))
 
   const shelves = collections.map((collection) => ({
@@ -185,9 +140,6 @@ export default async function AdminLibraryPage({
     return typeof id === 'number' ? id : null
   }
 
-  // The Media id, whatever shape the relationship came back as. It is
-  // the address the cover is served under now (`coverUploadUrl`), so a
-  // populated document is no longer needed here at all.
   const uploadedCover = selected ? uploadedCoverId(selected.cover) : null
 
   const editing: BookEditValues | null = selected
@@ -206,23 +158,15 @@ export default async function AdminLibraryPage({
         uploader: uploaderOf(selected),
         uploaderEmail: uploaderEmailOf(selected),
         uploaded: shortDate(selected.createdAt),
-        // The same order a reader's tile resolves — upload, then page
-        // one, then neither — decided here rather than in the panel, so
-        // there is one answer to "what does this book look like".
         coverUrl: coverImageUrl({
           uploadedId: uploadedCover,
           bookId: selected.id,
           generated: selected.generatedCover ?? {},
         }),
         hasUploadedCover: uploadedCover !== null,
-        // Which page it wears, and which pages there are to wear. Both
-        // read from the same record the picture came from, so the panel
-        // never has to ask a second time.
         coverPage: chosenCoverPage(selected.generatedCover ?? {}),
         coverPages: coverCandidatePages(selected.generatedCover ?? {}),
         hasRenderedCover: hasRenderedPages(selected.generatedCover ?? {}),
-        // A browser can render pages from a PDF or an EPUB. A book with
-        // only a master waits for the PDF phase 2 builds anyway.
         canMakeCover:
           coverSourceFormat((selected.artifacts ?? []).map((a) => a.format)) !== null,
       }
@@ -264,14 +208,6 @@ export default async function AdminLibraryPage({
   )
 }
 
-/**
- * Books on this shelf and every shelf standing on it, counted once.
- *
- * By id rather than by adding lengths, because a book may be filed on a
- * parent and on one of its children at the same time and it is still
- * one book — the same reason the reader-facing count in
- * `CollectionShelves` is a Set.
- */
 function subtreeBookCount(
   node: { collection: { id: number }; children: { collection: { id: number } }[] },
   direct: Map<number, { id: number }[]>,
@@ -285,26 +221,12 @@ function subtreeBookCount(
   return seen.size
 }
 
-/**
- * Who uploaded this book, as a name to show — or null.
- *
- * Null is not a gap in the data: a book entered by staff has no
- * uploader at all (`CLAUDE.md` section 6.2), and the rows say so
- * rather than inventing an account for it.
- *
- * The owner arrives populated because `getLibrary` reads at `depth: 1`
- * with `overrideAccess: true`. That override is doing real work here —
- * `owner` is field-level restricted in `collections/Books.ts` so that a
- * reader cannot correlate one uploader's books, and an administrator is
- * one of the two parties it is readable to.
- */
 function uploaderOf(book: { owner?: unknown }): string | null {
   const owner = typeof book.owner === 'object' ? (book.owner as User | null) : null
   if (!owner) return null
   return owner.displayName || owner.email || null
 }
 
-/** Their email, when the name shown above was something else. */
 function uploaderEmailOf(book: { owner?: unknown }): string | null {
   const owner = typeof book.owner === 'object' ? (book.owner as User | null) : null
   if (!owner?.email) return null

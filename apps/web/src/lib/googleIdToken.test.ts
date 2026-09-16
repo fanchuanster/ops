@@ -1,14 +1,3 @@
-/**
- * Forgery tests for the One Tap credential check.
- *
- * This is the only place in NobleSee where a caller-supplied token is
- * turned into an identity, so it is the only place where getting the
- * check wrong hands out accounts. Google's keys are stubbed rather than
- * fetched — the tests are about our verification, not about Google being
- * reachable, and a security test that depends on the network is a
- * security test that gets skipped.
- */
-
 import { createSign, generateKeyPairSync } from 'crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -19,8 +8,6 @@ const b64 = (value: object) => Buffer.from(JSON.stringify(value)).toString('base
 const GOOGLE_KID = 'google-key-1'
 const ATTACKER_KID = 'attacker-key-1'
 
-// The pair Google is pretending to sign with, and the pair an attacker
-// actually holds.
 const google = generateKeyPairSync('rsa', { modulusLength: 2048 })
 const attacker = generateKeyPairSync('rsa', { modulusLength: 2048 })
 
@@ -68,15 +55,12 @@ describe('google id token signature', () => {
   })
 
   it('rejects a token signed by anyone else, even under a real key id', async () => {
-    // The heart of it: an attacker who copies a genuine `kid` still
-    // cannot produce a signature that key verifies.
     await expect(
       verifyGoogleIdTokenSignature(token({ alg: 'RS256', kid: GOOGLE_KID }, attacker.privateKey)),
     ).rejects.toThrow(/signature did not verify/)
   })
 
   it('rejects an unsigned token', async () => {
-    // `alg: none` is the reason algorithms are pinned rather than read.
     await expect(
       verifyGoogleIdTokenSignature(`${b64({ alg: 'none' })}.${b64(claims)}.`),
     ).rejects.toThrow(/unexpected ID token algorithm/)

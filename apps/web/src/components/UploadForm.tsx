@@ -5,42 +5,11 @@ import React, { useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from '../domain/publication'
 import { coverSourceFor, makeCoversFor } from '../lib/client/coverImages'
 
-/**
- * The conversion portal's first step: the file, and nothing else.
- *
- * It used to ask for a title, an author and the rights answer up front.
- * Two of those the file already knows, and asking someone to retype
- * what they just uploaded is the kind of friction that stops uploads
- * happening. What the file says is read out of it and shown on the next
- * page, where it can be corrected — see `BookDetailsForm`.
- *
- * Note what is still *not* here, and will not be on the next page
- * either: no visibility control, no reading level. Those are
- * administrator fields (CLAUDE.md section 6.1), and an uploader who
- * could set them would walk their upload into the front of the library.
- *
- * The drop zone is a `<label>` wrapping a hidden-but-real file input,
- * not a div with a click handler. That is what keeps it keyboard
- * reachable and correctly announced without reimplementing any of it —
- * dragging is the enhancement, and clicking or tabbing to it is the
- * path that always works.
- *
- * Submitting is an explicit request rather than a server action, and
- * the file is the request body rather than a field in a multipart form
- * (`api/upload/route.ts`). That is what lets a 100 MB book stream into
- * storage instead of being parsed into a Worker's memory — and, since
- * the request is ours, it is also what makes the progress bar below
- * possible. `XMLHttpRequest` rather than `fetch`: only XHR reports
- * upload progress, and a reader watching a 100 MB file go up with no
- * indication of movement assumes it has hung.
- */
-
 const ACCEPT =
   '.pdf,.docx,.epub,.txt,.md,application/pdf,' +
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
   'application/epub+zip,text/plain,text/markdown'
 
-/** The four things the portal takes, in the order section 3 lists them. */
 const FORMATS = ['pdf', 'docx', 'epub', 'txt'] as const
 
 export function UploadForm({ quota }: { quota?: React.ReactNode }) {
@@ -49,15 +18,10 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
   const [chosen, setChosen] = useState<string | null>(null)
 
   const [error, setError] = useState<string | null>(null)
-  /** Null when idle; 0-100 while the file is going up. */
   const [progress, setProgress] = useState<number | null>(null)
-  /** The upload is done and this browser is rendering the cover. */
   const [makingCover, setMakingCover] = useState(false)
   const pending = progress !== null
 
-  // Checked here as well as in the route, because the server's answer
-  // to an oversized file costs the whole upload to hear. The route
-  // still enforces it — this is courtesy, not the boundary.
   const [tooBig, setTooBig] = useState<string | null>(null)
 
   function accept(file: File | undefined) {
@@ -70,14 +34,6 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
     )
   }
 
-  /**
-   * Send the file as the request body and go to the draft it became.
-   *
-   * The whole response is read before navigating, because the route
-   * answers with the new book's id — there is no redirect to follow, by
-   * design: `fetch` and XHR both follow a 3xx themselves, and the
-   * reader would never move.
-   */
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -89,8 +45,6 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
 
     const request = new XMLHttpRequest()
     request.open('POST', `/api/upload?name=${encodeURIComponent(file.name)}`)
-    // The type the browser guessed, which the route re-checks against
-    // the filename — several browsers send octet-stream for an EPUB.
     request.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
 
     request.upload.addEventListener('progress', (progressEvent) => {
@@ -103,8 +57,6 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
       try {
         body = JSON.parse(request.responseText)
       } catch {
-        // A proxy or the platform answered instead of the route — most
-        // likely the request never reached us at all.
       }
 
       if (request.status >= 200 && request.status < 300 && body.bookId !== undefined) {
@@ -126,14 +78,6 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
     request.send(file)
   }
 
-  /**
-   * Render the cover, then go to the draft.
-   *
-   * The wait is a second or two for a scan and nothing at all for a
-   * file that has no pages to rasterize, so it is shown rather than
-   * hidden: a progress bar that sits at 100% with no explanation reads
-   * as a hang.
-   */
   async function finish(bookId: string | number, file: File) {
     const source = coverSourceFor(file.name, file.type)
     if (source) {
@@ -141,8 +85,6 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
       await makeCoversFor(bookId, file, source)
     }
 
-    // Not `router.push`: the draft page must load fresh, and this
-    // navigation ends the upload rather than continuing the session.
     window.location.assign(`/account/books/${bookId}`)
   }
 
@@ -153,10 +95,6 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
     const dropped = event.dataTransfer.files
     if (dropped.length === 0 || !inputRef.current) return
 
-    // Assigning the FileList onto the real input rather than keeping the
-    // File in state: the input is what `submit` reads the file back
-    // from, and it is also what keeps the native `required` check
-    // honest. State would show a filename and upload nothing.
     inputRef.current.files = dropped
     accept(dropped[0])
   }

@@ -10,58 +10,6 @@ import {
   plansFor,
 } from '../domain/publication'
 
-/**
- * The editable summary of an uploaded book.
- *
- * Pre-filled from what the file said about itself and entirely
- * editable, because file metadata is frequently wrong and the reader is
- * the one who can tell. Nothing here is authoritative until they say so.
- *
- * One button, deliberately. It briefly offered "convert privately" and
- * "convert and submit for review" side by side, which asked the reader
- * to decide about publication before they had seen a single converted
- * page. Submitting for review is offered later, on the finished book,
- * when there is something to judge — and so is the rights question,
- * which used to be a select on this form. It moved for the same reason
- * the submit button did: it is only load-bearing at the moment someone
- * asks for the book to be published, and asking it here made a private
- * upload feel like a submission (`SubmitForReview`).
- *
- * Original title was also deliberately absent until 2026-08-21, on the
- * argument that it is curatorial rather than something an uploader
- * confirming their own scan can answer. The Figma revision put it back,
- * and the argument does not survive the way extraction actually works:
- * for a Chinese classic the file's own metadata usually *is* the
- * original title — 道德經 — so the field arrives pre-filled and the
- * uploader is confirming, not composing. A field they can leave alone
- * is cheap; a wrong 道德經 nobody was shown is not.
- *
- * Translator returned with it on that date and is gone again since
- * 2026-08-25, along with the book field behind it. Nothing extracts a
- * translator, so it was the one box on this form that was always empty
- * and always prose — and the credit it carried reads better inside the
- * description, where the seed books already put it.
- *
- * The one decision that does belong here is what to *do* with the file,
- * and only a PDF has one to make: a scan has to be read before it can
- * reflow, which costs money and time and can go wrong, while a
- * born-digital PDF may already be perfectly good as it stands. A DOCX,
- * an EPUB and a text file each have exactly one sensible path, so they
- * are shown what will happen rather than asked to choose it
- * (`domain/publication.ts`).
- */
-
-/**
- * Simplified Chinese leads the list and is what a book arrives with
- * when its file said nothing (the `language` default in
- * `collections/Books.ts`), because it is what most uploads are. The
- * order is the same one the admin select uses, so an uploader and an
- * editor are reading the same list.
- *
- * "Not sure" stays at the top as the empty value rather than being
- * ranked among the languages — it is the absence of an answer, and a
- * reader looking for it is looking for the way out of the question.
- */
 const LANGUAGES = [
   { value: '', label: 'Not sure' },
   { value: 'zh-Hans', label: 'Simplified Chinese' },
@@ -76,57 +24,14 @@ export interface EditableBook {
   originalTitle: string
   author: string
   language: string
-  /** Exact once converted, estimated before; null when neither is known. */
   pageCount: number | null
   pagesAreEstimated: boolean
   collection: number | null
   sourceKind: SourceKind
   plan: PublicationPlan
-  /** Whether they have already asked for AI-assisted correction. */
   aiCorrection: boolean
 }
 
-/**
- * What each plan actually does, in the uploader's terms.
- *
- * The tags say which one is going to happen if the uploader does
- * nothing, and that is `as_is` since 2026-08-25 (`defaultPlanFor`).
- * "Recommended" therefore moved with it — a pre-selected option sitting
- * next to a differently-labelled recommendation is the form telling the
- * reader two things at once.
- *
- * Converting keeps a tag of its own rather than losing one, because
- * what it gives is the thing this project exists for and the copy
- * should not read as a consolation.
- */
-/**
- * The two plans, in the uploader's own terms.
- *
- * Keyed by source as well as by plan, because what each one costs
- * depends entirely on what was uploaded. Publishing a scan as it stands
- * gives up reflow — the thing this project exists to provide — and
- * publishing a text file as it stands gives up nothing but structure,
- * since text reflows on its own. One sentence cannot be honest about
- * both.
- *
- * ## `sends`: who else sees the file
- *
- * Converting means handing the book to services outside NobleSee — a
- * scan goes to Adobe to be read, and text goes to an AI service to have
- * OCR damage suggested away. Publishing as it stands hands it to nobody.
- *
- * This used to be a *prohibition*: CLAUDE.md forbade sending a private
- * upload to a third party at all, which is a rule the uploader never
- * saw, could not weigh, and could not consent to. It also could not
- * survive contact with the pipeline — reading a scan *is* a third-party
- * call now, so the rule would have banned the portal's main path.
- *
- * Disclosure is the honest version of the same care: say plainly who
- * gets the file, on the screen where the choice is made, and let the
- * person who owns the book decide. Every uploader here has a private
- * alternative that keeps the file inside NobleSee, and it is the
- * default (`defaultPlanFor`).
- */
 const PLAN_COPY: Record<
   SourceKind,
   Partial<
@@ -186,23 +91,10 @@ const PLAN_COPY: Record<
   },
 }
 
-/** The copy for one plan, falling back to the PDF wording. */
 function planCopy(kind: SourceKind, plan: PublicationPlan) {
   return PLAN_COPY[kind][plan] ?? PLAN_COPY.pdf[plan]!
 }
 
-/**
- * The badge on a field whose value came out of the file.
- *
- * "guessed", which is the design's word, rather than "from your file".
- * Both are true and the design's is the one that invites correction —
- * which is the entire purpose of this screen.
- *
- * Shown only while the book is a draft. After that everything on the
- * form is something the reader has already seen and accepted, and
- * marking it as guessed would be telling them about a decision they
- * made themselves.
- */
 function ReadFromFile({ show }: { show: boolean }) {
   return show ? <span className="field-mark">guessed</span> : null
 }
@@ -214,24 +106,14 @@ export function BookDetailsForm({
   submitLabel = 'Next',
 }: {
   book: EditableBook
-  /** In tree order, parents before their children; `depth` indents them. */
   collections: { id: number; title: string; depth: number }[]
-  /** Before conversion, when the values on show were guessed. */
   draft?: boolean
-  /** "Next" for a draft, which is a step in a flow; "Save changes" after. */
   submitLabel?: string
 }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(saveBookDetails, {})
 
-  // One option is not a choice. A DOCX, an EPUB and a text file each
-  // have a single path, so the uploader is told what will happen rather
-  // than asked to pick it out of a list of one.
   const plans = plansFor(book.sourceKind)
 
-  // Which plan is selected *now*, not which one was saved. The AI
-  // question below only exists inside a conversion, so it has to follow
-  // the radios rather than the stored value — a reader who picks
-  // "publish as it stands" should watch it go.
   const [plan, setPlan] = useState<PublicationPlan>(book.plan)
 
   return (
@@ -283,10 +165,6 @@ export function BookDetailsForm({
         </select>
       </label>
 
-      {/* Read-only, and not a disabled input: the length is a property
-          of the file, counted rather than claimed. It is what the credit
-          price and the monthly allowance are both computed from, so it
-          is shown rather than hidden — but there is nothing to correct. */}
       <label>
         <span className="field-label">
           Page count
@@ -302,32 +180,11 @@ export function BookDetailsForm({
         ) : null}
       </label>
 
-      {/*
-        One shelf, and the shelves drawn the way the library draws them.
-        A book on two shelves printed twice, and nesting is what makes
-        one enough: a reader opening a parent finds everything beneath
-        it (`domain/collectionTree.ts`).
-
-        Radios rather than a select, and the reason is the hierarchy
-        rather than the arity. An `<option>` cannot be styled, so a
-        select could only fake the tree with leading dashes — which is
-        a drawing of a hierarchy, not one. Here a root shelf is set in
-        the display face and a sub-shelf in small tracked capitals,
-        exactly as on `/books`, so the uploader is picking from a
-        picture of the library they already know. Every option is also
-        visible at once, which a select hides behind a click.
-
-        Books are not shown. The question is where this one goes, and
-        what is already on the shelf does not change the answer.
-      */}
       {collections.length > 0 ? (
         <fieldset className="upload-form__collections">
           <legend>Collection</legend>
           <small>Only used if the book is ever published.</small>
           <div>
-            {/* First, and a real option: most uploads are nobody's
-                shelf yet, and an uploader who has no view should not
-                have to un-pick one. */}
             <label className="upload-form__shelf upload-form__shelf--none">
               <input
                 type="radio"
@@ -346,8 +203,6 @@ export function BookDetailsForm({
                     ? 'upload-form__shelf'
                     : 'upload-form__shelf upload-form__shelf--nested'
                 }
-                // Indented by depth, like every other rendering of this
-                // tree — the admin's and the reader's both.
                 style={{ '--depth': collection.depth - 1 } as CSSProperties}
               >
                 <input
@@ -377,9 +232,6 @@ export function BookDetailsForm({
               />
               <span
                 className={`plan-card__tag${
-                  // Follows the default rather than naming a plan, so
-                  // the highlight cannot drift away from the option
-                  // that is actually pre-selected.
                   option === defaultPlanFor(book.sourceKind) ? ' plan-card__tag--recommended' : ''
                 }`}
               >
@@ -387,10 +239,6 @@ export function BookDetailsForm({
               </span>
               <strong>{planCopy(book.sourceKind, option).label}</strong>
               <span>{planCopy(book.sourceKind, option).detail}</span>
-              {/* Who else sees the file. Inside the card rather than
-                  below the group, so it is read while the choice is
-                  being made and cannot be attached to the wrong
-                  option. */}
               {planCopy(book.sourceKind, option).sends ? (
                 <span className="plan-card__sends">{planCopy(book.sourceKind, option).sends}</span>
               ) : null}
@@ -406,22 +254,6 @@ export function BookDetailsForm({
         </>
       )}
 
-      {/* **The AI decision is the uploader's.**
-          Offered only while converting is actually the chosen plan,
-          because the correction stage runs inside a conversion — on a
-          book being published as it stands there is nothing for it to
-          read, and a checkbox that does nothing is worse than no
-          checkbox. It followed `plansFor` until now, so a PDF showed it
-          beside "publish as it stands", which is the default: the one
-          case where it was offered and could never fire.
-
-          It disappears rather than greying out, and that is the honest
-          shape — an unmounted checkbox posts nothing, so the saved
-          answer for a book published as it stands is no, which is the
-          only answer that can be true of it.
-
-          Unchecked by default: a question nobody answered is answered
-          no, which is what makes the disclosure above true. */}
       {plan === 'convert' ? (
         <label className="ai-consent">
           <input

@@ -17,25 +17,8 @@ import { getCurrentUser } from '../../../lib/auth'
 import { logError } from '../../../lib/logError'
 import { artifactBytes, objectBucket } from '../../../lib/storage'
 
-/**
- * The reader's half of AI correction: deciding what to adopt.
- *
- * CLAUDE.md section 7 requires the AI to propose rather than edit, with
- * a human approval between the proposal and the change. This file is
- * that approval. Nothing here talks to a model — the suggestions were
- * written by a converter and the decisions are read back by one; what
- * happens in between is a person reading their own book.
- *
- * **Whose decision.** The owner's, or an administrator's — the same
- * pair that chooses the cover, and for the same reason. The suggestions
- * are about the words of a book somebody uploaded, and rights,
- * visibility and level (the administrator's, section 6.1) are claims
- * about the *library*. What a line of your own book should say is not.
- */
-
 export type CorrectionActionState = { error?: string; ok?: string }
 
-/** The book, if this reader may decide about its text — otherwise null. */
 async function correctableBook(
   payload: Awaited<ReturnType<typeof getPayload>>,
   bookId: number,
@@ -53,15 +36,6 @@ async function correctableBook(
   return mine || isAdmin(user) ? book : null
 }
 
-/**
- * Read the suggestions a converter wrote for this book.
- *
- * Exported because the book page renders them and there is exactly one
- * correct way to do it: through the stored key, which the converter is
- * only permitted to set to something under this book's own prefix.
- * Returns an empty list rather than throwing — a missing or unreadable
- * file means there is nothing to decide, which the page can render.
- */
 export async function loadSuggestions(bookId: number) {
   const payload = await getPayload({ config })
   const book = await correctableBook(payload, bookId)
@@ -80,14 +54,6 @@ export async function loadSuggestions(bookId: number) {
   }
 }
 
-/**
- * Ask for corrections to be proposed, or proposed again.
- *
- * Only ever queues work — the proposing is a converter's, off the same
- * poll as everything else. Consent is re-checked here and again when
- * the job is handed out, because the uploader may untick the box
- * between the two and the later answer is the one that counts.
- */
 export async function requestCorrection(
   _prev: CorrectionActionState,
   formData: FormData,
@@ -137,16 +103,6 @@ export async function requestCorrection(
   return { ok: 'Queued. The suggestions will appear here once a converter has read the book.' }
 }
 
-/**
- * Record what the reader adopted, and queue the rewrite.
- *
- * The decisions file is written from the *stored* suggestions rather
- * than from the form. The form says only which addresses were ticked;
- * every line of text comes from the file the converter wrote. That is
- * the containment rule, and without it a crafted post would be an
- * arbitrary rewrite of any master — `acceptDecisions` drops an address
- * that was never offered.
- */
 export async function recordDecisions(
   _prev: CorrectionActionState,
   formData: FormData,
@@ -174,10 +130,6 @@ export async function recordDecisions(
     approved: formData.getAll('adopt').filter((v): v is string => typeof v === 'string'),
   })
 
-  // Nothing adopted is a complete and legitimate answer — the model
-  // found nothing worth changing, or the reader disagreed with all of
-  // it. Recorded as a finished pass rather than sent to a converter
-  // that would read the master, change nothing and write it back.
   if (!anyAdopted(decisions)) {
     await payload.update({
       collection: 'books',

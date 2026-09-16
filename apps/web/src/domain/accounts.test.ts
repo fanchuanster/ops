@@ -10,8 +10,6 @@ describe('checkAccountEmail', () => {
     })
   })
 
-  // Every homegrown tightening of the grammar eventually refuses a real
-  // reader, so these have to keep working.
   it('accepts the addresses a strict pattern would refuse', () => {
     for (const address of ["o'brien@example.com", 'reader+books@example.co.uk', 'a@b.io']) {
       expect(checkAccountEmail(address)).toEqual({ valid: true, email: address })
@@ -48,7 +46,6 @@ describe('checkRoleChange', () => {
   it('allows everything else, including demoting another admin', () => {
     expect(checkRoleChange({ actorId: 1, targetId: 2, makeAdmin: false }).ok).toBe(true)
     expect(checkRoleChange({ actorId: 1, targetId: 2, makeAdmin: true }).ok).toBe(true)
-    // Re-affirming your own role is not a demotion.
     expect(checkRoleChange({ actorId: 1, targetId: 1, makeAdmin: true }).ok).toBe(true)
   })
 })

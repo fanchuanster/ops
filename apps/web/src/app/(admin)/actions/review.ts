@@ -9,53 +9,8 @@ import type { RightsStatus } from '../../../domain/rights'
 import { currentAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
 
-/**
- * An editor's decision on a submitted book.
- *
- * Two outcomes, and only two:
- *
- *   approve()        — this belongs in the library. The book becomes
- *                      public in the same act.
- *   requestChanges() — not yet, and here is why.
- *
- * Approving and publishing were two buttons until 2026-08-24, on the
- * argument that they answer two different questions — "does this belong
- * here" and "may we legally distribute it". The second question is real
- * and is still enforced; what was wrong was making a person answer it
- * twice. There is no such thing as an approved book that stays out of
- * the library: approving one and leaving it private produced a state
- * nobody could explain to its uploader, and an "Approved" chip that
- * meant nothing had happened.
- *
- * So approval *is* publication, and the rights gate moves in front of
- * it rather than behind it: a book whose rights do not permit
- * distribution cannot be approved at all, and the queue says so instead
- * of offering a button that leads nowhere. That is also what the design
- * draws — its Approve control is disabled outright on a submission
- * declared as "owns a copy".
- *
- * What did NOT change is the gate itself. `isPubliclyDistributable` is
- * consulted here, again by `canPublishToLibrary`, and a third time by
- * `enforcePublicationReview` on the write. An approval is not a finding
- * that material may be redistributed, and no amount of administrator
- * gets past it.
- *
- * Every action re-checks the administrator itself. A server action is a
- * POST endpoint; the layout guard around the page never runs for it.
- */
-
 export type ReviewState = { error?: string; ok?: string }
 
-/**
- * Approve a submission, and publish it.
- *
- * The publication check reads the review state **as stored**, not the
- * `approved` this call is about to write. That distinction is the whole
- * of the `not_offered` gate: an administrator may give their approval
- * early, but the uploader offering the book is a different gate and not
- * theirs to walk through. Checking against the value we are writing
- * would make every book look offered.
- */
 export async function approveSubmission(
   _prev: ReviewState,
   formData: FormData,
@@ -93,9 +48,6 @@ export async function approveSubmission(
         visibility: 'public',
       },
       overrideAccess: true,
-      // Passed so `enforcePublicationReview` knows whose act this is.
-      // Access is overridden either way; this is what identifies the
-      // administrator to the hook.
       user: admin,
     })
   } catch (error) {
@@ -107,19 +59,6 @@ export async function approveSubmission(
   return { ok: 'Approved — it is in the public library.' }
 }
 
-/**
- * Send it back with a reason.
- *
- * The note is required here and optional on approval, and the asymmetry
- * is the point: an uploader being asked to change something has to be
- * told what, while an approval explains itself by the book appearing.
- *
- * This never touches visibility. A book already in the library that is
- * sent back stays where it is — withdrawing a published book is a
- * different act with different consequences for the readers who have
- * spent credits on it, and it is not something a review note should do
- * as a side effect.
- */
 export async function requestChanges(
   _prev: ReviewState,
   formData: FormData,
@@ -165,11 +104,8 @@ const APPROVAL_REFUSALS: Record<string, string> = {
 function revalidateReview(bookId: number) {
   revalidatePath('/admin')
   revalidatePath('/admin/library')
-  // The uploader's own screens are where the decision is read.
   revalidatePath(`/account/books/${bookId}`)
   revalidatePath('/account/books')
-  // Approving now publishes, so the catalog is what just changed for
-  // everybody else.
   revalidatePath('/')
   revalidatePath('/books')
 }

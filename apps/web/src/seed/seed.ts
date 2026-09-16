@@ -1,20 +1,3 @@
-/**
- * Seeds the public catalog.
- *
- * Idempotent: everything is matched on slug and updated in place, so
- * running it twice never duplicates a book. That matters because it is
- * wired into `docker compose up` as a one-shot service.
- *
- * No data is migrated from the previous WordPress implementation — the
- * books below are re-declared here from scratch. The `storageKey`
- * values, however, point at artifacts that already exist in our own R2
- * bucket, so the download path has real files to serve instead of
- * dangling references. Regenerate them with
- * `tools/generate-seed-content.py` if they are ever lost.
- *
- * Run with:  npm run seed
- */
-
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
@@ -29,22 +12,15 @@ interface SeedBook {
   author: string
   language: 'zh-Hant' | 'zh-Hans' | 'en' | 'zh-en'
   description: string
-  /** The one shelf it sits on. A parent shows it too, by containing that shelf. */
   collection: string
   level: BookLevel
-  /** Pages in the DOCX master. The credit price is derived from it. */
   pageCount: number
-  /** Prefix in object storage; the three artifacts hang off it. */
   keyPrefix: string
 }
 
-/** Filenames are fixed per format, so only the prefix varies per part. */
 const ARTIFACT_FILES: Record<FormatKey, string> = {
   docx: 'master.docx',
   epub: 'book.epub',
-  // One PDF now, mirroring the original's layout. These staff-entered
-  // library books have no uploaded original, so theirs is rendered from
-  // the master like any DOCX source's would be.
   pdf: 'book.pdf',
 }
 
@@ -98,9 +74,6 @@ const BOOKS: SeedBook[] = [
       'One of the foundational texts of Chinese philosophy, traditionally attributed to Laozi. This edition presents James Legge’s 1891 translation, which is in the public domain, alongside the original Chinese text.',
     collection: 'chinese-classics',
     level: 'normal',
-    // Measured from the rendered standard PDF, which is what the price
-    // rule means by "pages". Both seed books are short enough to cost
-    // the minimum — the rule is exercised properly by real uploads.
     pageCount: 3,
     keyPrefix: 'books/4/book',
   },
@@ -123,8 +96,6 @@ function artifactsFor(spec: SeedBook) {
   return (Object.keys(ARTIFACT_FILES) as FormatKey[]).map((format) => ({
     format,
     storageKey: `${spec.keyPrefix}/${ARTIFACT_FILES[format]}`,
-    // The editable master is an editorial artifact, not a reader
-    // download — it is the source of truth and stays internal.
     downloadable: format !== 'docx',
   }))
 }
@@ -132,7 +103,6 @@ function artifactsFor(spec: SeedBook) {
 async function seed() {
   const payload = await getPayload({ config })
 
-  // --- collections, parents first so children can point at them ------
   const collectionIds = new Map<string, number>()
   for (const spec of [...COLLECTIONS].sort((a, b) => (a.parent ? 1 : 0) - (b.parent ? 1 : 0))) {
     const existing = await payload.find({
@@ -156,7 +126,6 @@ async function seed() {
     console.log(`${existing.docs[0] ? 'updated' : 'created'} collection: ${spec.title}`)
   }
 
-  // --- books ---------------------------------------------------------
   for (const spec of BOOKS) {
     const existing = await payload.find({
       collection: 'books',
@@ -171,19 +140,11 @@ async function seed() {
       author: spec.author,
       language: spec.language,
       description: spec.description,
-      // Both seed titles are pre-1928 translations of pre-modern texts.
       rightsStatus: 'public_domain' as const,
       visibility: 'public' as const,
-      // The Analects sits at essential — it is the core of what NobleSee
-      // exists to make readable, and stays visible however narrowly a
-      // reader is browsing. The Tao Te Ching sits at normal, so the two
-      // seed books differ and the level filter has something real to do
-      // on a fresh install.
       level: LEVEL_IDS[spec.level],
       pageCount: spec.pageCount,
       artifacts: artifactsFor(spec),
-      // Library content entered by staff, not a reader submission —
-      // there is nothing to review. See domain/moderation.ts.
       review: { state: 'unsubmitted' as const },
       status: 'published' as const,
       collection: collectionIds.get(spec.collection) ?? null,

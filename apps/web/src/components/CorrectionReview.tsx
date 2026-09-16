@@ -15,34 +15,11 @@ import {
   suggestionId,
 } from '../domain/correction'
 
-/**
- * The human half of AI correction.
- *
- * CLAUDE.md section 7 asks for *original + suggestion + reason +
- * confidence + human approval*, and this is the screen where the last
- * of those happens. Every element of it is deliberate:
- *
- * **Nothing is ticked to begin with.** A pre-ticked list is a consent
- * dialogue pretending to be a review — the reader would be approving
- * whatever they failed to read. Adopting is an action; declining is the
- * default and costs nothing.
- *
- * **The original is shown, always, beside the proposal.** A suggestion
- * without its before-text asks the reader to trust the model, which is
- * exactly what this stage exists not to do.
- *
- * **The model's reason is shown as the model's**, not as a finding. It
- * proposed a change and said why; whether that is true about this book
- * is the reader's judgement, and the phrasing must not borrow authority
- * it does not have.
- */
-
 const CATEGORY_LABELS: Record<string, string> = {
   characters: 'Wording',
   punctuation: 'Punctuation',
 }
 
-/** Only two are meaningful; anything else is shown as the converter named it. */
 function categoryLabel(category: string): string {
   return CATEGORY_LABELS[category] ?? category
 }
@@ -88,7 +65,6 @@ export function CorrectionReview({
     {},
   )
 
-  // Ticked ids, so the count in the button is honest before submitting.
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const ids = useMemo(() => suggestions.map((s) => suggestionId(s)), [suggestions])
 

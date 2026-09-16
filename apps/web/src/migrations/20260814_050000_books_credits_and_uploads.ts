@@ -1,34 +1,9 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-d1-sqlite'
 
-/**
- * Whole books, credits, entitlements and the conversion portal.
- *
- * Written by hand rather than generated. `payload migrate:create` hangs
- * against the D1 adapter on this change — no output, no file — so the
- * DDL below follows the conventions of the generated migrations either
- * side of it: Payload's column naming (`conversion.state` becomes
- * `conversion_state`), its index naming, and its array-field tables.
- *
- * DESTRUCTIVE, deliberately and with the owner's approval. `parts` and
- * `parts_artifacts` are dropped outright. The seed re-creates the
- * library's books as whole works with their artifacts attached, so
- * nothing of value is in those tables at the time this runs — but if
- * this is ever replayed against a database with real part rows, their
- * content is gone. `down` restores the shape, never the rows.
- *
- * SQLite specifics worth knowing before editing:
- *   - DROP COLUMN refuses to touch an indexed column, so every index is
- *     dropped before its column.
- *   - A table cannot be dropped while another table's FK points at it,
- *     which is why `downloads.part_id` and the locked-documents
- *     relationship go first.
- */
 export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
-  // --- readers gain a balance ---------------------------------------
   await db.run(sql`ALTER TABLE \`users\` ADD \`credits\` numeric DEFAULT 10;`)
   await db.run(sql`ALTER TABLE \`users\` ADD \`credits_granted_through\` text;`)
 
-  // --- books absorb what parts used to carry -------------------------
   await db.run(sql`ALTER TABLE \`books\` ADD \`page_count\` numeric;`)
   await db.run(sql`ALTER TABLE \`books\` ADD \`price_credits\` numeric;`)
   await db.run(sql`ALTER TABLE \`books\` ADD \`conversion_state\` text DEFAULT 'none';`)
@@ -42,8 +17,6 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
     sql`CREATE INDEX \`books_conversion_conversion_state_idx\` ON \`books\` (\`conversion_state\`);`,
   )
 
-  // Staged release paced a reader through a book's parts. No parts, no
-  // pacing — the credit price is what governs access now.
   await db.run(sql`ALTER TABLE \`books\` DROP COLUMN \`staged_release_enabled\`;`)
   await db.run(sql`ALTER TABLE \`books\` DROP COLUMN \`staged_release_unlock_delay_hours\`;`)
 
@@ -64,12 +37,6 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
     sql`CREATE INDEX \`books_artifacts_parent_id_idx\` ON \`books_artifacts\` (\`_parent_id\`);`,
   )
 
-  // --- deliveries are per book, and cost credits ---------------------
-  //
-  // Rebuilt rather than altered: SQLite refuses DROP COLUMN on a column
-  // named in a foreign key, and `part_id` references `parts`. The
-  // surviving rows are carried across; their part_id is dropped on the
-  // floor, which is the point.
   await db.run(sql`PRAGMA foreign_keys=OFF;`)
   await db.run(sql`CREATE TABLE \`__new_downloads\` (
   	\`id\` integer PRIMARY KEY NOT NULL,
@@ -95,22 +62,12 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   await db.run(sql`CREATE INDEX \`user_createdAt_idx\` ON \`downloads\` (\`user_id\`,\`created_at\`);`)
   await db.run(sql`PRAGMA foreign_keys=ON;`)
 
-  // --- reading progress is per book ----------------------------------
   await db.run(sql`ALTER TABLE \`reading_progress\` DROP COLUMN \`part_order\`;`)
   await db.run(sql`DROP INDEX \`user_book_idx\`;`)
-  // (book, user) rather than (user, book): the name is global in SQLite
-  // and `user_book_idx` is taken below by entitlements.
   await db.run(
     sql`CREATE UNIQUE INDEX \`book_user_idx\` ON \`reading_progress\` (\`book_id\`,\`user_id\`);`,
   )
 
-  // --- books a reader has bought -------------------------------------
-  // `user_id` cascades rather than SET NULLing: the column is NOT NULL,
-  // so a SET NULL rule makes deleting a reader fail outright. Cascading
-  // is also the right answer — a departed reader's purchases and credit
-  // history should leave with them. `credit_ledger.book_id` is nullable
-  // and keeps SET NULL, so deleting a book does not erase the record
-  // that someone once paid for it.
   await db.run(sql`CREATE TABLE \`entitlements\` (
   	\`id\` integer PRIMARY KEY NOT NULL,
   	\`user_id\` integer NOT NULL,
@@ -130,13 +87,10 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   await db.run(
     sql`CREATE INDEX \`entitlements_created_at_idx\` ON \`entitlements\` (\`created_at\`);`,
   )
-  // One purchase per reader per book. This is the constraint that makes
-  // "already owned" a fact rather than a race.
   await db.run(
     sql`CREATE UNIQUE INDEX \`user_book_idx\` ON \`entitlements\` (\`user_id\`,\`book_id\`);`,
   )
 
-  // --- every credit gained or spent ----------------------------------
   await db.run(sql`CREATE TABLE \`credit_ledger\` (
   	\`id\` integer PRIMARY KEY NOT NULL,
   	\`user_id\` integer NOT NULL,
@@ -165,11 +119,6 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
     sql`CREATE INDEX \`user_createdAt_credit_idx\` ON \`credit_ledger\` (\`user_id\`,\`created_at\`);`,
   )
 
-  // --- the admin's lock table learns the new collections -------------
-  //
-  // Rebuilt for the same reason as downloads: `parts_id` is a foreign
-  // key. These rows are transient editor locks, so nothing is carried
-  // across — a stale lock is worth less than a clean table.
   await db.run(sql`PRAGMA foreign_keys=OFF;`)
   await db.run(sql`DROP TABLE \`payload_locked_documents_rels\`;`)
   await db.run(sql`CREATE TABLE \`payload_locked_documents_rels\` (
@@ -231,19 +180,10 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
     sql`CREATE INDEX \`payload_locked_documents_rels_reading_progress_id_idx\` ON \`payload_locked_documents_rels\` (\`reading_progress_id\`);`,
   )
 
-  // --- and parts are gone --------------------------------------------
   await db.run(sql`DROP TABLE \`parts_artifacts\`;`)
   await db.run(sql`DROP TABLE \`parts\`;`)
 }
 
-/**
- * Restores the shape, not the content.
- *
- * `parts` and `parts_artifacts` come back empty, and the artifacts that
- * moved onto books are not moved back. This is a one-way change in
- * practice; `down` exists so the migration can be rolled off a database
- * during development, not so a production mistake can be undone.
- */
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
   await db.run(sql`CREATE TABLE \`parts\` (
   	\`id\` integer PRIMARY KEY NOT NULL,

@@ -1,17 +1,5 @@
 import React from 'react'
 
-/**
- * "Continue with Google".
- *
- * A plain link, not a button with a click handler: the flow is a
- * navigation, so it works without JavaScript and the reader can see
- * where it goes. `next` is carried in the query string and validated
- * server-side in the route handler — never trusted from here.
- *
- * The wordmark is inline SVG in Google's own four colours, per their
- * branding guidelines, and is `aria-hidden` because the label beside it
- * already says what the button does.
- */
 export function GoogleSignInButton({ next, label }: { next: string; label: string }) {
   return (
     <a className="oauth-button" href={`/auth/google/start?next=${encodeURIComponent(next)}`}>

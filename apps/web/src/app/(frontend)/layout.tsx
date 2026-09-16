@@ -11,7 +11,6 @@ import { getCurrentUser } from '../../lib/auth'
 import { isGoogleSignInConfigured } from '../../lib/googleOAuth'
 import './styles.css'
 
-// The header reflects who is signed in, so the shell is per-request.
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
@@ -25,9 +24,6 @@ export const metadata = {
 
 export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser()
-  // Null unless analytics is configured *and* this request reached the
-  // canonical public origin — which is what keeps `wrangler dev` and
-  // the `*.workers.dev` URL out of the property (`lib/analytics.ts`).
   const measurementId = analyticsMeasurementId((await headers()).get('host'))
 
   return (
@@ -57,17 +53,8 @@ export default async function FrontendLayout({ children }: { children: React.Rea
           </div>
         </header>
 
-        {/* Only for a signed-out reader, and only when Google is set up.
-            Rendering it otherwise would prompt someone who already has a
-            session, or load Google's script for nothing. */}
         {!user && isGoogleSignInConfigured() ? <GoogleOneTap /> : null}
 
-        {/* The public site only — `/admin` has its own layout and is
-            never measured. `/account` used to be excluded here too;
-            that needed the pathname, which needed a client component,
-            which is what stopped the tag reaching the HTML at all. Its
-            URLs carry ids rather than titles, so measuring them says
-            far less than the book pages already do. */}
         {measurementId ? <GoogleAnalytics measurementId={measurementId} /> : null}
 
         {children}
@@ -79,8 +66,6 @@ export default async function FrontendLayout({ children }: { children: React.Rea
                 <BrandMark />
                 Noble<span>See</span>
               </a>
-              {/* The design's footer carries the editorial promise
-                  rather than a second navigation. */}
               <p className="site-footer__note">
                 Reviewed by an editor before joining the public library.
               </p>

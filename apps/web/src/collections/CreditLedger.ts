@@ -1,19 +1,5 @@
 import type { CollectionConfig } from 'payload'
 
-/**
- * Every credit a reader has ever gained or spent.
- *
- * The reader's `credits` field on Users is the balance the checks read;
- * this is the account of how it got there. Keeping both is a deliberate
- * duplication: summing a ledger on D1 for every delivery decision would
- * be a table scan per request, and a balance nobody can explain is
- * worse than one that is slightly denormalised. Anything that moves the
- * balance writes a row here in the same operation — see
- * `lib/credits.ts`, which is the only thing that may.
- *
- * Nothing here is writable through the API. A reader who could create
- * ledger rows could grant themselves the library.
- */
 export const CreditLedger: CollectionConfig = {
   slug: 'credit-ledger',
   admin: {
@@ -32,7 +18,6 @@ export const CreditLedger: CollectionConfig = {
     delete: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
   },
   indexes: [
-    // Always read as "this reader's history, newest first".
     { fields: ['user', 'createdAt'] },
   ],
   fields: [

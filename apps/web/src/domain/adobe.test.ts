@@ -20,13 +20,10 @@ describe('choosing an OCR locale', () => {
   })
 
   it('maps simplified Chinese to Adobe’s spelling of it', () => {
-    // Adobe's Export PDF enum says `zh-CN`, not `zh-Hans`.
     expect(exportLocaleFor('zh-Hans')).toBe('zh-CN')
   })
 
   it('sends a mixed book to the CJK locale', () => {
-    // Latin under a CJK locale reads far better than CJK under a Latin
-    // one, so the asymmetric failure decides it.
     expect(exportLocaleFor('zh-en')).toBe('zh-Hant')
   })
 
@@ -79,8 +76,6 @@ describe('reading a job status', () => {
   })
 
   it('treats a finished export with no file as a failure', () => {
-    // Nothing downstream could act on it, and reporting `done` would
-    // move the book to `master_ready` with no master.
     expect(readExportStatus({ status: 'done', asset: {} }).state).toBe('failed')
   })
 
@@ -93,8 +88,6 @@ describe('reading a job status', () => {
   })
 
   it('marks a busy service as worth sending again', () => {
-    // Adobe's own wording, request id and all, which is what a book
-    // failed on in production and what nothing retried.
     expect(
       readExportStatus({
         status: 'failed',
@@ -106,14 +99,10 @@ describe('reading a job status', () => {
   })
 
   it('does not retry an export that finished without a file', () => {
-    // The job ran to completion and Adobe says so. Sending the same
-    // pages again is unlikely to produce a different answer.
     expect(readExportStatus({ status: 'done', asset: {} }).retryable).toBe(false)
   })
 
   it('treats an unrecognised status as still running', () => {
-    // Abandoning a job we have already paid for because the vendor added
-    // a status word is the expensive way to be wrong.
     expect(readExportStatus({ status: 'in progress' }).state).toBe('running')
     expect(readExportStatus({ status: 'queued somewhere new' }).state).toBe('running')
     expect(readExportStatus(null).state).toBe('running')
@@ -133,8 +122,6 @@ describe('abandoning a stuck export', () => {
   })
 
   it('never expires a job with no recorded start', () => {
-    // Books submitted before the timestamp existed. Failing them on a
-    // missing field would fail work that is running perfectly well.
     expect(exportHasExpired(null, Date.now())).toBe(false)
     expect(exportHasExpired('not a date', Date.now())).toBe(false)
   })
@@ -159,7 +146,6 @@ describe('deciding what needs an export', () => {
 
 describe('where the master lives', () => {
   it('sits under its own book’s prefix', () => {
-    // The containment rule the download path checks.
     expect(masterKey(7)).toBe('books/7/book/master.docx')
   })
 })
@@ -182,9 +168,6 @@ describe('telling a busy service from an unreadable file', () => {
   })
 
   it('treats an unfamiliar message as permanent', () => {
-    // Recognised transience only. Failing a book that would have
-    // succeeded costs one click; retrying one that never can costs the
-    // transactions three times over, on every such book, for ever.
     expect(isTransientExportFailure('Something entirely new went wrong')).toBe(false)
     expect(isTransientExportFailure('')).toBe(false)
     expect(isTransientExportFailure(null)).toBe(false)

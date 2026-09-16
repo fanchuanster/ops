@@ -43,14 +43,6 @@ import { usageThisMonth } from '../../../../../lib/uploadQuota'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Book details' }
 
-/**
- * The summary page an upload lands on.
- *
- * Everything here was read out of the file. The reader's job is to
- * correct it, answer the one question the file cannot answer — where
- * the book came from — and decide whether they are asking for it to be
- * published.
- */
 export default async function BookDetailsPage({
   params,
 }: {
@@ -65,21 +57,14 @@ export default async function BookDetailsPage({
     .findByID({ collection: 'books', id: Number(id), depth: 1, overrideAccess: true })
     .catch(() => null)
 
-  // Not found and not yours give the same answer: whether a book exists
-  // is not something to leak through a URL someone can guess.
   const ownerId = typeof book?.owner === 'object' ? book?.owner?.id : book?.owner
   if (!book || !ownerId || String(ownerId) !== String(user.id)) notFound()
 
   const collections = await getCollections()
   const draft = book.conversion?.state === 'draft'
-  // The same rule the reader authorizes with: a book published as it
-  // stands has no EPUB and is still read in the browser, and this is
-  // the page its owner opens it from (`domain/publication.ts`).
   const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
   const hasMaster = (book.artifacts ?? []).some((a) => a.format === 'docx')
 
-  // Read only when there is something to decide on. The file is a
-  // fetch from R2 and the page renders on every visit to a book.
   const correctionState = readCorrectionState(book.conversion?.correction?.state)
   const suggestions =
     correctionState === 'ready' ? await loadSuggestions(Number(book.id)) : []
@@ -87,25 +72,9 @@ export default async function BookDetailsPage({
   const usage = isAdmin ? null : await usageThisMonth(payload, user.id)
   const state = book.conversion?.state ?? 'none'
 
-  // An approved book that has stopped converting is finished, and every
-  // step list on this page is then a row of ticks describing a journey
-  // that is over. The lists are hidden rather than the page redesigned,
-  // because a corrected master puts the book back in the pipeline and
-  // the progress list becomes the point of the page again.
   const finished =
     book.review?.state === 'approved' && (state === 'ready' || state === 'none')
 
-  // What was uploaded, and what its owner chose to do with it. Both
-  // decide which stages this book will actually pass through, so they
-  // are read once here and shared by the form and the progress list.
-  // Everything this book can be delivered as. A reader's own upload is
-  // free to send — it is their book (CLAUDE.md section 5.2) — so the
-  // price is zero here without consulting the ledger. The action
-  // re-derives all of it regardless; this only decides what the button
-  // says.
-  // Format and size together: the button greys out anything email
-  // cannot carry (`domain/kindle.ts`), which for an uploader's own scan
-  // is a real possibility rather than a corner case.
   const deliverable = (book.artifacts ?? [])
     .filter((artifact) => isKindleDeliverableFormat(artifact.format))
     .map((artifact) => ({ format: artifact.format, bytes: artifact.bytes }))
@@ -114,17 +83,8 @@ export default async function BookDetailsPage({
   const plan = resolvePlan(sourceKind, book.conversion?.plan)
   const share = shareDescription(book.rightsStatus)
 
-  // Every file this book was made from, which for most books is the one
-  // it was uploaded as. The list is synthesized from the three `source*`
-  // fields when nothing has been filed yet, so a draft shows its file
-  // here exactly as a converted book does (`domain/sources.ts`).
   const sources = readSources(book.conversion ?? {}, book.artifacts)
 
-  // The face the book will wear on a shelf. Shown here because until
-  // now the one person who never saw it was the person who uploaded it:
-  // the cover is rendered after conversion, on pages this book's owner
-  // has no reason to be looking at, and a private upload appears on
-  // none of them at all.
   const uploadedCover = uploadedCoverId(book.cover)
   const generatedCover = book.generatedCover ?? {}
   const coverUrl = coverImageUrl({
@@ -132,9 +92,6 @@ export default async function BookDetailsPage({
     bookId: book.id,
     generated: generatedCover,
   })
-  // Whether this browser could make one. Books uploaded from now on
-  // arrive with a cover already rendered; this is the offer for the
-  // ones that did not, and for a cover that came out wrong.
   const canMakeCover =
     coverSourceFormat((book.artifacts ?? []).map((a) => a.format)) !== null
 
@@ -149,10 +106,6 @@ export default async function BookDetailsPage({
         <Stepper step={uploadStep({ state, reviewState: book.review?.state })} />
       )}
 
-      {/* The file this book came from, kept in view at every stage. The
-          page changes shape as the book converts; which file it is does
-          not, and for a reader with several drafts open that is the one
-          thing worth never having to go and check. */}
       <p className="file-chip">
         <span className={`fmt fmt--${sourceKind === 'text' ? 'txt' : sourceKind}`}>
           {sourceKind === 'text' ? 'txt' : sourceKind}
@@ -169,11 +122,6 @@ export default async function BookDetailsPage({
         </div>
       ) : null}
 
-      {/* The finished book, offered in the order the reading mission
-          puts them in: read it here first, take it away second. Sending
-          is only shown once there is something to send *and* somewhere
-          to send it — otherwise the reader is pointed at the setting
-          that would make it work. */}
       {readable || deliverable.length > 0 ? (
         <p className="book-actions">
           {readable ? (
@@ -215,10 +163,6 @@ export default async function BookDetailsPage({
           originalTitle: book.originalTitle ?? '',
           author: book.author ?? '',
           language: book.language ?? '',
-          // The counted length once there is one, the estimate read
-          // from the file before that. Both are shown the same way and
-          // labelled differently, because the difference is real: the
-          // estimate is what the monthly allowance was charged against.
           pageCount: book.pageCount ?? book.estimatedPages ?? null,
           pagesAreEstimated: !book.pageCount && Boolean(book.estimatedPages),
           collection:
@@ -231,8 +175,6 @@ export default async function BookDetailsPage({
           plan,
           aiCorrection: book.conversion?.aiCorrection === true,
         }}
-        // Flattened in tree order so a sub-shelf appears directly under
-        // the shelf it stands on, indented (`domain/collectionTree.ts`).
         collections={flattenTree(buildTree(collections)).map((node) => ({
           id: Number(node.collection.id),
           title: node.collection.title,
@@ -254,16 +196,8 @@ export default async function BookDetailsPage({
         />
       )}
 
-      {/* Only once the book has been through the pipeline: there is
-          nothing to correct, and nothing to judge, until something has
-          been generated. */}
       {draft ? null : (
         <>
-          {/* Always, now that an image can be uploaded. It was shown
-              only when there was a picture or a page to render one
-              from, which left a book whose only artifact is a master —
-              nothing a browser can rasterize — with no way to have a
-              cover at all. */}
           <section className="cover-panel">
             <h3>Cover</h3>
             <div className="cover-panel__body">
@@ -279,11 +213,6 @@ export default async function BookDetailsPage({
                 </span>
               )}
               <div>
-                {/* An uploaded image wins over every page of the book
-                    (`domain/cover.ts`), so while one is in place the
-                    page picker would be a control that changes
-                    nothing visible. It comes back the moment the
-                    image is removed. */}
                 {uploadedCover ? (
                   <p className="hint">
                     This book is wearing an uploaded image rather than a page of itself.
@@ -295,13 +224,6 @@ export default async function BookDetailsPage({
                       page={chosenCoverPage(generatedCover)}
                       pages={coverCandidatePages(generatedCover)}
                     />
-                    {/* Offered only while there is nothing rendered.
-                        Rasterizing the same opening pages of the same
-                        file twice produces the same pictures, so a
-                        "render again" was a button whose whole effect
-                        was a wait. A render that failed leaves the
-                        state short of `ready`, so the offer stands
-                        exactly where it is still worth something. */}
                     {canMakeCover && !hasRenderedPages(generatedCover) ? (
                       <p className="cover-panel__make">
                         <MakeCoverButton
@@ -312,9 +234,6 @@ export default async function BookDetailsPage({
                     ) : null}
                   </>
                 )}
-                {/* Yours to set: a cover is not a claim about the
-                    book, and you are the one holding the copy it was
-                    scanned from. */}
                 <CoverImageUpload
                   bookId={Number(book.id)}
                   hasUploadedCover={uploadedCover !== null}
@@ -324,29 +243,16 @@ export default async function BookDetailsPage({
             </div>
           </section>
 
-          {/* Before the master, because it is what the master is built
-              from — and because the answer to "the OCR got this wrong"
-              is frequently a different source rather than a corrected
-              master. */}
           <BookSources
             bookId={Number(book.id)}
             sources={sources}
             selected={sourceKind}
             hasMaster={hasMaster}
-            // Switching mid-flight would compare-and-swap against a
-            // state a worker is holding. The control waits rather than
-            // racing it.
             converting={isConversionState(state) && isInFlight(state)}
           />
 
           <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />
 
-          {/* Only for a book whose uploader asked for it. Correction is
-              a third party reading their text, so a book that never
-              consented shows nothing here at all rather than an offer
-              to consent after the fact — that question belongs on the
-              upload screen, beside the disclosure of who receives the
-              file (CLAUDE.md section 6.1). */}
           {book.conversion?.aiCorrection === true ? (
             <CorrectionReview
               bookId={Number(book.id)}

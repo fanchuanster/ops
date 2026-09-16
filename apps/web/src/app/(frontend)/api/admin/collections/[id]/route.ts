@@ -6,23 +6,6 @@ import { adminFromRequest, unauthorized } from '../../../../../../lib/apiAuth'
 import { logError } from '../../../../../../lib/logError'
 import { revalidateCuration } from '../../shared'
 
-/**
- * One shelf, for a machine.
- *
- * `GET` to read it, `PATCH` to rename it, re-describe it, re-file it
- * under another shelf, or move it among its siblings.
- *
- * `parent` is writable and the nesting rules are *not* checked here.
- * They live in a hook on the collection — a shelf may not be its own
- * ancestor and the tree is three levels deep at most — precisely so
- * they hold for every door into the table. This route is the third
- * door, and it walks through the same gate as the other two.
- *
- * Authentication is a per-user API key or an ordinary session, then the
- * `admin` role; see `app/(frontend)/api/admin/books/[id]/route.ts` for
- * why the key belongs to a person rather than to the machine.
- */
-
 export const dynamic = 'force-dynamic'
 
 export async function GET(
@@ -77,9 +60,6 @@ export async function PATCH(
     await revalidateCuration()
     return Response.json({ collection: serialize(updated) })
   } catch (error) {
-    // The nesting hook refuses with a sentence a person can act on —
-    // "a collection cannot stand on itself" — so it is passed through
-    // rather than flattened into a 500.
     if (error instanceof APIError) {
       return Response.json({ error: error.message }, { status: error.status || 400 })
     }

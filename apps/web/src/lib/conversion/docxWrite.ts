@@ -1,40 +1,14 @@
-/**
- * Generate the editable DOCX master from a structured document.
- *
- * The DOCX is the source of truth for everything downstream (CLAUDE.md
- * section 5): the EPUB is generated from the *approved* master, never
- * from the scan. So this file's job is to produce something an editor
- * can actually work in — real named styles rather than direct
- * formatting, so that a proofreader changing how verse looks changes it
- * everywhere at once.
- *
- * Ported from `services/converter/app/docx/builder.py` on 2026-08-26.
- * python-docx is not available on a Worker and is not needed: what it
- * was doing here was writing a fixed set of styles and one paragraph per
- * block, which is a template and a zip.
- *
- * The style *names* are the contract with `docxRead.ts`. The styleIds
- * are Word's convention (the name with spaces removed) and matter only
- * inside the file.
- */
-
 import { zipSync, strToU8 } from 'fflate'
 
 import { type BlockKind, type Document, blockText } from '../../domain/document'
 import { escapeXml, stripInvalidXmlChars } from './xml'
 
-// Latin and CJK are bound separately in OOXML. Setting only the Latin
-// face leaves Chinese to whatever the reader's Word falls back to, which
-// is how a carefully typeset Chinese document ends up mismatched.
 const LATIN_FONT = 'Times New Roman'
 const CJK_FONT = '宋体'
 const CJK_HEADING_FONT = '黑体'
 
-/** Points → half-points, the unit `w:sz` is in. */
 const halfPoints = (pt: number) => String(Math.round(pt * 2))
-/** Points → twips, the unit paragraph spacing and indents are in. */
 const twips = (pt: number) => String(Math.round(pt * 20))
-/** A line-spacing multiple, where Word's single line is 240. */
 const lineHeight = (multiple: number) => String(Math.round(multiple * 240))
 
 const STYLE_FOR: Record<BlockKind, string> = {
@@ -49,14 +23,12 @@ const STYLE_FOR: Record<BlockKind, string> = {
 
 const REFERENCE_STYLE = 'NobleSee Reference'
 
-/** The name with spaces removed, which is what Word itself does. */
 function styleId(name: string): string {
   return name.replace(/\s+/g, '')
 }
 
 interface StyleSpec {
   name: string
-  /** Word stores built-in heading names lower-cased; `docxRead` undoes it. */
   internalName?: string
   size: number
   align: 'left' | 'center' | 'right' | 'both'
@@ -103,8 +75,6 @@ const STYLES: StyleSpec[] = [
     bold: true,
     cjk: CJK_HEADING_FONT,
   },
-  // Verse lines carry no space between them: the gap belongs between
-  // poems, not between a poem's own lines.
   { name: 'NobleSee Verse', size: 11, align: 'center', before: 0, after: 0, lineSpacing: 1.5 },
   { name: 'NobleSee Attribution', size: 10, align: 'right', before: 6, after: 0, italic: true },
   { name: REFERENCE_STYLE, size: 9, align: 'right', before: 2, after: 6 },
@@ -116,8 +86,6 @@ const STYLES: StyleSpec[] = [
     before: 0,
     after: 6,
     lineSpacing: 1.5,
-    // Chinese prose indents the first line by two characters, which at
-    // 11pt is 22pt.
     firstLineIndent: 22,
   },
 ]
@@ -245,19 +213,12 @@ export function buildDocx(doc: Document, author?: string | null): Uint8Array {
     }
 
     if (block.kind === 'section') {
-      // No page break: a section head divides a chapter, it does not
-      // start one. Word's built-in style, so the master keeps a real
-      // outline — one an editor can navigate and restyle, and one the
-      // EPUB's table of contents can be built from.
       flushRef()
       parts.push(paragraphXml(block.lines[0] ?? '', 'Heading 2'))
       continue
     }
 
     if (block.kind === 'attribution') {
-      // The poem's reference is emitted after its attribution, as the
-      // printed page sets it, even though it belongs to the poem
-      // structurally.
       parts.push(paragraphXml(block.lines[0] ?? '', STYLE_FOR.attribution))
       if (block.sourceRef) pendingRef = (pendingRef ?? '') + block.sourceRef
       flushRef()
@@ -268,8 +229,6 @@ export function buildDocx(doc: Document, author?: string | null): Uint8Array {
     const style = STYLE_FOR[block.kind]
 
     if (block.kind === 'body') {
-      // Prose is one paragraph; the printed line breaks were the
-      // measure, not the author's.
       parts.push(paragraphXml(block.lines.join(''), style))
     } else {
       for (const line of block.lines) parts.push(paragraphXml(line, style))
@@ -285,8 +244,6 @@ export function buildDocx(doc: Document, author?: string | null): Uint8Array {
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
     `<w:body>${parts.join('')}</w:body></w:document>`
 
-  // Always written, even when empty: a master that claims some library
-  // wrote it is both wrong and something a round trip would read back.
   const byline = author ?? doc.author ?? ''
 
   return zipSync(

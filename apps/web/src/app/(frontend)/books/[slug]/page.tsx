@@ -15,18 +15,8 @@ import { ownsBook } from '../../../../lib/credits'
 
 export const dynamic = 'force-dynamic'
 
-/** Order shown to readers: EPUB first, because EPUB is the point. */
 const FORMAT_ORDER = ['epub', 'pdf', 'docx']
 
-/*
-  Badges, not links. A reader should be able to see what a book is
-  available as before signing in — otherwise the page is silent about
-  the thing it is offering. The badge is the same `.fmt` chip the drop
-  zone and the My Books list use, so a format is named identically
-  wherever it appears.
-*/
-
-/** Rights, in a reader's words rather than the stored enum. */
 const RIGHTS_LABEL: Record<string, string> = {
   public_domain: 'Public domain',
   licensed: 'Licensed',
@@ -53,16 +43,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function BookPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  // With the session, so an uploader can open their own private book's
-  // page. Without it the lookup is anonymous and their own book reads
-  // as missing.
   const reader = await getCurrentUser()
   const book = await getBookBySlug(slug, reader)
   if (!book) notFound()
 
-  // The uploaded cover first, then the chosen page of the book. Only
-  // when there is neither does the title itself stand in
-  // (`domain/cover.ts`).
   const cover = coverImageUrl({
     uploadedId: uploadedCoverId(book.cover),
     bookId: book.id,
@@ -75,22 +59,14 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
     .filter((a) => a.downloadable !== false)
     .sort((a, b) => FORMAT_ORDER.indexOf(a.format) - FORMAT_ORDER.indexOf(b.format))
 
-  // Not just the EPUB. A book published as it stands has only its own
-  // pages and is still read here, in the browser — the same rule the
-  // reader authorizes with, so the button never offers a page that then
-  // refuses (`domain/publication.ts`).
   const readable = readingFormat(artifacts.map((a) => a.format)) !== null
   const distributable = isPubliclyDistributable(book.rightsStatus)
 
-  // Stored on the book, but recomputed as a fallback so a record saved
-  // before the price rule existed still shows something honest.
   const price = book.priceCredits ?? priceInCredits(book.pageCount)
 
   const ownerId = typeof book.owner === 'object' ? book.owner?.id : book.owner
   const isOwnUpload = Boolean(ownerId) && String(ownerId) === String(reader?.id)
 
-  // Only to decide what the send control should say. The action
-  // re-checks all of it, so this is presentation, not authorization.
   const payload = await getPayload({ config })
   const alreadyOwned = reader ? await ownsBook(payload, reader.id, book.id) : false
 
@@ -99,12 +75,6 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
       <article>
         <header className="book-head">
           <div className="book-card__cover">
-            {/* The alt read the Media document's own `alt` before, and
-                that was only ever `coverAltFor(book.title)` — what an
-                upload stores (`actions/cover.ts`). Deriving it saves
-                populating a relationship for one string, and says the
-                same thing whether the picture is an uploaded image or a
-                page of the book. */}
             {cover ? (
               <img src={cover} alt={coverAltFor(book.title)} />
             ) : (
@@ -128,9 +98,6 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
               {book.language ? <span>{LANGUAGE_LABEL[book.language] ?? book.language}</span> : null}
               {book.pageCount ? <span>{`${book.pageCount} pages`}</span> : null}
               <span>{RIGHTS_LABEL[book.rightsStatus] ?? book.rightsStatus}</span>
-              {/* The price is a property of the book, like its length —
-                  visible before signing in, so nobody discovers the cost
-                  only after committing to the book. */}
               <span className="meta__price">
                 {isOwnUpload
                   ? 'Your upload — free to send'
@@ -148,12 +115,6 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
           <p className="locked">This book is not available for distribution.</p>
         ) : (
           <div className="book-actions">
-            {/* No "Read online" button. Opening a book *is* reading it —
-                every shelf tile links straight to the reader, and this
-                page is where a reader arrives from inside it to see the
-                rights, the price and how to send it to a device. A
-                button back to the page they came from would be
-                furniture. */}
             {readable ? null : (
               <span className="locked">No readable edition has been generated yet.</span>
             )}
@@ -172,9 +133,6 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
               ) : kindleReady && reader ? (
                 <SendToKindleButton
                   bookId={book.id}
-                  // The size travels with the format so the button can
-                  // grey out what email cannot carry, rather than
-                  // offering a send the server will refuse.
                   formats={artifacts
                     .filter((a) => isKindleDeliverableFormat(a.format))
                     .map((a) => ({ format: a.format, bytes: a.bytes }))}

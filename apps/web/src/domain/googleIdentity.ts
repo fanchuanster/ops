@@ -1,17 +1,3 @@
-/**
- * Rules for signing a reader in with Google.
- *
- * The security of "sign in with Google" is almost entirely in two
- * decisions — whether to trust the claims that came back, and whether
- * they may be attached to an account that already exists — so both live
- * here, framework-independent and tested, rather than inside a route
- * handler where they would be exercised only by clicking through a
- * browser.
- *
- * Framework-independent, like everything in `src/domain`.
- */
-
-/** The claims we care about from Google's ID token. */
 export interface GoogleClaims {
   iss?: unknown
   aud?: unknown
@@ -24,27 +10,14 @@ export interface GoogleClaims {
   picture?: unknown
 }
 
-/** A verified Google identity, once the claims have passed. */
 export interface GoogleProfile {
-  /** Google's stable subject id. The account's real identifier. */
   googleId: string
   email: string
   emailVerified: boolean
   displayName?: string
-  /** Google's profile picture, if it gave us a usable one. */
   avatarUrl?: string
 }
 
-/**
- * Accept a profile picture URL only if it is plainly an https URL.
- *
- * The claim arrives inside a token we have already established Google
- * signed, so this is not the load-bearing check — it is a refusal to
- * put an arbitrary string into an `<img src>` on the strength of "the
- * envelope was genuine". `https:` only, so a `data:` or `javascript:`
- * value can never reach the attribute even if one day the token does
- * not come from where we think it does.
- */
 function usableAvatarUrl(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value) return undefined
   try {
@@ -66,26 +39,8 @@ export type ClaimsRejection =
   | 'no_subject'
   | 'no_email'
 
-/**
- * Google issues tokens under both spellings, and both are legitimate.
- */
 const GOOGLE_ISSUERS = new Set(['accounts.google.com', 'https://accounts.google.com'])
 
-/**
- * Check an ID token's claims.
- *
- * This does not verify the token's *signature*, and does not need to.
- * The token is fetched by the server directly from Google's token
- * endpoint over TLS, authenticated with the client secret, and never
- * passes through the browser — the case OpenID Connect Core §3.1.3.7
- * explicitly allows TLS server validation to stand in for signature
- * validation. What still has to be checked is that the token is *for
- * us*, is current, and answers the request we actually made, because
- * none of that follows from the transport.
- *
- * `now` is passed in rather than read from the clock so expiry is
- * testable.
- */
 export function verifyGoogleClaims({
   claims,
   clientId,
@@ -95,7 +50,6 @@ export function verifyGoogleClaims({
 }: {
   claims: GoogleClaims
   clientId: string
-  /** The nonce this login started with. */
   nonce: string
   now: Date
   leewaySeconds?: number
@@ -104,8 +58,6 @@ export function verifyGoogleClaims({
     return { ok: false, reason: 'wrong_issuer' }
   }
 
-  // A token minted for a different OAuth client is a valid Google token
-  // and still must not sign anyone in here.
   if (claims.aud !== clientId) {
     return { ok: false, reason: 'wrong_audience' }
   }
@@ -115,9 +67,6 @@ export function verifyGoogleClaims({
     return { ok: false, reason: 'expired' }
   }
 
-  // Binds this token to the login that started in this browser. Without
-  // it, a token obtained elsewhere could be replayed into someone
-  // else's session.
   if (typeof claims.nonce !== 'string' || claims.nonce !== nonce) {
     return { ok: false, reason: 'nonce_mismatch' }
   }
@@ -135,7 +84,6 @@ export function verifyGoogleClaims({
     profile: {
       googleId: claims.sub,
       email: claims.email.trim().toLowerCase(),
-      // Anything other than a literal true is treated as unverified.
       emailVerified: claims.email_verified === true,
       displayName: typeof claims.name === 'string' ? claims.name.trim() : undefined,
       avatarUrl: usableAvatarUrl(claims.picture),
@@ -143,7 +91,6 @@ export function verifyGoogleClaims({
   }
 }
 
-/** An account as far as this decision is concerned. */
 export interface ExistingAccount {
   id: string | number
   email: string
@@ -158,45 +105,24 @@ export type SignInAction =
 
 export type SignInRefusal = 'email_unverified' | 'linked_to_other_account'
 
-/**
- * Decide what a verified Google identity means for our accounts.
- *
- * The dangerous case is the second one — a Google identity arriving with
- * an email that already has a password account here. Linking them is
- * what readers expect, and it is safe *only* because Google says the
- * address is verified. Without that check, anyone could register a
- * Google account claiming someone else's address and take over their
- * NobleSee account by clicking "Sign in with Google". So an unverified
- * email is refused outright rather than being allowed to create a
- * separate account, which would leave two accounts fighting over one
- * address.
- */
 export function decideGoogleSignIn({
   profile,
   byGoogleId,
   byEmail,
 }: {
   profile: GoogleProfile
-  /** An account already linked to this Google id, if any. */
   byGoogleId?: ExistingAccount | null
-  /** An account holding this email address, if any. */
   byEmail?: ExistingAccount | null
 }): SignInAction {
   if (!profile.emailVerified) {
     return { action: 'refuse', reason: 'email_unverified' }
   }
 
-  // The Google subject id is the identity, not the address. A reader who
-  // changed their email at Google is still the same person, and is
-  // signed into the account they already have.
   if (byGoogleId) {
     return { action: 'sign_in', accountId: byGoogleId.id }
   }
 
   if (byEmail) {
-    // Somebody else's Google account is already linked to this address.
-    // Refuse rather than move the link: silently re-pointing it would
-    // hand this address's account to whoever signed in most recently.
     if (byEmail.googleId && byEmail.googleId !== profile.googleId) {
       return { action: 'refuse', reason: 'linked_to_other_account' }
     }
@@ -206,7 +132,6 @@ export function decideGoogleSignIn({
   return { action: 'create', profile }
 }
 
-/** What a refused sign-in should tell the reader. */
 export const SIGN_IN_REFUSAL_MESSAGES: Record<SignInRefusal | ClaimsRejection, string> = {
   email_unverified:
     'Google has not verified the email address on that account, so we cannot use it to sign in. Verify it with Google, or sign in with a password instead.',

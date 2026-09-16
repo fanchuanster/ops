@@ -1,14 +1,3 @@
-/**
- * The two-phase pipeline.
- *
- * The behaviour worth protecting is that correcting a DOCX master costs
- * a rebuild of the formats and nothing else. Everything about the shape
- * of these states exists to make that true — if editing a master ever
- * re-ran the export, the project would be paying Adobe again to re-read
- * pages it had already read, and discarding the correction that
- * prompted it.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -32,9 +21,6 @@ import {
 
 describe('a failure nothing will retry', () => {
   it('rescues a book published as it stands', () => {
-    // The bug: a text upload was converted by default, a converter
-    // refused it, and switching it to "as it stands" left it failed —
-    // unreadable and unsubmittable over a conversion nobody wanted.
     expect(
       recoversFromFailure({ state: 'failed', sourceKind: 'text', plan: 'as_is' }),
     ).toBe(true)
@@ -52,9 +38,6 @@ describe('a failure nothing will retry', () => {
   })
 
   it('never re-settles a finished book', () => {
-    // A converted book flipped back to `as_is` is a metadata change, not
-    // a request to rebuild anything — its EPUB may already have been
-    // sent to somebody's device.
     expect(recoversFromFailure({ state: 'ready', sourceKind: 'pdf', plan: 'as_is' })).toBe(false)
     expect(recoversFromFailure({ state: 'queued', sourceKind: 'text', plan: 'as_is' })).toBe(false)
   })
@@ -62,10 +45,6 @@ describe('a failure nothing will retry', () => {
 
 describe('entering the queue does not take a book out of the library', () => {
   it('keeps a book that already has an edition published', () => {
-    // The bug: converting a published PDF is the ordinary road to an
-    // EPUB, and it dropped the book out of `published` — so the catalog
-    // query stopped returning it and readers lost a book that was
-    // sitting in storage the whole time.
     expect(statusOnQueue(['pdf'])).toBe('published')
     expect(statusOnQueue(['txt'])).toBe('published')
     expect(statusOnQueue(['epub', 'docx'])).toBe('published')
@@ -76,8 +55,6 @@ describe('entering the queue does not take a book out of the library', () => {
   })
 
   it('does not count the master as an edition', () => {
-    // The DOCX is the editorial source of truth, never a reader
-    // download — a book that has only one has nothing to read yet.
     expect(statusOnQueue(['docx'])).toBe('in_production')
   })
 })
@@ -108,9 +85,6 @@ describe('what a converter may claim', () => {
 })
 
 describe('claiming changes the state', () => {
-  // The claim is a compare-and-swap on the old state. If the in-progress
-  // state equalled the claimable one the swap would be a no-op and two
-  // converters could hold the same book.
   it('moves off the claimable state in both phases', () => {
     for (const state of ['ocr_ready', 'master_ready'] as ConversionState[]) {
       const kind = claimableAs(state)!
@@ -121,8 +95,6 @@ describe('claiming changes the state', () => {
 
 describe('finishing a phase', () => {
   it('does not call a book ready when only the master is built', () => {
-    // Phase 1 produces a DOCX, which no reader can read. Calling this
-    // 'ready' would publish a book with no EPUB.
     expect(completedState('master')).toBe('master_ready')
   })
 
@@ -141,9 +113,6 @@ describe('editing the master', () => {
   })
 
   it('rebuilds without re-running OCR', () => {
-    // The point of the split: the new state is phase 2's, so phase 1 --
-    // the expensive half we have already paid Google for -- does not
-    // run again.
     const after = stateAfterMasterEdit('ready')!
     expect(claimableAs(after)).toBe('formats')
   })
@@ -168,8 +137,6 @@ describe('deciding to start an export', () => {
   })
 
   it('does not start a second export for one already running', () => {
-    // A retried poll must not submit the same book again -- that is a
-    // second Adobe bill for one book.
     expect(
       needsMasterRun({ state: 'queued', exportJob: 'https://pdf-services.adobe.io/ops/id/abc' }),
     ).toBe(false)
@@ -184,11 +151,6 @@ describe('putting a book back in the queue', () => {
   const JOB = 'https://pdf-services.adobe.io/ops/id/abc'
 
   it('drops the handle from the export that failed', () => {
-    // The bug: every failure path kept `exportJob`, and only
-    // `attachMaster` ever cleared it. So a retried book was queued
-    // holding a job nothing would poll, `needsMasterRun` refused to
-    // start a new one, and `advanceRunningMaster` only looks at `ocr` —
-    // "Waiting to be converted", for ever, silently.
     expect(releasedExportHandle('queued')).toEqual({
       exportJob: null,
       exportAsset: null,
@@ -198,10 +160,6 @@ describe('putting a book back in the queue', () => {
   })
 
   it('gives a hand-requeued book a fresh automatic retry budget', () => {
-    // An automatic retry is the pipeline guessing; a person pressing Try
-    // again is somebody deciding. A book that had exhausted its retries
-    // would otherwise be requeued into a state where the next timeout
-    // failed it instantly.
     expect(releasedExportHandle('queued').exportRetries).toBe(0)
   })
 
@@ -212,10 +170,6 @@ describe('putting a book back in the queue', () => {
   })
 
   it('leaves a running export alone', () => {
-    // `startMasterFor` writes the state and the handle in one update, so
-    // a live export is always `ocr`. Clearing unconditionally would
-    // orphan a job we have paid for the moment somebody saved a title
-    // while it was running.
     expect(releasedExportHandle('ocr')).toEqual({})
     expect(releasedExportHandle('master_ready')).toEqual({})
     expect(releasedExportHandle('ready')).toEqual({})
@@ -225,9 +179,6 @@ describe('putting a book back in the queue', () => {
 
 describe('retrying a failure', () => {
   it('rebuilds only the formats when a master survived', () => {
-    // The expensive half already happened. Restarting from the
-    // beginning would be a second Document AI bill for pages already
-    // read, to rebuild a file sitting in storage.
     expect(retryStateFor({ hasMasterArtifact: true })).toBe('master_ready')
   })
 
@@ -266,15 +217,6 @@ describe('validating stored values', () => {
 })
 
 describe('review does not stand in front of phase 2', () => {
-  /*
-   * Phase 2 was held until an administrator approved the book, until
-   * 2026-08-17. The gate was the wrong way round: what a reviewer reads
-   * is the finished EPUB, so holding the EPUB for the review left them
-   * nothing to read -- and an uploader who never submitted their private
-   * book, which section 6.2 explicitly permits, could never read it at
-   * all. Publication is where review belongs, and the Books collection
-   * is where it is enforced.
-   */
   it('builds the formats for an unsubmitted private upload', () => {
     expect(claimFor({ state: 'master_ready', sourceKind: 'pdf', existingFormats: [] })).toEqual({
       kind: 'formats',
@@ -296,46 +238,30 @@ describe('review does not stand in front of phase 2', () => {
   })
 
   it('does not treat a book at the hinge as in flight', () => {
-    // Nothing is running at `master_ready` -- a converter has to claim
-    // it. That was true when review held it there and stays true now.
     expect(isInFlight('master_ready')).toBe(false)
   })
 })
 
 describe('choosing which formats to build', () => {
   it('builds only the EPUB for a scanned PDF', () => {
-    // The book's PDF is the scan itself, so rendering one from the
-    // master would replace a faithful picture of the original with
-    // something that looks nothing like it.
     expect(formatsToBuild({ sourceKind: 'pdf', existingFormats: [] })).toEqual(['epub'])
   })
 
   it('builds only the EPUB for a DOCX upload', () => {
-    // Not a PDF as well. Nothing renders one from a master any more —
-    // that was our own typography frozen flat, strictly worse than the
-    // EPUB beside it (`domain/publication.ts`).
     expect(formatsToBuild({ sourceKind: 'docx', existingFormats: [] })).toEqual(['epub'])
   })
 
   it('builds nothing for an EPUB upload, and so is not claimable', () => {
-    // It is already the reading edition. Handing a converter an empty
-    // job list would have it report success on work it never did.
     expect(formatsToBuild({ sourceKind: 'epub', existingFormats: [] })).toEqual([])
     expect(claimFor({ state: 'master_ready', sourceKind: 'epub', existingFormats: [] })).toBeNull()
   })
 
   it('rebuilds everything the book already has when the master is edited', () => {
-    // The reason this matters: an EPUB built from the old master still
-    // carries the errors the edit removed, and nothing would ever
-    // rebuild it if only the missing formats were regenerated.
     const formats = formatsToBuild({ sourceKind: 'docx', existingFormats: ['docx', 'epub'] })
     expect(formats).toContain('epub')
   })
 
   it('never rebuilds a PDF a book still carries, because none was built', () => {
-    // A `pdf` on a DOCX-sourced book could only be a rendering from
-    // before 2026-08-26. It is left exactly where it is: still
-    // downloadable, never regenerated, and not treated as work.
     expect(
       formatsToBuild({ sourceKind: 'docx', existingFormats: ['docx', 'epub', 'pdf'] }),
     ).toEqual(['epub'])
@@ -352,7 +278,6 @@ describe('choosing which formats to build', () => {
   })
 
   it('does not give a PDF source a rendered PDF, even if one is listed', () => {
-    // A stale row from before the split. The source rule wins.
     expect(formatsToBuild({ sourceKind: 'pdf', existingFormats: ['epub', 'pdf'] })).toEqual(['epub'])
   })
 })
@@ -376,8 +301,6 @@ describe('which step of the flow a book is standing on', () => {
     }
   })
 
-  // A failure belongs to the phase that was running, not to a step of
-  // its own — that is the phase the reader will restart.
   it('keeps a failure on Process rather than inventing a step', () => {
     expect(uploadStep({ state: 'failed' })).toBe(1)
   })
@@ -388,9 +311,6 @@ describe('which step of the flow a book is standing on', () => {
     expect(uploadStep({ state: 'ready', reviewState: 'rejected' })).toBe(2)
   })
 
-  // Submitting is optional (CLAUDE.md section 6.2), so a private upload
-  // may sit at Review forever. Lighting Publish for it would claim
-  // something of a book its owner never offered to anyone.
   it('reaches Publish only on an approved review', () => {
     expect(uploadStep({ state: 'ready', reviewState: 'approved' })).toBe(3)
     expect(uploadStep({ state: 'none', reviewState: 'unsubmitted' })).toBe(2)

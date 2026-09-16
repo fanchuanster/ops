@@ -1,12 +1,3 @@
-/**
- * The uploader's share.
- *
- * The case that matters most is the boring-looking one: a 1-credit book
- * at 33%. Paid as whole credits it earns nothing, ever, no matter how
- * many times the book is sent — and most books cost 1 or 2 credits. The
- * points accumulator is what makes the percentage real.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -33,7 +24,6 @@ describe('the rates', () => {
   })
 
   it('is nothing for anything not publicly distributable', () => {
-    // Nobody else can be sent these, so there is nothing to share.
     for (const status of ['user_owned', 'unknown', 'restricted'] as const) {
       expect(sharePercent(status)).toBe(0)
     }
@@ -48,15 +38,12 @@ describe('earning on one delivery', () => {
   })
 
   it('pays nobody when the book has no uploader', () => {
-    // A library book entered by staff.
     expect(
       shareForDelivery({ creditsSpent: 7, rightsStatus: 'public_domain', hasUploader: false }),
     ).toBe(0)
   })
 
   it('pays nothing on a free delivery', () => {
-    // The uploader sending their own book costs nothing, so there is
-    // nothing to take a share of.
     expect(earn(0, 'licensed')).toBe(0)
   })
 
@@ -89,8 +76,6 @@ describe('settling points into credits', () => {
   })
 
   it('adds up to the exact percentage over many deliveries', () => {
-    // The whole point: a 1-credit public-domain book sent 100 times
-    // earns 33 credits, not 0.
     let carry = 0
     let credits = 0
     for (let i = 0; i < 100; i += 1) {

@@ -1,23 +1,3 @@
-/**
- * EPUB 3 from a reconstructed Document.
- *
- * EPUB is the primary format (CLAUDE.md section 10) because it is the
- * one that reflows: the *device* picks the font size, the margins and
- * the line spacing, and a book that fights that is a PDF wearing a
- * different extension. So this builder deliberately sets no page size,
- * no font size and no measure — only the structural typography that
- * would be wrong to lose, like verse line breaks.
- *
- * One XHTML document per chapter rather than one per book. It gives the
- * reader a real table of contents to navigate by, and it keeps any
- * single document small enough that a cheap e-reader can paginate it
- * without stalling.
- *
- * Ported from `services/converter/app/epub/builder.py` on 2026-08-26.
- * ebooklib does not run on a Worker; an EPUB is a zip of XHTML with two
- * navigation documents, which is a template rather than a library.
- */
-
 import { zipSync, strToU8 } from 'fflate'
 
 import { BOOK_CSS, chapterHtml, chapters, escapeHtml, sections } from '../../domain/bookHtml'
@@ -30,11 +10,6 @@ const CONTAINER_XML =
   '<rootfiles><rootfile full-path="EPUB/content.opf"' +
   ' media-type="application/oebps-package+xml"/></rootfiles></container>'
 
-/**
- * Traditional Chinese unless we are told otherwise. Getting this wrong
- * makes a reader pick Japanese glyph forms for shared characters, which
- * looks subtly wrong on every page.
- */
 const LANGUAGE = 'zh-Hant'
 
 function xhtml(title: string, body: string): string {
@@ -125,11 +100,6 @@ function contentOpf(
     ),
   ].join('')
 
-  // The text is the first page, not the table of contents. The nav
-  // document stays in the manifest — EPUB 3 requires it, and it is what
-  // feeds the reader's chapter list — it just is not where the book
-  // opens. Landing a reader on a contents page is a small insult
-  // repeated every time they open the book.
   const spine = chapterFiles.map((_, index) => `<itemref idref="ch${index + 1}"/>`).join('')
 
   const creator = document.author
@@ -154,7 +124,6 @@ function contentOpf(
 
 export interface EpubOptions {
   identifier?: string
-  /** Injectable so a test can assert on bytes rather than on a clock. */
   modified?: string
 }
 
@@ -182,11 +151,6 @@ export function buildEpub(document: Document, { identifier, modified }: EpubOpti
       xhtml(title, chapterHtml(title, blocks, opening)),
     )
 
-    // Two levels deep where the book has two. A chapter with section
-    // heads gets them as children, so a reader navigating a four-hundred
-    // page classic lands on the passage rather than at the top of the
-    // chapter containing it — which is the whole difference between a
-    // table of contents and a list of files.
     toc.push({
       href: file,
       title,
@@ -203,10 +167,6 @@ export function buildEpub(document: Document, { identifier, modified }: EpubOpti
   files['EPUB/content.opf'] = strToU8(contentOpf(id, document, chapterFiles, stamp))
   files['META-INF/container.xml'] = strToU8(CONTAINER_XML)
 
-  // `mimetype` must be the first entry in the archive and must be
-  // stored, not deflated. A reader that checks — and Kindle's converter
-  // does — rejects the file outright otherwise, which is why this is
-  // built as an ordered object with the entry inserted first.
   return zipSync(
     {
       mimetype: [strToU8('application/epub+zip'), { level: 0 }],

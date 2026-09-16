@@ -1,40 +1,9 @@
-/*
- * NobleSee — reading-first design tokens.
- *
- * The whole product thesis is that these books are currently unpleasant
- * to read, so typography is not decoration here; it is the feature. Two
- * consequences run through this file:
- *
- *   1. Serif by default, with a Traditional Chinese face named FIRST in
- *      the stack. A Latin-first stack makes the browser fall back to a
- *      system CJK font chosen for UI, not for prose, and the result is
- *      the cramped rendering NobleSee exists to fix.
- *   2. Generous line-height and a measure capped in `ch`, so a line
- *      never runs longer than the eye can track back from.
- *
- * One palette, light. There was a three-state light/auto/dark control
- * until 2026-08-14; it is gone, and with it the pre-paint script that
- * replayed the choice before first render. These books are set on paper
- * and read like paper.
- *
- * The values below are the Figma palette (2026-08-21). Lora and Inter
- * come from that design too, but they are named *after* the CJK faces,
- * not before: neither has a single Han glyph, so a Lora-first stack
- * would hand 論語 back to whatever UI font the system picks — exactly
- * the failure rule 1 exists to prevent. Lora sets the Latin headings,
- * Noto Serif TC sets everything Chinese, and the cascade sorts it out
- * per glyph.
- */
-
 @import url("https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Inter:wght@400;500;600&display=swap");
 
 :root {
   --paper: #f2ede3;
   --paper-raised: #ffffff;
 
-  /* A second ground, one step darker than the page, for a full-bleed
-     band that has to separate itself from the paper without becoming a
-     card. Only the "how it works" strip uses it. */
   --paper-band: #eae3d6;
 
   --ink: #23201b;
@@ -46,9 +15,6 @@
   --accent-muted: #a07840;
   --accent-soft: #f0ebe0;
 
-  /* Confirmation green. Deliberately its own token rather than reusing
-     the accent: "done" is a different thing from "this is the action",
-     and the accent is already the reading-brown the site is built on. */
   --done: #5a8c5a;
   --done-soft: #eef5ee;
   --done-rule: #bcd6bc;
@@ -58,24 +24,15 @@
   --font-sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", Inter,
     system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Latin-first, for the display headings the Figma sets in Lora. Still
-     ends in the CJK faces, so a mixed title never loses its Han. */
   --font-display: Lora, Georgia, "Noto Serif TC", "Source Han Serif TC", serif;
 
   --measure: 34rem;
 
-  /* The design's `max-w-5xl`. It was 68rem until 2026-08-21, which ran
-     every page four rems wider than the Figma sets them. */
   --page: 64rem;
   --radius: 3px;
 
-  /* The design rounds cards far more than the 3px the text UI uses. Its
-     own token, so a card and a button do not have to share a radius. */
   --radius-card: 1rem;
 
-  /* And form controls sit between the two: the design rounds every
-     input, select and boxed control to 8px. Its own token for the same
-     reason — a text field is neither a card nor a rule. */
   --radius-control: 0.5rem;
 }
 
@@ -112,14 +69,11 @@ h3 {
   letter-spacing: -0.01em;
 }
 
-/* CJK titles want no negative tracking — it closes up the glyphs. */
 :lang(zh) h1,
 :lang(zh) h2,
 .cjk {
   letter-spacing: 0;
 }
-
-/* --- shell ------------------------------------------------------- */
 
 .page {
   max-width: var(--page);
@@ -127,12 +81,6 @@ h3 {
   padding: 0 1.5rem;
 }
 
-/*
- * Sticky, translucent, and blurred over whatever scrolls under it. The
- * blur is the reason the background is rgba rather than a token: a
- * solid --paper would be indistinguishable from the page and the bar
- * would vanish the moment it stopped having a shadow.
- */
 .site-header {
   position: sticky;
   top: 0;
@@ -168,9 +116,6 @@ h3 {
   color: var(--accent);
 }
 
-/* The mark keeps its designed geometry: an 18px box, never scaled by a
-   descendant rule. The image is 86px square, so the browser is drawing
-   it down and it stays sharp on a 2x screen. */
 .brand-mark {
   width: 18px;
   height: 18px;
@@ -192,9 +137,6 @@ h3 {
   color: var(--ink-soft);
 }
 
-/* The accent rule under the current page. An inset shadow rather than
-   a border, so the link does not move by a pixel when it becomes the
-   current one. */
 .site-nav a[aria-current='page'],
 .site-nav__panel a[aria-current='page'] {
   color: var(--ink);
@@ -206,7 +148,6 @@ h3 {
   color: var(--ink);
 }
 
-/* The one nav item that reads as an action rather than a destination. */
 .site-nav__signin {
   border: 1px solid var(--rule);
   border-radius: 999px;
@@ -218,14 +159,6 @@ h3 {
   border-color: var(--ink-faint);
 }
 
-/*
- * The hamburger, and the panel it opens.
- *
- * Both exist at every width and are swapped by the 48rem query below,
- * rather than being mounted and unmounted — a menu that unmounts on
- * resize loses its open state, and the header is one component for both
- * layouts.
- */
 .site-nav__toggle {
   display: none;
   margin-left: auto;
@@ -272,13 +205,6 @@ h3 {
   }
 }
 
-/*
- * The signed-in reader's own face in the header.
- *
- * `.account-link` had no rules at all until the header was rebuilt —
- * left behind when the account dropdown became a plain link and the
- * `.account-menu` styles below stopped being reachable from here.
- */
 .account-link {
   display: inline-flex;
   align-items: center;
@@ -302,19 +228,12 @@ h3 {
   white-space: nowrap;
 }
 
-/* In the narrow panel the name has room, so it comes back. */
 @media (max-width: 30rem) {
   .site-nav .account-link__name {
     display: none;
   }
 }
 
-/*
- * One row: the mark, the links, the copyright — which is all the design
- * puts here. It carried two paragraphs of prose above this bar until
- * 2026-08-21; the design says what those paragraphs said on the About
- * page instead, where someone is actually reading.
- */
 .site-footer {
   border-top: 1px solid var(--rule);
   margin-top: 5rem;
@@ -333,7 +252,6 @@ h3 {
   gap: 1.25rem;
 }
 
-/* The wordmark, a size down from the header's. */
 .site-footer .wordmark {
   font-size: 0.875rem;
 }
@@ -371,7 +289,6 @@ h3 {
   border-color: var(--ink-faint);
 }
 
-/* Accessible name for something the eye already gets from an icon. */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -383,8 +300,6 @@ h3 {
   white-space: nowrap;
   border: 0;
 }
-
-/* --- the reader's own face --------------------------------------- */
 
 .avatar {
   display: inline-flex;
@@ -402,9 +317,7 @@ h3 {
 
 .avatar--initials {
   color: #fff;
-  /* The generated hue is mid-tone in both themes, so white sits on it
-     either way; a token would have to change with the theme and the
-     initials would stop being recognisably the same badge. */
+
   letter-spacing: 0.02em;
 }
 
@@ -446,8 +359,7 @@ h3 {
 }
 
 @media (max-width: 34rem) {
-  /* The circle carries it on a narrow screen; the accessible name is
-     still there for anyone not reading it by eye. */
+
   .account-menu__name,
   .account-menu__caret {
     display: none;
@@ -534,13 +446,6 @@ h3 {
   border-top: 1px solid var(--rule);
 }
 
-/* --- account area ------------------------------------------------- */
-
-/*
- * The account area. It sat flush under the site header until
- * 2026-08-21; the design gives every page air above its first line, and
- * on this one the first line is your own name.
- */
 .account {
   padding-top: 2.75rem;
   padding-bottom: 4rem;
@@ -559,15 +464,11 @@ h3 {
     gap: 1.5rem;
   }
 
-  /* Stacked, the column sits above the panel — sticking would park it
-     over what the reader came to read. */
   .account__side {
     position: static;
   }
 }
 
-/* The sections and sign out travel together, so the whole column is
-   what sticks rather than the list inside it. */
 .account__side {
   position: sticky;
   top: 1.5rem;
@@ -582,7 +483,6 @@ h3 {
   gap: 0.15rem;
 }
 
-/* Quiet, and set apart from the sections: leaving is not one of them. */
 .account-signout {
   margin: 1.25rem 0 0;
   padding: 1rem 0.8rem 0;
@@ -627,7 +527,6 @@ h3 {
   color: var(--ink);
 }
 
-/* The balance, sat opposite the reader's name. */
 .account-balance {
   margin: 0 0 0 auto;
   text-align: right;
@@ -649,9 +548,6 @@ h3 {
   letter-spacing: 0.08em;
 }
 
-/* The account of how a balance got where it is, on the same card the
-   history timeline uses. `separate` rather than `collapse` so the
-   card's corners actually clip the first and last rows. */
 .ledger {
   width: 100%;
   border-collapse: separate;
@@ -689,17 +585,6 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
-/* --- history ------------------------------------------------------ */
-
-/*
- * One card holding the whole timeline, rather than a card per entry.
- *
- * The opposite call from `.my-books`, and for a reason: a history has
- * a hundred rows and they are read as a sequence, so carding each one
- * would turn scanning down a column of dates into stepping over a
- * hundred separate objects. My Books has five rows and each is a thing
- * you act on.
- */
 .history {
   list-style: none;
   margin: 0;
@@ -767,23 +652,12 @@ h3 {
   white-space: nowrap;
 }
 
-/* --- my books ----------------------------------------------------- */
-
 .my-books {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-/*
- * A row per book, each on its own card.
- *
- * They were rule-separated rows in one block until 2026-08-21. The
- * design makes each an object you can point at — which is what they
- * are: every row is a book with its own state, its own actions and its
- * own page, and a shared block of rules said they were lines in a
- * table.
- */
 .my-books {
   display: flex;
   flex-direction: column;
@@ -846,10 +720,6 @@ h3 {
   color: var(--accent);
 }
 
-/* --- the conversion flow ------------------------------------------ */
-
-/* The flow's own title, above the stepper: what you are doing, and to
-   what. The design sets it once and keeps it on every screen. */
 .wizard-head {
   margin-bottom: 1.5rem;
 }
@@ -871,9 +741,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* The card's own heading, what it accepts, and the month's allowance —
-   the three things the design puts above the drop zone, ruled off from
-   it. */
 .upload-form__head {
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--rule-soft);
@@ -895,7 +762,6 @@ h3 {
   margin-bottom: 0;
 }
 
-/* The heading of the step you are on, inside the flow. */
 .wizard-step-head {
   margin-bottom: 0.25rem;
 }
@@ -913,15 +779,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* --- where you are in the flow ------------------------------------ */
-
-/*
- * Four steps with a rule running between them, as the design draws it.
- *
- * The connector is a child of each step rather than a separate element
- * between them, so the list stays four items long — which is what it
- * is, and what a screen reader should hear.
- */
 .stepper {
   display: flex;
   align-items: flex-start;
@@ -962,9 +819,6 @@ h3 {
   color: var(--paper-raised);
 }
 
-/* Under its own mark, not in the row: the label belongs to the circle,
-   and the connector has to run between the circles rather than around
-   the text. Absolute so a long label cannot widen the step. */
 .stepper__label {
   position: absolute;
   margin-top: 2.35rem;
@@ -993,18 +847,10 @@ h3 {
   background: var(--accent);
 }
 
-/* The labels sit below the row, so the block needs room for them. */
 .stepper {
   padding-bottom: 1.5rem;
 }
 
-/* --- upload form -------------------------------------------------- */
-
-/*
- * The portal's forms — choosing a file, and confirming what we read out
- * of it — on the design's white card. Both are a step in a flow rather
- * than a field or two appended to a page, and the card is what says so.
- */
 .upload-form {
   display: flex;
   flex-direction: column;
@@ -1018,16 +864,6 @@ h3 {
   font-family: var(--font-sans);
 }
 
-/*
- * A field: its label above its control.
- *
- * Excluding `.plan-card`, which is also a `label` in this form and is
- * not a field — it is a card you choose between. Both of these rules
- * out-specify the card's own, so without the exclusion the card became
- * a stretch-aligned flex column: its "Recommended" pill stretched into
- * a full-width band, and this rule's colour repainted the pill's text
- * to the same ink as the card, leaving an unreadable accent bar.
- */
 .upload-form label:not(.plan-card) {
   display: flex;
   flex-direction: column;
@@ -1056,30 +892,12 @@ h3 {
   resize: vertical;
 }
 
-/*
- * The row a form ends on. It held two buttons side by side — "convert
- * privately" and "convert and submit for review" — and styled the first
- * of them as the primary. Submitting moved to the finished book, so
- * there is one button here now, and the rule that painted it pale was
- * silently overriding `.cta`: it out-specifies the class, so the
- * design's filled accent pill was rendering as a soft outline
- * everywhere in the portal. Removed rather than rewritten, because
- * `.cta` already says what a primary action looks like.
- */
 .upload-form__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-/*
- * How far a book has got on its way up.
- *
- * Worth the space only because the limit is 100 MB: on a slow
- * connection that is minutes, and a submit button that simply sits
- * there reads as a hang. The percentage is also on the button itself,
- * so the state survives for anyone who cannot see the bar.
- */
 .upload-progress {
   height: 4px;
   margin-top: 0.9rem;
@@ -1093,8 +911,7 @@ h3 {
   height: 100%;
   border-radius: inherit;
   background: var(--accent);
-  /* Eases the jump between progress events, which arrive in chunks
-     rather than smoothly. */
+
   transition: width 0.2s ease-out;
 }
 
@@ -1121,14 +938,6 @@ h3 {
   padding: 0 0.35rem;
 }
 
-/*
- * The shelves, down the page rather than wrapped across it.
- *
- * They wrapped when this was a set of checkboxes and the order between
- * them carried nothing. It is a tree now, and a tree that wraps is a
- * list — a child could land to the right of an unrelated shelf and read
- * as belonging to it.
- */
 .upload-form__collections > div {
   --step: 1.1rem;
   display: flex;
@@ -1137,14 +946,6 @@ h3 {
   margin-top: 0.6rem;
 }
 
-/*
- * A radio beside its label, not above it.
- *
- * Qualified with `label` to out-specify the field rule above, which is
- * `.upload-form label:not(.plan-card)` and stacks its children in a
- * column. Unqualified this rule loses that fight and every shelf sits
- * on its own line above its name.
- */
 .upload-form label.upload-form__shelf {
   flex-direction: row;
   align-items: center;
@@ -1164,16 +965,6 @@ h3 {
   flex-shrink: 0;
 }
 
-/*
- * The same two treatments the library gives its headings: a root shelf
- * is a name in the display face, a sub-shelf is a small tracked label.
- * That contrast is what makes three levels read as a hierarchy rather
- * than as three arbitrary sizes — and an uploader picking from it is
- * looking at the page they already know from `/books`.
- *
- * A size down from the library's, because there it is a heading and
- * here it is an option in a form.
- */
 .upload-form__shelf span {
   font-family: var(--font-display);
   font-size: 0.9375rem;
@@ -1190,7 +981,6 @@ h3 {
   color: var(--ink-soft);
 }
 
-/* Not a shelf, so not set like one — it is the way out of the question. */
 .upload-form__shelf--none span {
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -1198,18 +988,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* --- managing your own upload ------------------------------------- */
-
-/*
- * The sections of a book's own page — what to do with it, where it is
- * in the pipeline, its master, and whether to submit it.
- *
- * Each is a card. They were separated by a top rule until 2026-08-21,
- * which read as one continuous document; they are not one document.
- * Each answers a different question and several of them appear and
- * disappear as the book moves, so a rule between two of them said
- * something different depending on which happened to be showing.
- */
 .book-manage {
   margin-top: 1.25rem;
   padding: 1.5rem;
@@ -1229,8 +1007,6 @@ h3 {
   gap: 0.75rem;
 }
 
-/* Destructive, so it reads as destructive — but not shouting, because
-   it is a perfectly ordinary thing to do with your own draft. */
 .button-quiet--danger {
   border-color: var(--rule);
   color: var(--ink-faint);
@@ -1264,8 +1040,6 @@ h3 {
   color: var(--accent);
 }
 
-/* --- the conversion pipeline -------------------------------------- */
-
 .pipeline {
   margin-top: 1.25rem;
   padding: 1.5rem;
@@ -1291,8 +1065,7 @@ h3 {
   border-radius: var(--radius);
   border-left: 2px solid transparent;
   font-family: var(--font-sans);
-  /* Stages not yet reached are quiet but not invisible: the point is to
-     show the whole road, including the part still ahead. */
+
   color: var(--ink-faint);
 }
 
@@ -1353,13 +1126,6 @@ h3 {
   font-size: 1rem;
 }
 
-/* --- the files a book was made from -------------------------------- */
-
-/*
- * Sits directly above the master panel and wears the same card, because
- * the two are one thought read downwards: this is what the master is
- * built from, and that is the master.
- */
 .sources {
   margin-top: 1.25rem;
   padding: 1.5rem;
@@ -1382,9 +1148,6 @@ h3 {
   gap: 0.5rem;
 }
 
-/* One row per file. Wraps rather than truncating: the names here are
-   the reader's own, frequently Chinese and frequently long, and a name
-   you cannot read is the one thing this list must not produce. */
 .sources__item {
   display: flex;
   align-items: flex-start;
@@ -1396,9 +1159,6 @@ h3 {
   background: var(--paper);
 }
 
-/* The one the master is built from, marked by the accent edge rather
-   than by a fill — the row is not selected, it is in use, and a
-   selection colour would read as something you could click off. */
 .sources__item--current {
   border-color: var(--accent);
   box-shadow: inset 2px 0 0 var(--accent);
@@ -1479,8 +1239,6 @@ h3 {
   width: 100%;
 }
 
-/* --- a draft's master file ---------------------------------------- */
-
 .master {
   margin-top: 1.25rem;
   padding: 1.5rem;
@@ -1527,8 +1285,6 @@ h3 {
   font-size: 0.75rem;
 }
 
-/* --- book page actions -------------------------------------------- */
-
 .book-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1538,17 +1294,6 @@ h3 {
   border-bottom: 1px solid var(--rule);
 }
 
-/*
- * Reading is the primary action on every page that offers a book, so it
- * gets the design's primary control: the filled accent pill, the same
- * one the homepage uses to send a reader into the library. It was a
- * pale bordered rectangle until 2026-08-21, which read as the peer of
- * the format badges beside it — and it is not their peer. Sending a
- * book to a device costs credits; reading it here never does.
- *
- * A shade smaller than `.cta` because it sits in a row with metadata
- * rather than at the end of a section of prose.
- */
 .book-actions__read {
   display: inline-flex;
   align-items: center;
@@ -1567,14 +1312,10 @@ h3 {
   opacity: 0.9;
 }
 
-/* The price reads as a fact about the book, like its page count. */
 .meta__price {
   color: var(--accent);
 }
 
-/* The same identity block, on the account page itself. */
-/* Who you are and what you have, on the design's white card — the
-   same one the shelves and the forms use. */
 .account-identity {
   display: flex;
   align-items: center;
@@ -1604,13 +1345,6 @@ h3 {
   overflow-wrap: anywhere;
 }
 
-/* --- home -------------------------------------------------------- */
-
-/*
- * The small uppercase line above a heading. Used often enough across
- * the homepage bands to be worth a name, and it is always sans — it is
- * a label, not prose.
- */
 .eyebrow {
   margin: 0 0 1.1rem;
   font-family: var(--font-sans);
@@ -1643,11 +1377,6 @@ h3 {
   max-width: var(--measure);
 }
 
-
-/* The pill the design uses for its primary calls to action. */
-/* The design breaks the headline in three deliberate places, and only
-   where there is room for them — below 40rem it sets as one wrapped
-   paragraph. */
 .hero__break {
   display: none;
 }
@@ -1679,8 +1408,6 @@ h3 {
   opacity: 0.9;
 }
 
-/* Sized to sit on a heading row rather than at the end of a section of
-   prose, where `.cta`'s full padding would tower over the heading. */
 .cta--compact {
   padding: 0.45rem 1.1rem;
 }
@@ -1690,28 +1417,8 @@ h3 {
   color: var(--accent);
 }
 
-/* --- the library, grouped by collection --------------------------- */
-
-/*
- * The library is one tree of shelves, folded rather than drilled into
- * (2026-08-24, from the Figma design). Three things follow:
- *
- *   1. Depth is a custom property, not a class per level. `--depth` is
- *      set on each section and every indent is computed from it, so the
- *      three levels CLAUDE.md 5.3 allows — and a fourth, if that limit
- *      ever moves — need no new rule here.
- *   2. Each rail still scrolls sideways on its own. The negative margin
- *      lets it run to the viewport edge from inside `.page`, and the
- *      padding pays it back so the first tile lines up under its own
- *      heading rather than under the page edge.
- *   3. A root heading is set in the display face; a nested one as small
- *      tracked capitals. Two treatments rather than one per level,
- *      because what a reader needs to see is "shelf" against "shelf
- *      inside a shelf" — the indent carries the rest, and a third size
- *      would only be a third size.
- */
 .shelves {
-  /* How far one level of nesting steps in. */
+
   --step: 1.25rem;
 
   display: flex;
@@ -1724,8 +1431,6 @@ h3 {
     gap: 3.5rem;
   }
 
-  /* The library's shelves sit a little tighter than the homepage's two
-     teaser rails, because there are many more of them on the page. */
   .library .shelves {
     gap: 3rem;
   }
@@ -1736,8 +1441,6 @@ h3 {
   flex-direction: column;
 }
 
-/* Shelves inside a shelf sit closer together than root shelves do, so a
-   subtree reads as one block instead of as more top-level shelves. */
 .shelf__body {
   display: flex;
   flex-direction: column;
@@ -1748,22 +1451,16 @@ h3 {
   gap: 1.5rem;
 }
 
-/* `hidden` is a presentation hint and `display: flex` above outranks
-   it. Restated, or a folded shelf would stay on screen while telling
-   assistive technology it had gone. */
 .shelf__body[hidden] {
   display: none;
 }
 
-/* The collection name, with a rule running out to the right of it. */
 .shelf__head {
   display: flex;
   align-items: center;
   gap: 0.85rem;
   margin-bottom: 1.25rem;
-  /* `--step` is defaulted rather than assumed: the homepage's teaser
-     shelves use this head outside `.shelves`, where nothing defines it,
-     and an undefined var poisons the whole calc. */
+
   padding-left: calc(var(--step, 1.25rem) * var(--depth, 0));
 }
 
@@ -1771,12 +1468,6 @@ h3 {
   margin-bottom: 0.75rem;
 }
 
-/*
- * A heading that is a link rather than a fold — the homepage's teaser
- * shelves, which navigate into the library instead of collapsing. Kept
- * on the same head so the two pages' shelves line up; only the control
- * inside it differs.
- */
 .shelf__head > a {
   font-family: var(--font-sans);
   font-size: 0.75rem;
@@ -1793,12 +1484,6 @@ h3 {
   color: var(--ink);
 }
 
-/*
- * The whole heading is the fold control — chevron and name together, so
- * the target is as wide as the words rather than as wide as a 12px
- * glyph. Reset to nothing: this is a button for the semantics and the
- * keyboard, not for the chrome.
- */
 .shelf__toggle {
   display: flex;
   align-items: center;
@@ -1833,8 +1518,6 @@ h3 {
   }
 }
 
-/* Inherits the toggle's colour, which is also the chevron's — a nested
-   heading and its fold marker are one muted mark in the design. */
 .shelf--nested .shelf__name {
   font-family: var(--font-sans);
   font-size: 0.75rem;
@@ -1844,17 +1527,6 @@ h3 {
   color: inherit;
 }
 
-/*
- * How many books are under a nested shelf.
- *
- * Set on the band ground rather than as plain text so it reads as a
- * tally attached to the heading rather than as another word in it —
- * the headings here are tracked capitals, and a bare numeral in that
- * run would look like part of the name.
- *
- * `tabular-nums` so a column of folded shelves does not jitter as the
- * digits change width.
- */
 .shelf__count {
   flex-shrink: 0;
   font-family: var(--font-sans);
@@ -1873,8 +1545,6 @@ h3 {
   color: var(--ink-soft);
 }
 
-/* The nested name inherits the hover above; the root name set its own
-   colour, so it needs its own hover to give it back. */
 .shelf--root .shelf__toggle:hover .shelf__name {
   color: var(--ink-soft);
 }
@@ -1888,12 +1558,6 @@ h3 {
   transform: rotate(90deg);
 }
 
-/*
- * Heaviest under a root shelf of the tree, hairline under a nested one:
- * the rule is doing the same work as the two heading treatments above.
- * The bare 1px is the default because the homepage's teaser shelves use
- * it too, and they are not part of any tree.
- */
 .shelf__rule {
   flex: 1;
   border-top: 1px solid var(--rule);
@@ -1907,27 +1571,19 @@ h3 {
   border-top-color: var(--rule-soft);
 }
 
-/* The rail breaks out to the viewport edge; its heading does not. */
 .shelves .shelf__books,
 .shelf__books--lead {
   margin-left: -1.5rem;
   margin-right: -1.5rem;
 }
 
-/* A shelf's books step in one level further than its own heading, so
-   the tiles sit clear of the name above them rather than under it.
-   Root shelves are the exception — nothing is above them to clear. */
 .shelf--nested > .shelf__body > .shelf__books {
   padding-left: calc(1.5rem + var(--step) * (var(--depth, 0) + 1));
 }
 
-/* The selected collection's own books, above its child shelves. It has
-   no heading of its own — the page heading is its heading. */
 .shelf__books--lead {
   margin-bottom: 2.5rem;
 }
-
-/* --- chips -------------------------------------------------------- */
 
 .chips {
   display: flex;
@@ -1953,8 +1609,6 @@ h3 {
   color: var(--ink);
 }
 
-/* The collection you are looking at. Same treatment the level filter
-   uses, so "which of these am I on" reads identically in both rows. */
 .chip[aria-current="true"] {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -1967,13 +1621,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* --- full-bleed bands --------------------------------------------- */
-
-/*
- * A band spans the viewport while its contents stay on the page grid,
- * so it has to sit outside `.page` in the markup and re-apply the
- * padding inside itself. `.band__inner` is that inner page.
- */
 .band {
   width: 100%;
   padding: 3rem 0;
@@ -2027,7 +1674,6 @@ h3 {
   margin: 0 0 1.75rem;
 }
 
-/* The numbered "how it works" columns. */
 .steps {
   list-style: none;
   margin: 0;
@@ -2062,9 +1708,6 @@ h3 {
   color: var(--ink-soft);
 }
 
-/* --- the "share a book" invitation -------------------------------- */
-
-/* The design's share CTA sits well clear of the last shelf. */
 .shelves__foot {
   margin-top: 3.5rem;
 }
@@ -2106,23 +1749,12 @@ h3 {
   color: var(--ink-soft);
 }
 
-/* Full width on a phone, where a right-aligned pill next to wrapped
-   text reads as an orphan. */
 @media (max-width: 40rem) {
   .invite .cta {
     width: 100%;
   }
 }
 
-/*
- * The heading a standalone page leads with — Library, About.
- *
- * Distinct from `.section-head`, which labels a band *within* a page
- * and is therefore set small, uppercase and in the sans face. This one
- * is the page's own title, so it is the display serif at something
- * under the homepage hero: a hero announces the product, a page title
- * only says where you are.
- */
 .page-head {
   display: flex;
   align-items: baseline;
@@ -2146,9 +1778,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* The trail back up through a nested shelf. Links are only underlined
-   on hover here: a breadcrumb of four underlined words reads as a
-   sentence with something wrong with it. */
 .page-head__note a {
   color: var(--ink-soft);
   text-decoration: none;
@@ -2158,17 +1787,12 @@ h3 {
   text-decoration: underline;
 }
 
-/* A collection's own description, under its heading. It is editorial
-   writing — what this shelf is *for* — so it is set in the reading
-   serif at the reading measure, not as UI text. */
 .page-lede {
   margin: -1.5rem 0 2rem;
   max-width: var(--measure);
   color: var(--ink-soft);
 }
 
-/* A panel opens on its own heading, so the 3rem that separates one
-   section from the next would only push it away from the card above. */
 .account__panel > .section-head:first-child {
   margin-top: 0;
 }
@@ -2193,15 +1817,6 @@ h3 {
   color: var(--ink-soft);
 }
 
-/*
- * The quiet link at the right of a section heading — "All books →".
- *
- * Excluding `.cta` deliberately. A heading row sometimes carries a real
- * action rather than a link, and a bare `.section-head a` out-specifies
- * the class, so a pill dropped in here came out with accent text on an
- * accent fill: an invisible button. The same collision `.upload-form__
- * actions button:first-child` was making, so the fix is the same shape.
- */
 .section-head a:not(.cta) {
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -2210,14 +1825,6 @@ h3 {
   white-space: nowrap;
 }
 
-/* --- catalog ----------------------------------------------------- */
-
-/*
- * The cover block on a book's own page, where a 2:3 portrait has room
- * to be large. The shelves use `.tile__face`, which is the same shape
- * at shelf size; this one is not shared with it because the book page
- * wants a border and a bigger fallback than a shelf tile does.
- */
 .book-card__cover {
   aspect-ratio: 2 / 3;
   background: var(--accent-soft);
@@ -2237,7 +1844,6 @@ h3 {
   display: block;
 }
 
-/* Fallback when a book has no cover: set the title, don't show a gap. */
 .book-card__cover--empty {
   padding: 1rem;
   font-size: 1.5rem;
@@ -2246,16 +1852,6 @@ h3 {
   line-height: 1.4;
 }
 
-/*
- * The reading-level control: pills, sized from the design.
- *
- * Links rather than buttons, deliberately. The level is a *view* — a
- * reader who has narrowed to Essential and sends someone the URL should
- * send them the same shelf — so it lives in the query string and the
- * page re-renders on the server. The fold beside it is the opposite
- * kind of state and lives in the browser
- * (`components/CollectionShelves.tsx`).
- */
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -2288,8 +1884,6 @@ h3 {
   border-color: var(--accent);
   color: var(--ink);
 }
-
-/* --- book detail ------------------------------------------------- */
 
 .book-head {
   display: grid;
@@ -2363,11 +1957,6 @@ h3 {
   flex: 1 1 16rem;
 }
 
-/*
- * The title itself opens the part. Underlined only on hover so the list
- * still reads as a table of contents rather than a wall of links, but
- * coloured from the start so it is visibly the thing to click.
- */
 .part__read {
   color: var(--ink);
   text-decoration: none;
@@ -2388,15 +1977,6 @@ h3 {
   min-width: 3.5rem;
 }
 
-/*
- * What a book is available as, beside the button that sends it.
- *
- * A bare flex row and nothing more. It used to draw a bordered box
- * around every `a` and `span` inside it, from when the formats were
- * download links; they are `.fmt` badges now, and that rule
- * out-specified the badge — so a PDF and an EPUB came out the same
- * grey, in a row whose whole job is telling them apart.
- */
 .formats {
   display: flex;
   flex-wrap: wrap;
@@ -2428,8 +2008,6 @@ h3 {
   font-style: italic;
 }
 
-/* --- auth and account ---------------------------------------------- */
-
 .auth-page {
   max-width: var(--measure);
   padding-top: 3.5rem;
@@ -2446,9 +2024,6 @@ h3 {
   margin: 0 0 2rem;
 }
 
-/* The design puts every form on a white card. Here it also does
-   something useful: it separates the two ways in — Google above the
-   rule, an email and a password below it — from the page's own words. */
 .auth-card {
   background: var(--paper-raised);
   border: 1px solid var(--rule-soft);
@@ -2500,9 +2075,6 @@ h3 {
   border-color: var(--accent);
 }
 
-/* Full width and filled, like every primary control in the design.
-   Aligned rather than left as a soft outline because on this page it is
-   the only action there is. */
 .auth-form button[type='submit'] {
   font: inherit;
   font-weight: 600;
@@ -2532,8 +2104,6 @@ h3 {
   font-size: 0.875rem;
 }
 
-/* --- sign in with Google ----------------------------------------- */
-
 .oauth-button {
   display: flex;
   align-items: center;
@@ -2554,7 +2124,6 @@ h3 {
   border-color: var(--ink-faint);
 }
 
-/* A rule with the word "or" sitting in a gap in the middle of it. */
 .auth-divider {
   display: flex;
   align-items: center;
@@ -2579,9 +2148,6 @@ h3 {
   font-size: 0.8125rem;
 }
 
-/* The month's allowance. The design colours this line and nothing else
-   on the page, and it is right to: every other hint is background, and
-   this is the one that can stop the upload happening. */
 .hint--quota {
   color: var(--accent);
 }
@@ -2606,12 +2172,6 @@ h3 {
   border-bottom: none;
 }
 
-/* --- reader --------------------------------------------------------- */
-
-/*
- * The reader takes the whole viewport: the site chrome is a distraction
- * once you are actually reading, which is the entire point of the page.
- */
 .reader-page {
   display: flex;
   flex-direction: column;
@@ -2743,19 +2303,13 @@ h3 {
 }
 
 @media (max-width: 40rem) {
-  /* Tap targets get in the way on a small screen; swipe and the arrow
-     keys still work, and the page area is what matters there. */
+
   .reader__page {
     flex-basis: 1.5rem;
     font-size: 1rem;
   }
 }
 
-/*
- * A book with no EPUB is shown in the browser's own PDF viewer, which
- * brings its own chrome and its own scrolling. All this has to do is
- * give it the whole stage and a border it can sit against.
- */
 .reader__pdf {
   flex: 1;
   min-width: 0;
@@ -2765,19 +2319,6 @@ h3 {
   background: var(--paper-raised);
 }
 
-/*
- * A plain text book, set as prose.
- *
- * The reader for a text upload published as it stands. Unlike the PDF
- * above it there is nothing here to hand to a viewer — the file is
- * words and nothing else — so this is the one reader whose typography
- * is entirely ours, and it is the site's reading face at a measure
- * chosen to be read rather than to fill the window.
- *
- * `pre-line` on the paragraph keeps the line breaks the file has inside
- * a paragraph: verse whose lines were joined into a sentence is no
- * longer verse (`components/TextReader.tsx`).
- */
 .reader__stage--text {
   display: block;
   overflow-y: auto;
@@ -2818,10 +2359,6 @@ h3 {
   font-size: 0.875rem;
 }
 
-/* --- Send to Kindle ------------------------------------------------- */
-
-/* Setting up delivery is a task, not a footnote, so it gets the card
-   the other tasks on this page have. */
 .kindle-settings {
   margin-top: 1.25rem;
   padding: 1.5rem;
@@ -2830,12 +2367,6 @@ h3 {
   border-radius: var(--radius-card);
 }
 
-/*
-  The Amazon approved-sender step is numbered and full-width rather than
-  a footnote: skipping it makes Amazon discard the document silently, so
-  a reader who misses it has no error to read and no way to work out
-  why nothing arrived.
-*/
 .kindle-steps {
   margin: 1rem 0 1.5rem;
   padding-left: 1.25rem;
@@ -2900,7 +2431,6 @@ h3 {
   cursor: default;
 }
 
-/* Sits inside the .formats row, so it has to read as one of the pills. */
 .send-to-kindle {
   display: inline-flex;
   align-items: center;
@@ -2930,12 +2460,6 @@ h3 {
   cursor: default;
 }
 
-/*
- * Sent. Still a live button — a reader may genuinely want it again, on
- * a second device or after deleting it — so it keeps its affordance
- * rather than going flat and disabled. The confirm prompt is what
- * catches the accidental second press.
- */
 .send-to-kindle__button--sent {
   background: var(--done-soft);
   border-color: var(--done-rule);
@@ -2964,16 +2488,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* Shown in place of the send control when the reader cannot use it yet. */
-/*
- * The way out when there is something to send but nowhere to send it.
- *
- * Sized and shaped as a secondary control beside the read pill — dashed
- * because it is not the action, it is the setting that would make the
- * action possible. It inherited the body serif at full size until
- * 2026-08-21, which made a quiet aside as tall as the primary button
- * next to it.
- */
 .send-hint {
   display: inline-flex;
   align-items: center;
@@ -2992,14 +2506,6 @@ h3 {
   color: var(--ink-soft);
 }
 
-/*
- * The split control: send, and the caret that offers the other way.
- *
- * The two halves read as one button — the pair carries the shape and
- * the seam between them is a single shared rule, so the caret looks
- * attached to the send rather than beside it. `position: relative` on
- * the wrapper is what the menu hangs from.
- */
 .send-split {
   position: relative;
   display: inline-flex;
@@ -3014,7 +2520,6 @@ h3 {
   border-bottom-right-radius: 0;
 }
 
-/* One rule between the halves rather than two touching borders. */
 .send-split__toggle {
   border-left: none;
   border-top-left-radius: 0;
@@ -3024,12 +2529,6 @@ h3 {
   line-height: 1;
 }
 
-/*
- * Hangs below the control, left-aligned with it, and wide enough to
- * hold the sentence explaining what the option costs — narrow enough
- * that it does not become a panel. It floats above the formats row it
- * sits in, so it needs a ground of its own.
- */
 .send-split__menu {
   position: absolute;
   top: calc(100% + 0.25rem);
@@ -3069,7 +2568,6 @@ h3 {
   cursor: default;
 }
 
-/* The sentence under the option, in the quieter ink asides use. */
 .send-split__note {
   display: block;
   margin-top: 0.2rem;
@@ -3088,15 +2586,6 @@ h3 {
   font-size: 0.8125rem;
 }
 
-
-/* --- a page that is mostly words ---------------------------------- */
-
-/*
- * Capped at the reading measure, in the soft ink the design sets body
- * copy in. The same rule the reader itself obeys: a line of prose that
- * runs the full width of a laptop is a line the eye loses its place
- * returning from.
- */
 .prose {
   max-width: var(--measure);
   color: var(--ink-soft);
@@ -3106,16 +2595,6 @@ h3 {
   margin: 0 0 1.25rem;
 }
 
-/* --- a book as a portrait tile ------------------------------------ */
-
-/*
- * The shelf: tiles in a row that scrolls sideways rather than wrapping.
- *
- * Full-bleed on purpose — the row runs to the edge of the viewport so a
- * partly-visible tile at the right edge says "there is more here",
- * which is the whole reason a shelf scrolls instead of wrapping. Its
- * heading stays on the page grid; only the rail breaks out.
- */
 .shelf__books {
   list-style: none;
   margin: 0;
@@ -3184,23 +2663,6 @@ h3 {
   transform: scale(1.1);
 }
 
-/*
- * Two lines for the title, and the height of two whether it uses them.
- *
- * One line until 2026-08-24, when the author line came out from under
- * it. A one-line clamp is right when a title is competing with a second
- * line of its own; on its own it just truncated names this library is
- * full of — `南怀瑾选集 第七卷` loses the volume, which is the half that
- * tells two tiles apart.
- *
- * Three would be worse than two: past that a shelf is reading rather
- * than scanning, and the rail's tiles stop being the same shape.
- *
- * `min-height` rather than a plain clamp so a one-line title reserves
- * the second line anyway — otherwise the bottom edge of a scrolling
- * rail steps up and down as titles vary, which reads as misalignment
- * rather than as short names.
- */
 .tile__title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -3215,26 +2677,6 @@ h3 {
   min-height: 2.8em;
 }
 
-/* --- a book as a line --------------------------------------------- */
-
-/*
- * The library lists books as text: title, then author.
- *
- * The tiles above are the homepage's. They ran here too, at 3/5 size,
- * until 2026-09-14 — 90px faces, a 0.625rem title clamped to two lines
- * and no author at all, because none of it fit. That is a picture too
- * small to recognise a book by attached to a name too short to read
- * one by, which is the worst of both and costs a third of the page.
- *
- * A shelf of covers is for being *shown* books; this page is for
- * *finding* one across every shelf at once, and for that the name is
- * the thing. Nothing is clamped and the author is back.
- *
- * Columns rather than one long list: the entries are short, the tree
- * shows every shelf at once, and a single column would make a shelf of
- * twelve books as tall as the fold. `auto-fill` so a shelf of two does
- * not stretch its lines across the whole page.
- */
 .shelf__lines {
   list-style: none;
   margin: 0;
@@ -3244,23 +2686,14 @@ h3 {
   gap: 0.125rem 1.5rem;
 }
 
-/* A shelf's books step in one level further than its own heading, the
-   same as the homepage's rails do. Root shelves have nothing above
-   them to clear. */
 .shelf--nested > .shelf__body > .shelf__lines {
   padding-left: calc(var(--step) * (var(--depth, 0) + 1));
 }
 
-/* The selected collection's own books, above its child shelves. */
 .shelf__lines--lead {
   margin-bottom: 2.5rem;
 }
 
-/*
- * The whole row is the link, so the target is the width of the column
- * rather than the width of the title — a two-character title is still
- * comfortable to hit on a phone.
- */
 .line a {
   display: flex;
   align-items: baseline;
@@ -3284,11 +2717,6 @@ h3 {
   line-height: 1.45;
 }
 
-/*
- * The author gives way first. It is what tells two editions apart once
- * the title is read, so it belongs on the line — but a long name must
- * not push a title out of its own column.
- */
 .line__author {
   flex: 0 1 auto;
   min-width: 0;
@@ -3300,16 +2728,6 @@ h3 {
   text-overflow: ellipsis;
 }
 
-/* --- the conversion portal ---------------------------------------- */
-
-/*
- * The drop zone.
- *
- * A label wrapping a visually-hidden file input, not a div with a
- * click handler: the label keeps the input keyboard-reachable and
- * screen-reader-announced for free, which a div would have to
- * reimplement with a tabindex and a key handler.
- */
 .dropzone {
   display: flex;
   flex-direction: column;
@@ -3318,9 +2736,7 @@ h3 {
   padding: 2.5rem 1.5rem;
   border: 2px dashed var(--rule);
   border-radius: var(--radius-card);
-  /* Paper, because the card behind it is now white. It was a wash of
-     white for the opposite reason, back when the form stood on the
-     page's own ground. */
+
   background: var(--paper);
   text-align: center;
   cursor: pointer;
@@ -3370,7 +2786,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* The chosen file, replacing the invitation once there is one. */
 .dropzone__chosen {
   margin: 0;
   font-family: var(--font-sans);
@@ -3378,8 +2793,6 @@ h3 {
   color: var(--ink);
   overflow-wrap: anywhere;
 }
-
-/* --- format badges ------------------------------------------------ */
 
 .formats-row {
   display: flex;
@@ -3419,14 +2832,6 @@ h3 {
   color: var(--ink-soft);
 }
 
-/*
- * The file this book came from, carried through the flow.
- *
- * The design keeps a chip at the top of every step naming the file you
- * uploaded — which sounds cosmetic and is not: this page changes shape
- * as the book converts, and the one fixed fact through all of it is
- * which file it is. Especially so for a reader with several drafts.
- */
 .file-chip {
   display: inline-flex;
   align-items: center;
@@ -3448,11 +2853,6 @@ h3 {
   white-space: nowrap;
 }
 
-/* --- "we read this from your file" -------------------------------- */
-
-/* Scoped to a class rather than `.upload-form label > span`: that
-   selector also caught the collection checkboxes and the drop zone's
-   own spans, and turned each of them into a flex row. */
 .field-label {
   display: flex;
   align-items: center;
@@ -3484,14 +2884,6 @@ h3 {
   cursor: not-allowed;
 }
 
-/* --- choosing what to do with a PDF ------------------------------- */
-
-/*
- * Two cards, side by side on a laptop and stacked on a phone. The
- * radio itself is hidden and the card carries the selected state, so
- * the whole card is the hit target — but it is still a real radio, so
- * arrow keys and the form both behave.
- */
 .plan-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
@@ -3560,14 +2952,6 @@ h3 {
   margin-bottom: 0.25rem;
 }
 
-/*
- * The AI correction opt-in.
- *
- * A checkbox rather than a plan card, because it is not an alternative
- * to anything — it is a second question about the same conversion, and
- * the answer that costs nothing is the unchecked one. Set apart from the
- * cards above it so it does not read as a third option.
- */
 .ai-consent {
   display: flex;
   gap: 0.75rem;
@@ -3600,15 +2984,6 @@ h3 {
   margin-bottom: 0.2rem;
 }
 
-/*
- * Who else sees the file, on the option that sends it to them.
- *
- * Quieter than the body copy and set apart from it, because it is a
- * different kind of statement: the copy above sells the option, this
- * one discloses its cost in privacy. It must be legible rather than
- * loud — small print that hides is worse than no small print, and
- * scaring someone off a conversion they wanted is not the goal either.
- */
 .plan-card__sends,
 .notice--sends {
   margin-top: 0.6rem;
@@ -3617,10 +2992,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* The card's body copy. Excluding the tag, which is a `span` too and
-   whose whole point is to be an inline pill in the accent — this rule
-   out-specifies it and was flattening it into a full-width band of
-   accent with accent-coloured text on it, i.e. an unreadable one. */
 .plan-card span:not(.plan-card__tag) {
   display: block;
   font-family: var(--font-sans);
@@ -3628,8 +2999,6 @@ h3 {
   line-height: 1.6;
   color: var(--ink-soft);
 }
-
-/* --- where did this book come from? ------------------------------- */
 
 .rights {
   margin: 1.25rem 0;
@@ -3675,9 +3044,6 @@ h3 {
   flex: 0 0 auto;
 }
 
-/* The calm consequence of an answer that cannot lead to publication.
-   Framed as a note, never as an error — the book still converts, still
-   reads, still sends to a Kindle. */
 .rights__note {
   margin: 1rem 0 0;
   padding: 0.75rem 0.9rem;
@@ -3689,8 +3055,6 @@ h3 {
   line-height: 1.6;
   color: var(--ink-soft);
 }
-
-/* --- the review timeline ------------------------------------------ */
 
 .timeline {
   list-style: none;
@@ -3706,8 +3070,6 @@ h3 {
   color: var(--ink-faint);
 }
 
-/* The rail is drawn by the marker column, not by a border on the row,
-   so the last step has no tail hanging off it. */
 .timeline__rail {
   display: flex;
   flex-direction: column;
@@ -3751,8 +3113,6 @@ h3 {
   padding-bottom: 1rem;
 }
 
-/* --- the editor's note -------------------------------------------- */
-
 .editor-note {
   margin: 1rem 0;
   padding: 1rem 1.1rem;
@@ -3778,12 +3138,6 @@ h3 {
   line-height: 1.7;
 }
 
-/* --- the cover, and which page it comes from ---------------------- */
-
-/* The book's own face, on the page its owner manages it from. Sits
-   beside the picker rather than above it: the question is "is this the
-   right page?", and the answer is easier with the current one and the
-   alternatives in the same glance. */
 .cover-panel {
   margin: 2rem 0 0;
 }
@@ -3808,9 +3162,6 @@ h3 {
   background: var(--paper-band);
 }
 
-/* No picture yet, but one can be made: the same frame, with the book's
-   own first character in it, so the button below has something to be
-   about. */
 .cover-panel__img--empty {
   display: flex;
   align-items: center;
@@ -3825,10 +3176,6 @@ h3 {
   margin: 0.75rem 0 0;
 }
 
-/* Upload your own image as the cover. The file input covers the label
-   rather than being hidden, so the control stays a real file input —
-   keyboard-reachable, and opening the dialog with no JavaScript. The
-   focus ring is drawn on the parent because the input is invisible. */
 .cover-upload {
   margin: 0.75rem 0 0;
   display: flex;
@@ -3881,9 +3228,6 @@ h3 {
   flex-wrap: wrap;
 }
 
-/* A thumbnail with its page number under it. Bordered rather than
-   filled, so the pages themselves — which are mostly white paper —
-   carry the row and the chrome stays out of the way. */
 .coverpick__page {
   display: flex;
   flex-direction: column;
@@ -3917,18 +3261,12 @@ h3 {
   opacity: 0.6;
 }
 
-/* The page in use. Marked by a ring rather than by dimming the others:
-   every one of them is a real page of the book and worth seeing. */
 .coverpick__page--on {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
   color: var(--accent);
 }
 
-/* --- my books ----------------------------------------------------- */
-
-/* The row grows a card of its own, to match the shelf cards the rest
-   of the site now uses. */
 .my-books__item {
   align-items: center;
   padding: 1rem 1.25rem;
@@ -3950,8 +3288,6 @@ h3 {
   color: var(--paper-raised);
 }
 
-/* Status is the strongest signal in the row, so it goes first on a
-   phone rather than being pushed under the links. */
 @media (max-width: 40rem) {
   .my-books__item {
     flex-direction: column;
@@ -3966,8 +3302,6 @@ h3 {
     gap: 0.75rem;
   }
 }
-
-/* --- narrow screens ----------------------------------------------- */
 
 @media (max-width: 40rem) {
   .page,
@@ -3992,20 +3326,11 @@ h3 {
     padding: 0 1.125rem;
   }
 
-  /* A card is already a container; nesting its padding inside the
-     page's at 375px leaves about 280px of text. */
   .rights {
     padding: 1rem;
   }
 }
 
-/* --- an in-progress stage ----------------------------------------- */
-
-/*
- * Indeterminate on purpose. Nothing in the pipeline reports a
- * percentage, so the bar says "moving" and nothing more — see the
- * `WORKING` set in `ConversionProgress`.
- */
 .pipeline__working {
   display: block;
   height: 3px;
@@ -4036,7 +3361,6 @@ h3 {
   }
 }
 
-/* A reader who asked for less motion gets a steady bar instead. */
 @media (prefers-reduced-motion: reduce) {
   .pipeline__working::after {
     animation: none;
@@ -4045,12 +3369,9 @@ h3 {
   }
 }
 
-/* The uploaded format, badged above the title in the My Books list. */
 .my-books__item .fmt {
   margin-bottom: 0.35rem;
 }
-
-/* --- Access tokens ------------------------------------------------- */
 
 .access-token {
   margin: 1rem 0 2rem;
@@ -4060,9 +3381,6 @@ h3 {
   border-radius: var(--radius-card);
 }
 
-/* `break-all` rather than `anywhere`: a 48-character token has no
-   spaces to break at, so on a phone it either wraps mid-string or
-   pushes the panel wider than the screen. */
 .access-token__value code {
   font-size: 0.875rem;
   word-break: break-all;
@@ -4076,8 +3394,6 @@ h3 {
   margin-top: 0.75rem;
 }
 
-/* The confirm pair is a form inside the row; it must not become a
-   column of its own. */
 .access-token__controls form {
   display: flex;
   gap: 0.5rem;
@@ -4089,8 +3405,7 @@ h3 {
   background: var(--paper-raised);
   border: 1px solid var(--rule-soft);
   border-radius: var(--radius);
-  /* A curl line is one long line by nature. Scroll it rather than
-     wrapping it, so what is shown is what would be pasted. */
+
   overflow-x: auto;
 }
 
@@ -4098,12 +3413,6 @@ h3 {
   font-size: 0.8125rem;
   white-space: pre;
 }
-
-/* --- AI correction review ------------------------------------------
-   The screen where a person decides what the model may change. Laid out
-   so the two versions of a line sit directly above one another: the
-   whole judgement is "did the OCR misread this?", and that is answered
-   by comparing two strings of Chinese, often differing by one glyph. */
 
 .correction {
   margin-top: 2rem;
@@ -4150,9 +3459,7 @@ h3 {
 
 .suggestion__line {
   margin: 0;
-  /* The lines are printed lines of a book and may be long; they wrap
-     rather than scrolling, because a horizontal scrollbar inside a
-     comparison defeats the comparison. */
+
   overflow-wrap: anywhere;
   line-height: 1.9;
 }

@@ -16,64 +16,6 @@ import { logError } from '../../../../lib/logError'
 import { addSourceToBook } from '../../../../lib/masterPipeline'
 import { objectBucket } from '../../../../lib/storage'
 
-/**
- * Accepting a reader's own book for conversion.
- *
- * The portal from CLAUDE.md section 6.1. A scanned PDF, a text-layer
- * PDF, a DOCX, an EPUB or plain text all converge on the same draft,
- * and from there on the DOCX master and the editions the library
- * offers.
- *
- * This step asks for **the file and nothing else**. Whatever the file
- * already says about itself is read out of it (`lib/extractMetadata.ts`)
- * and shown on the next page for the reader to correct — asking someone
- * to retype a title their file already contains is the kind of friction
- * that stops uploads happening at all.
- *
- * The book is created as a draft: private, owned, rights `unknown`, and
- * *not* queued for conversion. Nothing is converted and nothing can be
- * submitted until the reader has seen the details and answered the
- * rights question, which is the one thing no file can answer for them.
- *
- * ---
- *
- * **Why this is a route handler and not a server action.**
- *
- * It was `actions/upload.ts` until 2026-08-24, and the file arrived as
- * `FormData`. Next parses that in full before the action's first line
- * runs, so the whole book sat in memory whatever the action then did
- * with it — which put the ceiling at 64 MB, half a Worker's 128 MB
- * budget, and made the limit a memory fact rather than a product one.
- *
- * Here the file *is* the request body. It is piped into R2 as it
- * arrives and is never resident, so a 100 MB book costs no more memory
- * than a 100 KB one. The metadata read afterwards asks storage for the
- * few ranges it needs rather than pulling the file back.
- *
- * The cost is that the browser can no longer post a plain form: the
- * upload is an explicit request from `UploadForm`, which is also what
- * makes a progress bar possible for a file this size.
- *
- * ---
- *
- * **Two doors, and `?book=` is the second one.**
- *
- * Without it this makes a new book. With it the file joins a book that
- * already exists, as another *source* — the scan beside the
- * transcription, the transcription beside the scan
- * (`domain/sources.ts`). Everything up to and including the write to R2
- * is identical, which is the reason the two share a handler rather than
- * a copy: the streaming above is subtle enough that a second
- * implementation of it would be a second place to get it wrong.
- *
- * What the second door does *not* do is change the book. Adding a file
- * costs no quota and starts no conversion; choosing to build the master
- * from it is a separate act with a separate cost
- * (`actions/sources.ts`). Free and reversible to add, deliberate to act
- * on.
- */
-
-/** What the pipeline can start from, and the extension each is filed under. */
 const ACCEPTED = new Map<string, string>([
   ['application/pdf', 'pdf'],
   ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx'],
@@ -90,21 +32,12 @@ export async function POST(request: Request): Promise<Response> {
   const user = await getCurrentUser()
   if (!user) return fail(401, 'Sign in to upload a book.')
 
-  // The name travels as a query parameter rather than a header: book
-  // filenames here are routinely Chinese, and a header is bytes with no
-  // declared encoding, which is the exact problem `domain/metadata.ts`
-  // exists to clean up after. A URL component is unambiguous.
   const url = new URL(request.url)
   const filename = (url.searchParams.get('name') ?? '').trim()
   const declaredType = (request.headers.get('content-type') ?? '').split(';')[0].trim()
 
   if (!filename) return fail(400, 'Choose a file to upload.')
 
-  // Checked before a byte is read, so an oversized upload is refused on
-  // its headers instead of after the reader has waited for all of it.
-  // Cloudflare's own cap sits at this same number, so a body that lies
-  // about its length is stopped by the platform rather than by us —
-  // and the post-write check below catches whatever is left.
   const declaredSize = Number(request.headers.get('content-length') ?? '')
   if (!Number.isFinite(declaredSize) || declaredSize <= 0) {
     return fail(400, 'Choose a file to upload.')
@@ -113,8 +46,6 @@ export async function POST(request: Request): Promise<Response> {
     return fail(413, `That file is larger than ${MAX_UPLOAD_LABEL}.`)
   }
 
-  // The declared type first, then the filename — several browsers send
-  // `application/octet-stream` for an EPUB, which says nothing.
   const kind = sourceKindOf(filename, declaredType)
   const extension = ACCEPTED.get(declaredType) ?? (kind === 'epub' ? 'epub' : undefined)
   if (!extension || !kind) {
@@ -123,28 +54,18 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!request.body) return fail(400, 'Choose a file to upload.')
 
-  // Which door this is. A missing parameter is the ordinary upload; a
-  // malformed one is not quietly treated as one, because the difference
-  // between "make a new book" and "add to book 7" is not a thing to
-  // guess at.
   const rawBook = url.searchParams.get('book')
   if (rawBook !== null && !/^\d+$/.test(rawBook)) return fail(400, 'No such book.')
   const bookId = rawBook === null ? null : Number(rawBook)
 
   const payload = await getPayload({ config })
 
-  // Everything about the *destination* is settled before a byte is
-  // stored: whether the book exists, whether it is theirs, and whether
-  // it can take a file of this kind. Storing first would mean charging
-  // the reader a 60 MB upload to be told the slot was full.
   let target: Book | null = null
   if (bookId !== null) {
     target = await payload
       .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
       .catch(() => null)
 
-    // Not found and not yours are the same answer, as everywhere else a
-    // book is addressed by id.
     const ownerId = typeof target?.owner === 'object' ? target?.owner?.id : target?.owner
     if (!target || !ownerId || String(ownerId) !== String(user.id)) {
       return fail(404, 'No such book.')
@@ -160,30 +81,12 @@ export async function POST(request: Request): Promise<Response> {
   const bucket = await objectBucket()
   if (!bucket) return fail(503, 'Uploads are not available on this server yet.')
 
-  // A job id the uploader does not choose, so one reader cannot squat
-  // on a name the library might want and two uploads of the same title
-  // cannot collide.
   const jobId = crypto.randomUUID()
   const sourceKey = `conversion/${jobId}/input/source.${extension}`
 
   let size: number
   try {
-    // The whole point of this handler: the body goes to storage as it
-    // arrives. Nothing here ever holds the book.
-    //
-    // Through a `FixedLengthStream` rather than straight from
-    // `request.body`, for two reasons. R2 refuses a stream whose length
-    // it does not know — "Provided readable stream must have a known
-    // length" — and the request body loses that property on its way
-    // through Next's layer, so piping it directly fails at runtime for
-    // every upload. And the length it is fixed to is the declared one,
-    // which makes the stream itself the check on `Content-Length`: a
-    // body that does not deliver exactly that many bytes errors here
-    // rather than being stored as a truncated book.
     const sized = new FixedLengthStream(declaredSize)
-    // Started before the pipe, not awaited: `put` consumes the readable
-    // half as the writable half is fed, so awaiting it first would
-    // deadlock against a body nothing is reading yet.
     const stored = bucket.put(sourceKey, sized.readable, {
       httpMetadata: { contentType: declaredType || 'application/octet-stream' },
     })
@@ -192,35 +95,21 @@ export async function POST(request: Request): Promise<Response> {
     size = object?.size ?? declaredSize
   } catch (error) {
     logError('upload: stream source to R2', error)
-    // A partial object may exist — the failure above is as likely to be
-    // a body that stopped early as a storage fault. Either way nothing
-    // points at it, so it is removed rather than left to be paid for.
     await bucket.delete(sourceKey).catch(() => {})
     return fail(500, 'Could not store that file. Please try again.')
   }
 
-  // **The second door ends here.** The file is copied under the book,
-  // recorded as one of its sources, and nothing else happens: no
-  // metadata is read (the book already has its own, confirmed by its
-  // owner), no quota is spent, no conversion is started.
   if (target) {
     const refusal = await addSourceToBook(payload, target, {
       kind,
       sourceKey,
       filename,
     })
-    // The staged copy goes either way. On success `addSourceToBook` has
-    // made the durable copy under the book; on refusal nothing points at
-    // it at all. Leaving it would be paying for an object with no reader
-    // until the lifecycle rule swept it a month later.
     await bucket.delete(sourceKey).catch(() => {})
     if (refusal) return fail(409, refusal)
     return Response.json({ bookId: target.id })
   }
 
-  // Read after storing rather than before, because the bytes are in R2
-  // and nowhere else. Never throws; worst case is an empty suggestion
-  // and a form the reader fills in themselves.
   const suggested = await extractMetadata(
     r2Source(sourceKey, { name: filename, type: declaredType, size }),
   )
@@ -228,16 +117,6 @@ export async function POST(request: Request): Promise<Response> {
   const title = (suggested.title || filename.replace(/\.[^.]+$/, '')).trim()
   const slug = `${slugify(suggested.title ?? '') || 'book'}-${jobId.slice(0, 8)}`
 
-  // A book's title is unique (`collections/Books.ts`), so this would be
-  // refused by the database in a moment anyway. It is checked here for
-  // the sentence: the write would come back as a validation error about
-  // a field, and what the uploader needs to be told is that the book is
-  // already here — which is usually good news rather than a failure.
-  //
-  // `overrideAccess` because the answer must not depend on who is
-  // asking. A private upload by another reader still occupies the
-  // title, and reporting "no such book" and then failing on the write
-  // would be worse than saying so.
   const existing = await payload.find({
     collection: 'books',
     where: { title: { equals: title } },
@@ -246,7 +125,6 @@ export async function POST(request: Request): Promise<Response> {
     overrideAccess: true,
   })
   if (existing.docs.length > 0) {
-    // Nothing points at the bytes we just stored, so they go.
     await bucket.delete(sourceKey).catch(() => {})
     return fail(
       409,
@@ -262,26 +140,9 @@ export async function POST(request: Request): Promise<Response> {
         slug,
         author: suggested.author,
         ...(suggested.language ? { language: suggested.language as 'zh-Hans' } : {}),
-        // What the quota will be charged if this draft is converted.
-        // Recorded now because the file is in hand now; the real count
-        // replaces it when conversion finishes.
         estimatedPages: suggested.estimatedPages ?? undefined,
-        // `unknown` until the reader says otherwise, and `unknown` is
-        // exactly what blocks submission — so the question cannot be
-        // skipped by never answering it.
         rightsStatus: 'unknown',
-        // Not the uploader's to choose. Visibility is what keeps an
-        // upload out of the public catalog until an administrator
-        // approves it.
         visibility: 'private',
-        // The library's default depth, not the tail. It was `extensive`
-        // until 2026-08-24, on the reasoning that an unreviewed upload
-        // should not surface in the default browse view — but the thing
-        // keeping it out of that view is `visibility: 'private'` above,
-        // and levels are curation rather than access control
-        // (`domain/levels.ts`). All the old value achieved was that a
-        // book an administrator then approved arrived in the tail
-        // unless somebody remembered to move it.
         level: LEVEL_IDS[DEFAULT_BOOK_LEVEL],
         status: 'draft',
         owner: Number(user.id),
@@ -290,11 +151,6 @@ export async function POST(request: Request): Promise<Response> {
           state: 'draft',
           sourceKey,
           sourceFilename: filename,
-          // Recorded now, from the file that is actually in front of us.
-          // Everything downstream branches on it — which formats can be
-          // built, whether Adobe is called, whether a converter is
-          // needed at all — and re-deriving it from a filename later is
-          // one more chance to get it wrong.
           sourceKind: kind,
           plan: defaultPlanFor(kind),
           jobId,
@@ -303,13 +159,9 @@ export async function POST(request: Request): Promise<Response> {
       overrideAccess: true,
     })
 
-    // The client navigates; a 3xx here would be followed by `fetch`
-    // itself and the reader would never move.
     return Response.json({ bookId: created.id })
   } catch (error) {
     logError('upload: create book record', error)
-    // The file is already stored, and nothing points at it now. Left
-    // behind it would be a paid-for orphan nobody can reach.
     await bucket.delete(sourceKey).catch(() => {})
     return fail(500, 'Could not start the conversion. Please try again.')
   }

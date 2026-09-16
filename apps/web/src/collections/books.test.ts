@@ -1,20 +1,9 @@
-/**
- * Who may see which books.
- *
- * The rule is small and returns a query rather than a boolean, which is
- * exactly why it is worth testing directly: a wrong `Where` here does
- * not throw, it silently subtracts books from the answer. That is how
- * the 2026-08-17 bug behaved — a reader's own upload vanished from
- * their own reader and surfaced as a bare 404, with nothing logged.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import { readBooks } from './Books'
 
 type Rule = { and: unknown[] } | { or: unknown[] } | boolean
 
-/** The rule only ever reads `req.user`, so this is the whole input. */
 function decide(user: unknown): Rule {
   return readBooks({ req: { user } } as never) as Rule
 }
@@ -42,8 +31,6 @@ describe('anonymous', () => {
 
 describe('a signed-in reader', () => {
   it('can see the books they own', () => {
-    // The bug: without this the reader's own private upload is filtered
-    // out of getBookBySlug and /read/<slug> answers 404.
     expect(clauses(decide(owner))).toContainEqual({ owner: { equals: 7 } })
   })
 
@@ -53,9 +40,6 @@ describe('a signed-in reader', () => {
   })
 
   it('does not get a blanket yes', () => {
-    // What this returned until 2026-08-17. Every account could read
-    // every other account's private upload, with only the artifact
-    // boundary — the *second* check — in the way.
     expect(decide(owner)).not.toBe(true)
   })
 
@@ -67,8 +51,6 @@ describe('a signed-in reader', () => {
 
 describe('an administrator', () => {
   it('sees everything', () => {
-    // Otherwise the editorial workflow cannot review what it is asked
-    // to approve: a submission is a private book by definition.
     expect(decide({ id: 1, roles: ['admin'] })).toBe(true)
   })
 

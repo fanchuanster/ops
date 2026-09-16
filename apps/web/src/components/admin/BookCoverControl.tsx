@@ -10,39 +10,6 @@ import {
 import { CoverPagePicker } from '../CoverPagePicker'
 import { MakeCoverButton } from '../MakeCoverButton'
 
-/**
- * The book's face in the edit panel, and the way to change it.
- *
- * The picture shown is whatever a reader would see: an uploaded cover
- * if there is one, page one of the book if the converter has rendered
- * it, and the book's own first character if there is neither. That
- * ordering is `coverImageUrl` in `domain/cover.ts` and it is decided on
- * the server — this component is handed a URL and does not re-derive
- * it.
- *
- * The button submits on *choosing* a file rather than waiting for a
- * Save. Everything else in this panel is text an editor might mistype
- * and want to discard, which is what the explicit Save is for; picking
- * an image from a file dialog is already a deliberate act, and a chosen
- * cover sitting unsaved beside a preview that has not changed is a
- * worse state than no preview at all.
- *
- * Remove appears only when there is an upload to remove, because it is
- * not a way to have no cover — it falls back to page one.
- *
- * Both write through `app/(frontend)/actions/cover.ts`, which is not a
- * layering slip: since 2026-08-25 uploading a cover is the owner's as
- * much as an editor's, so the action sits beside the page choice it
- * already shared a rule with. This component is the admin's *view* of
- * it, not its own authority.
- *
- * Under it, when the converter rendered alternatives and no upload is
- * covering them, the choice of *which* page the book wears. That
- * control is shared with the uploader's own book page rather than being
- * an admin one: a cover is not a claim about the book, so the person
- * who has it open is as well placed to pick as an editor
- * (`actions/cover.ts`).
- */
 export function BookCoverControl({
   bookId,
   coverUrl,
@@ -56,15 +23,10 @@ export function BookCoverControl({
   bookId: number
   coverUrl: string | null
   hasUploadedCover: boolean
-  /** Whether the book has an artifact a browser can render pages from. */
   canMakeCover: boolean
-  /** Which rendered page the book wears. */
   coverPage: number
-  /** Every page rendered for it, in order. */
   coverPages: number[]
-  /** Whether any page of it has actually been rasterized yet. */
   hasRendered: boolean
-  /** The book's first character, drawn when there is no picture at all. */
   face: string
 }) {
   const [saved, save, saving] = useActionState<CoverState, FormData>(saveBookCover, {})
@@ -88,10 +50,6 @@ export function BookCoverControl({
         )}
 
         <label className="admin-cover__btn" title="Upload a different cover">
-          {/* A label rather than a button driving a hidden input: the
-              file dialog then opens from the browser's own control, so
-              it works with the keyboard and with no JavaScript beyond
-              the submit below. */}
           <input
             type="file"
             name="cover"
@@ -125,10 +83,6 @@ export function BookCoverControl({
         </form>
       ) : null}
 
-      {/* Only while there is nothing rendered: the same file's opening
-          pages rasterize to the same pictures every time, so "render
-          again" only ever cost a download and a wait. A failed render
-          never reaches `ready`, so the offer survives where it helps. */}
       {hasUploadedCover || !canMakeCover || hasRendered ? null : (
         <p className="admin-cover__make">
           <MakeCoverButton bookId={bookId} label="Make a cover" />

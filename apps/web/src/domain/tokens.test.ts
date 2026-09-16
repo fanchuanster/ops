@@ -25,7 +25,6 @@ describe('maskToken', () => {
     expect(maskToken(newToken())).not.toBe(maskToken(newToken()))
   })
 
-  // A key minted in the CMS before this screen existed is a bare UUID.
   it('masks a token that carries no prefix of ours', () => {
     const masked = maskToken('4f1c2b8e-2a77-4c1e-9e3a-0d6b5f8a1c22')
     expect(masked).toBe('4f1c…1c22')

@@ -15,8 +15,6 @@ export default async function UploadPage() {
   const user = await getCurrentUser()
   if (!user) return null
 
-  // Shown before a file is chosen, not after. A reader who is out of
-  // allowance should find out before they wait for a 60 MB upload.
   const isAdmin = Boolean(user.roles?.includes('admin'))
   const usage = isAdmin ? null : await usageThisMonth(await getPayload({ config }), user.id)
 

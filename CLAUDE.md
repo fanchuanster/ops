@@ -319,10 +319,13 @@ step with `mds/MSM_Automations/CLAUDE.md`.
 - **Reuse before writing.** Look in `domain/` for rules and `lib/` for
   I/O before adding a function; extend rather than duplicate, and put a
   shared helper in the shared module, not beside its first caller.
-- **Comments say why, never what.** The other repos forbid comments
-  outright; here they are kept, because what they record is the
-  reasoning — this document, at the scale of a function. One that
-  restates the code is still a rename waiting to happen.
+- **No comments in code.** Names and structure carry the meaning; a
+  block that needs a comment to be understood gets renamed or split out
+  instead. The reasoning belongs here, in this document, where it is
+  read once rather than re-read beside every function. The codebase was
+  stripped to this rule on 2026-09-16 — ~5,900 comments across 226
+  files. Only machine-read directives survive: `@ts-*`, `eslint-*`,
+  `/// <reference>`, `# shellcheck`, `# noqa`.
 - **Log through `lib/logError.ts`**, not bare `console.*`, and leave no
   debugging output behind.
 - **Rules are pure functions.** `domain/` imports no framework;

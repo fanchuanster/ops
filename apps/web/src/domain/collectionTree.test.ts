@@ -1,17 +1,3 @@
-/**
- * Nested collections.
- *
- * Two things carry weight here. `subtreeIds` is what makes a parent
- * shelf show the books on the shelves beneath it — get it wrong and
- * nesting is decoration. And `canNest` is the only thing standing
- * between an administrator and a ring of collections that would hang
- * every walk in this module.
- *
- * The tree builder is also tested against data that is already broken,
- * because it runs on the public catalog: a cycle someone created before
- * these rules existed must not take the library down.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -27,13 +13,6 @@ import {
   subtreeIds,
 } from './collectionTree'
 
-/*
-    1 Classics
-      2 Confucian
-        4 Analects commentary
-      3 Daoist
-    5 Health
-*/
 const library = [
   { id: 1, title: 'Classics', parent: null },
   { id: 2, title: 'Confucian', parent: 1 },
@@ -81,8 +60,6 @@ describe('building the tree', () => {
       { id: 3, title: 'C', parent: null },
     ]
     const tree = buildTree(ring)
-    // Every collection is still reachable — an administrator cannot fix
-    // what no screen will show them.
     expect(flattenTree(tree).map((n) => n.collection.id).sort()).toEqual([1, 2, 3])
   })
 
@@ -157,10 +134,7 @@ describe('what may be filed under what', () => {
   })
 
   it('counts the moved subtree’s own height, not just the node', () => {
-    // 5 is a leaf, so it fits under a depth-2 parent…
     expect(canNest({ collections: library, id: 5, parentId: 2 }).allowed).toBe(true)
-    // …but 2 carries a child, and moving it under 3 would put that
-    // child at depth 4.
     expect(canNest({ collections: library, id: 2, parentId: 3 })).toEqual({
       allowed: false,
       reason: 'too_deep',
@@ -183,9 +157,6 @@ describe('what may be filed under what', () => {
 
 describe('the parent picker', () => {
   it('offers only what will actually be accepted', () => {
-    // Not 3: 2 carries a child, and 3 is already a child itself, so
-    // that move would land a grandchild at depth 4. Not 4 either, and
-    // never itself.
     expect(eligibleParents(library, 2).map((c) => c.id)).toEqual([1, 5])
   })
 

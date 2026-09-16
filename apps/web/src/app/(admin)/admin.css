@@ -1,40 +1,9 @@
-/*
- * NobleSee — the editorial admin.
- *
- * Loaded after the site's own stylesheet, which is where the palette
- * lives. Nothing here defines a colour the site does not already have,
- * with one exception noted below: this is the same building, and a
- * second brown invented here would drift from the first within a month.
- *
- * The site is a page and this is a desk. Three things follow from that
- * and they are the whole difference:
- *
- *   1. Sans-serif throughout. The reading-first serif exists so a book
- *      is pleasant to read at length; a table of two hundred rows is
- *      not read at length, it is scanned, and a serif at 13px scanned
- *      is worse than a sans.
- *   2. A fixed shell that does not scroll. The sidebar and the section
- *      heading stay put and only the list moves, because an editor
- *      working a queue loses their place otherwise.
- *   3. Denser everything. Line-height 1.4 rather than 1.75, and the
- *      measure cap deliberately absent — a table wants the width.
- */
-
 :root {
-  /* One step lighter than --paper. The desk's ground has to sit behind
-     white cards without them disappearing into it, and --paper is warm
-     enough that a white card on it reads as a highlight. */
+
   --admin-ground: #f9f7f4;
 
-  /* The row a reviewer has open. Between the ground and white, so the
-     selected row is legible without a border that would fight the
-     table's own rules. */
   --admin-selected: #faf8f4;
 
-  /* Status colours. These *are* new, and deliberately: the site's
-     palette has one confirmation green and no vocabulary at all for
-     "waiting" or "needs work", because no reader-facing screen has
-     ever had to say either. */
   --admin-wait-bg: #fef3c7;
   --admin-wait-ink: #92400e;
   --admin-good-bg: #d1fae5;
@@ -54,13 +23,10 @@
 
 .admin {
   display: flex;
-  /* dvh, not vh: on a phone the browser chrome moves and vh does not,
-     which leaves the last table row permanently under the toolbar. */
+
   height: 100dvh;
   overflow: hidden;
 }
-
-/* ── Sidebar ─────────────────────────────────────────────────────── */
 
 .admin-side {
   width: 14rem;
@@ -168,8 +134,6 @@
   justify-content: center;
 }
 
-/* ── Panes ───────────────────────────────────────────────────────── */
-
 .admin-main {
   flex: 1;
   min-width: 0;
@@ -244,8 +208,6 @@
   color: var(--ink-faint);
 }
 
-/* ── Filters ─────────────────────────────────────────────────────── */
-
 .admin-filters {
   display: flex;
   align-items: center;
@@ -297,8 +259,6 @@
   color: var(--ink);
 }
 
-/* ── Table ───────────────────────────────────────────────────────── */
-
 .admin-table {
   width: 100%;
   border-collapse: collapse;
@@ -340,9 +300,6 @@
   text-align: right;
 }
 
-/* The stretched link: one link per row that a keyboard can tab to,
-   with a hit area covering the row. `position: relative` on the row is
-   what anchors it. */
 .admin-table tbody tr {
   position: relative;
 }
@@ -372,8 +329,6 @@
   text-decoration-color: var(--accent);
 }
 
-/* Anything interactive inside a row has to sit above the stretched
-   link, or the link swallows the click. */
 .admin-level {
   position: relative;
   z-index: 1;
@@ -392,8 +347,6 @@
   color: var(--ink-faint);
 }
 
-/* The same face the shelves use, at list size: the first character of
-   the original-script title on the band ground. */
 .admin-face {
   flex-shrink: 0;
   width: 2rem;
@@ -421,8 +374,6 @@
   align-items: center;
   justify-content: center;
 }
-
-/* ── Status and rights ───────────────────────────────────────────── */
 
 .admin-chip-status {
   display: inline-flex;
@@ -471,14 +422,9 @@
   color: var(--admin-stop-ink);
 }
 
-/* The block case earns a mark of its own. Colour alone would say
-   nothing to a reviewer who cannot see it, and this is the one row
-   state that changes what they are allowed to do. */
 .admin-rights--block::after {
   content: ' ⚠';
 }
-
-/* ── Detail panel ────────────────────────────────────────────────── */
 
 .admin-panel {
   width: 21rem;
@@ -591,8 +537,6 @@
   color: var(--accent);
 }
 
-/* ── Decision ────────────────────────────────────────────────────── */
-
 .admin-decision textarea {
   width: 100%;
   font: inherit;
@@ -681,15 +625,6 @@
   text-decoration: underline;
 }
 
-/* ── The library tree ────────────────────────────────────────────── */
-
-/*
- * One screen for the shelves and the books on them. The tree is
- * flattened on the server and every row indents by `--depth`, so a
- * shelf row and a book row are the same row wherever they sit and the
- * reorder arrows keep working — nesting them in the DOM would make a
- * sibling move a re-parent.
- */
 .admin-lib {
   --step: 1.25rem;
   display: flex;
@@ -727,8 +662,6 @@
   min-width: 0;
 }
 
-/* A root shelf is a name; a nested one is a label. That is what keeps
-   three levels readable as a hierarchy rather than as three sizes. */
 .admin-lib__name {
   font-family: var(--font-display);
   font-size: 0.9375rem;
@@ -745,9 +678,6 @@
   color: var(--ink-soft);
 }
 
-/* Revealed on hover, but never hidden from a keyboard: `opacity` alone
-   would leave them focusable and invisible, and `display: none` would
-   take them off the tab order entirely. */
 .admin-lib__tools {
   display: flex;
   align-items: center;
@@ -822,9 +752,6 @@
   color: var(--ink-faint);
 }
 
-/* Its place on the shelf, ahead of the title. Quiet and tabular so the
-   numbers line up down the column — the point of showing them is that
-   they can be read as a sequence, not one at a time. */
 .admin-lib__order {
   display: inline-block;
   min-width: 1.25rem;
@@ -834,24 +761,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The order box on a shelf card. Narrow, because it holds a number and
-   a full-width box for two digits reads as a field for prose. */
 .admin-lib__order-input {
   max-width: 6rem;
   font-variant-numeric: tabular-nums;
 }
 
-/* The stretched link is what makes the whole row open the panel while
-   still being one link a keyboard can reach. */
 .admin-lib__book .admin-rowlink::after {
   content: '';
   position: absolute;
   inset: 0;
 }
 
-/* Provenance: who uploaded the book and when. Fixed width so the
-   column reads as a column down the tree, whatever depth the shelf is
-   at, and so a long email cannot push the chips out of line. */
 .admin-lib__origin {
   display: flex;
   flex-direction: column;
@@ -871,8 +791,6 @@
   white-space: nowrap;
 }
 
-/* Narrow screens: the shelf tree matters more than the provenance,
-   and the date survives on its own — the panel has the full pair. */
 @media (max-width: 60rem) {
   .admin-lib__uploader {
     display: none;
@@ -903,9 +821,6 @@
   color: var(--ink-faint);
 }
 
-/* A book's level, as a label rather than a control. Three writers for
-   one field in a dense list was two too many — the panel sets one book
-   and the shelf form sets a subtree. */
 .admin-levelchip {
   flex-shrink: 0;
   font-size: 0.6875rem;
@@ -1049,9 +964,6 @@
   font-size: 0.75rem;
 }
 
-/* Deleting: at the foot of the panel, deliberately a link rather than
-   a button. It is destructive and rare, and a filled button beside
-   Save would invite the cursor to the wrong one. */
 .admin-panel__danger {
   padding: 1rem 1.5rem 1.5rem;
   border-top: 1px solid var(--rule-soft);
@@ -1072,14 +984,6 @@
   gap: 0.375rem;
 }
 
-/* ── Narrow ──────────────────────────────────────────────────────── */
-
-/*
- * The admin is a desk and a desk is not a phone, but an editor stuck
- * with a tablet on a train should still be able to work the queue. The
- * shell unstacks rather than trying to keep a 14rem sidebar and a 21rem
- * panel beside a table on a 40rem screen.
- */
 @media (max-width: 60rem) {
   .admin {
     flex-direction: column;
@@ -1120,8 +1024,6 @@
     overflow-y: visible;
   }
 
-  /* A table with sticky headings inside a page that scrolls as a whole
-     pins them to the viewport top, over the section heading. */
   .admin-table th {
     position: static;
   }
@@ -1138,9 +1040,6 @@
   }
 }
 
-/* Columns the design drops as the table narrows. Same breakpoints it
-   uses (Tailwind's md and lg), stated once here rather than as a class
-   on every cell. */
 @media (max-width: 64rem) {
   .admin-col--lg {
     display: none;
@@ -1152,8 +1051,6 @@
     display: none;
   }
 }
-
-/* ── Book edit panel ─────────────────────────────────────────────── */
 
 .admin-fields {
   gap: 1rem;
@@ -1169,8 +1066,6 @@
   min-width: 0;
 }
 
-/* The same label treatment the panel's own section headings get, so a
-   field and a section read as one vocabulary rather than two. */
 .admin-field > label,
 .admin-field > legend {
   font-size: 0.6875rem;
@@ -1210,9 +1105,6 @@
   gap: 0.5rem;
 }
 
-/* A radio and its label as one target. The native input stays in the
-   DOM — it is what makes the group a group for a keyboard and a screen
-   reader — and is drawn rather than replaced. */
 .admin-levelchoice {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1258,11 +1150,6 @@
   flex: 1;
 }
 
-
-/* --- The book's face, in the edit panel ----------------------------- */
-
-/* Bigger than the list's `.admin-face`: in a row it is a bullet telling
-   two books apart, here it is the thing being edited. */
 .admin-cover {
   position: relative;
   flex-shrink: 0;
@@ -1281,8 +1168,6 @@
   border-radius: 0.375rem;
 }
 
-/* `cover`, not `contain`: a book cover is portrait and so is the frame,
-   so cropping a few pixels beats letterboxing every single one. */
 .admin-cover__img {
   object-fit: cover;
   background: var(--paper-band);
@@ -1313,10 +1198,6 @@
   border-color: var(--accent);
 }
 
-/* The input covers the button rather than being hidden, so the control
-   stays a real file input — keyboard-reachable, and opening the dialog
-   with no JavaScript involved. The ring is drawn on the parent because
-   the input itself is invisible. */
 .admin-cover__btn input[type='file'] {
   position: absolute;
   inset: 0;
@@ -1340,9 +1221,6 @@
   margin: 0.4rem 0 0;
 }
 
-/* The page picker in the edit panel, which is a narrow column beside a
-   list rather than a page of its own — so the thumbnails shrink and the
-   label goes, since the cover it belongs to is right above it. */
 .coverpick--admin {
   margin-top: 0.55rem;
 }
@@ -1365,8 +1243,6 @@
   height: 2.75rem;
 }
 
-/* A refusal or a confirmation about the cover belongs under the cover,
-   not stretched across the panel head. */
 .admin-cover .form-error,
 .admin-cover .admin-ok {
   position: absolute;
@@ -1377,10 +1253,6 @@
   font-size: 0.6875rem;
 }
 
-/* --- The reader panel ----------------------------------------------- */
-
-/* Consequences an editor should read before typing, not after saving:
-   sits under the field it warns about, at the field's own width. */
 .admin-hint {
   margin: 0.35rem 0 0;
   font-size: 0.75rem;
@@ -1396,9 +1268,6 @@
   font-size: 0.875rem;
 }
 
-/* Your own account: the box is disabled rather than absent, so the role
-   is still legible as a state rather than looking like it has no
-   setting at all. */
 .admin-check input:disabled {
   cursor: not-allowed;
 }
@@ -1407,9 +1276,6 @@
   color: var(--ink-faint);
 }
 
-/* What the panel shows but cannot change. Read as a row of figures
-   rather than as fields, so they do not look like inputs someone has
-   failed to find the edit control for. */
 .admin-facts {
   display: flex;
   gap: 1.75rem;

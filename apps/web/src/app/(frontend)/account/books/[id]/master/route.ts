@@ -9,22 +9,6 @@ import {
   streamLocalArtifact,
 } from '../../../../../../lib/storage'
 
-/**
- * The DOCX master of your own upload.
- *
- * The master is never a reader download — it is the editorial source of
- * truth, and `downloadable: false` on the artifact keeps it out of every
- * delivery path. This route is the one exception and it is a different
- * thing: the owner of a private upload editing their own book.
- *
- * That is what makes a draft a workspace rather than a preview. A
- * conversion from a scan is a first pass, not a finished edition; the
- * uploader is the one who can see what the OCR got wrong, and they need
- * the file to fix it.
- *
- * Ownership is the whole access rule here, and it is checked against
- * the session rather than anything in the URL.
- */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -38,7 +22,6 @@ export async function GET(
     .findByID({ collection: 'books', id: Number(id), depth: 0, overrideAccess: true })
     .catch(() => null)
 
-  // Not yours and not there are the same answer.
   const ownerId = typeof book?.owner === 'object' ? book?.owner?.id : book?.owner
   if (!book || !ownerId || String(ownerId) !== String(user.id)) {
     return new Response(null, { status: 404 })

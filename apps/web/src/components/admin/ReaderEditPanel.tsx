@@ -7,25 +7,6 @@ import { useActionState, useState } from 'react'
 import { saveReader, type ReaderState } from '../../app/(admin)/actions/readers'
 import { useOnSaved } from './useOnSaved'
 
-/**
- * The panel beside the Readers list, where an account is changed.
- *
- * Two fields, and the panel is mostly what it *cannot* change: credits,
- * uploads and join date are shown as facts, because they are facts —
- * each is derived or ledgered elsewhere and a form that could type over
- * one would be a second answer to a question already answered. See
- * `actions/readers.ts` for why each is out.
- *
- * Selection is `?reader=` in the URL, as `?book=` is on the Library
- * screen: it renders on the server, survives a save, gives every row a
- * real link, and leaves the only client state as the unsaved draft.
- *
- * The role checkbox disables itself on your own account. The action
- * refuses self-demotion regardless — a disabled input is a courtesy,
- * not a control — but a checkbox you can tick that always fails is
- * worse than one you cannot.
- */
-
 export interface ReaderEditValues {
   id: number
   email: string
@@ -43,15 +24,12 @@ export function ReaderEditPanel({
   closeHref,
 }: {
   reader: ReaderEditValues
-  /** Whether this is the signed-in administrator's own account. */
   isSelf: boolean
   closeHref: string
 }) {
   const [state, save, saving] = useActionState<ReaderState, FormData>(saveReader, {})
   const router = useRouter()
 
-  // Closes itself once the account is saved, like the Library panel
-  // beside it (`useOnSaved`).
   useOnSaved(state, () => router.replace(closeHref, { scroll: false }))
 
   const [draft, setDraft] = useState(reader)

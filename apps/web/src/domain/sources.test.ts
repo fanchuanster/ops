@@ -36,9 +36,6 @@ describe('reading a book’s sources', () => {
   })
 
   it('synthesizes the single source of a book written before the list existed', () => {
-    // The whole reason nothing was backfilled. Every book uploaded
-    // before this feature has an empty array and a perfectly real
-    // source; reading the array alone would say it has none.
     const sources = readSources({
       sourceKind: 'pdf',
       sourceKey: 'conversion/abc/input/source.pdf',
@@ -59,7 +56,6 @@ describe('reading a book’s sources', () => {
   it('says a book with nothing at all has no sources', () => {
     expect(readSources({})).toEqual([])
     expect(readSources(null)).toEqual([])
-    // A kind with no file behind it is not a source.
     expect(readSources({ sourceKind: 'pdf' })).toEqual([])
   })
 
@@ -70,8 +66,6 @@ describe('reading a book’s sources', () => {
   })
 
   it('keeps only the first of a repeated kind', () => {
-    // One slot per format, so a list disagreeing with that would offer
-    // the same choice twice and switch to whichever row was clicked.
     const sources = readSources({
       sources: [scan, { ...scan, storageKey: 'books/other.pdf', filename: 'other.pdf' }],
     })
@@ -94,8 +88,6 @@ describe('which source the master comes from', () => {
   })
 
   it('does not count an EPUB towards the choice', () => {
-    // A book with a scan and an uploaded EPUB has exactly one file a
-    // master could come from, so there is nothing to ask about.
     const edition = { kind: 'epub' as const, storageKey: 'books/tao.epub', filename: 'tao.epub' }
     expect(masterSources([scan, edition])).toEqual([scan])
     expect(offersMasterChoice([scan, edition])).toBe(false)
@@ -129,9 +121,6 @@ describe('adding a source', () => {
   })
 
   it('refuses a generated EPUB’s slot as firmly as an uploaded one', () => {
-    // Keyed on artifacts rather than on the source list precisely for
-    // this: a second file accepted here would overwrite the edition
-    // readers already have.
     expect(canAddSource({ kind: 'epub', existingFormats: ['pdf', 'docx', 'epub'] })).toEqual({
       allowed: false,
       reason: 'slot_taken',
@@ -145,7 +134,6 @@ describe('adding a source', () => {
   })
 
   it('accepts a DOCX when there is no master yet', () => {
-    // A PDF published as it stands, whose owner has since typed it up.
     expect(canAddSource({ kind: 'docx', existingFormats: ['pdf'] })).toEqual({
       allowed: true,
       slot: 'docx',
@@ -161,9 +149,6 @@ describe('adding a source', () => {
 
 describe('switching to another source', () => {
   it('names the new file and clears the old file’s hash', () => {
-    // The hash is what lets a byte-identical upload skip the export.
-    // Left in place over a different file it would hand this book
-    // another book's master — a finished, plausible, wrong book.
     expect(switchedToSource(typed)).toEqual({
       sourceKind: 'text',
       sourceKey: 'books/tao.txt',
@@ -175,10 +160,6 @@ describe('switching to another source', () => {
 
 describe('reconciling a source against where the file actually is', () => {
   it('repoints a legacy entry at the artifact it was filed as', () => {
-    // `sourceKey` on a book filed before this list existed still names
-    // the `conversion/` prefix, which the R2 lifecycle rule sweeps after
-    // 30 days. Persisting that key into the list and switching back to
-    // it later would point the pipeline at nothing.
     const sources = readSources(
       {
         sourceKind: 'pdf',
@@ -192,8 +173,6 @@ describe('reconciling a source against where the file actually is', () => {
   })
 
   it('leaves an entry alone when its slot has not been filed', () => {
-    // A draft: the file is in storage, but under the upload key, and
-    // there is no artifact yet to prefer.
     const sources = readSources(
       { sourceKind: 'pdf', sourceKey: 'conversion/abc/input/source.pdf' },
       [],
@@ -202,7 +181,6 @@ describe('reconciling a source against where the file actually is', () => {
   })
 
   it('does not confuse one slot for another', () => {
-    // The text source must not be repointed at the PDF sitting beside it.
     const sources = readSources({ sources: [scan, typed] }, [
       { format: 'pdf', storageKey: 'books/tao.pdf' },
     ])

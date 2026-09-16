@@ -8,15 +8,6 @@ import {
   type ManageState,
 } from '../app/(frontend)/actions/manageBook'
 
-/**
- * Managing one uploaded book: retrying a failed conversion, deleting it.
- *
- * Delete asks first. It destroys the source file and every generated
- * format, and unlike almost everything else here it cannot be undone —
- * a confirmation is the least that owes the reader. The server checks
- * ownership and the entitlement rule again regardless; this dialog is
- * courtesy, not a control.
- */
 export function BookActions({
   bookId,
   title,

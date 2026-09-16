@@ -2,23 +2,6 @@
 
 import { useEffect } from 'react'
 
-/**
- * The Google One Tap prompt.
- *
- * A reader already signed in to Google sees "Continue as …" in the corner
- * and can be signed in without leaving the page. It is the one piece of
- * this flow that has to run in the browser: Google's library renders the
- * prompt and hands us a credential.
- *
- * Rendered only when nobody is signed in — the layout decides that — and
- * the endpoint checks again on the server, because a stale page is not a
- * reason to prompt someone who already has a session.
- *
- * Everything that matters still happens on the server. This component
- * receives a credential and posts it; it does not decide anything, and a
- * forged credential gets no further than the signature check.
- */
-
 const GSI_SRC = 'https://accounts.google.com/gsi/client'
 
 declare global {
@@ -55,28 +38,12 @@ function loadGsi(): Promise<void> {
   })
 }
 
-/**
- * Where to send the reader once One Tap signs them in.
- *
- * Derived from the page they are on, not passed in, because the useful
- * answer is only known in the browser. The case that matters: a reader
- * asks for something that needs an account, gets sent to
- * `/login?next=/read/analects/1`, and accepts the prompt there — they
- * should land on the chapter they asked for, not on the home page having
- * forgotten why they signed in.
- *
- * Whatever this returns is still put through `safeNext` on the server,
- * so a crafted `next` cannot turn the prompt into an open redirect.
- */
 function destination(): string {
   const params = new URLSearchParams(window.location.search)
   const requested = params.get('next')
   if (requested) return requested
 
   const { pathname, search } = window.location
-  // Signing in *from* the sign-in page with nowhere in particular to go
-  // means the reader came here deliberately; the library is the sensible
-  // landing, and returning to /login would only bounce.
   if (pathname === '/login' || pathname === '/sign-up') return '/'
   return `${pathname}${search}`
 }
@@ -88,8 +55,6 @@ export function GoogleOneTap() {
 
     async function start() {
       try {
-        // The nonce binds the credential to this browser, and the server
-        // refuses a credential without it.
         const setup = await fetch('/auth/google/one-tap', { credentials: 'same-origin' })
         if (!setup.ok) return
         const { enabled, clientId, nonce } = (await setup.json()) as {
@@ -115,24 +80,12 @@ export function GoogleOneTap() {
             })
             const body = (await result.json()) as { ok?: boolean; next?: string; message?: string }
             if (result.ok && body.ok) {
-              // A full navigation rather than a router refresh: the session
-              // arrived as a Set-Cookie header, and every server component
-              // on the page was rendered for a signed-out reader.
               window.location.assign(body.next || next)
               return
             }
-            // Not thrown and not shown to the reader — One Tap failing
-            // should leave the page alone. But it must not fail silently
-            // either: a prompt that appears, is accepted, and does
-            // nothing is the hardest kind of bug to report.
             console.warn('[NobleSee] One Tap sign-in was refused:', body.message ?? result.status)
           },
-          // Chrome has moved One Tap onto FedCM; without this the prompt
-          // is silently suppressed in current versions.
           use_fedcm_for_prompt: true,
-          // Do not dismiss the moment the reader clicks anywhere else —
-          // a prompt that vanishes on the first stray click may as well
-          // not have appeared.
           cancel_on_tap_outside: false,
           itp_support: true,
           context: 'signin',
@@ -140,9 +93,6 @@ export function GoogleOneTap() {
 
         window.google.accounts.id.prompt()
       } catch {
-        // One Tap is a convenience. If Google's script is blocked, or the
-        // reader has third-party prompts turned off, the ordinary sign-in
-        // page is still right there and must not be disturbed by this.
       }
     }
 
@@ -150,8 +100,6 @@ export function GoogleOneTap() {
     return () => {
       cancelled = true
     }
-    // Runs once per mount. The destination is read from the URL at that
-    // moment, which is the moment the prompt is configured.
   }, [])
 
   return null

@@ -15,8 +15,8 @@ For each part it produces the DOCX master plus the reader-facing formats
 generated *from* that same content: EPUB, and PDF in three font sizes.
 
     pip install python-docx ebooklib weasyprint pillow
-    python3 tools/generate-seed-content.py            # only missing files
-    python3 tools/generate-seed-content.py --force    # regenerate all
+    python3 tools/generate-seed-content.py
+    python3 tools/generate-seed-content.py --force
     python3 tools/generate-seed-content.py --book analects
 
 NOTE ON TEXT FIDELITY: the passages below are transcribed for
@@ -43,17 +43,7 @@ SEED_ROOT = os.path.join(REPO_ROOT, "content", "seed")
 CJK_FONT = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"
 LATIN_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
 
-# One PDF, at a body size that keeps an A5 measure close to a printed
-# book. There were three — standard, large and extra large — until
-# 2026-08-20; the EPUB answers "what type size do you want" properly, by
-# letting the device decide, so rendering fixed alternatives was work
-# spent badly. See CLAUDE.md section 11.
 PDF_BODY_SIZE = 12
-
-
-# --------------------------------------------------------------------------
-# Book specs
-# --------------------------------------------------------------------------
 
 ANALECTS = {
     "slug": "analects",
@@ -166,11 +156,6 @@ ANALECTS = {
 
 BOOKS = {"analects": ANALECTS}
 
-
-# --------------------------------------------------------------------------
-# Rendering
-# --------------------------------------------------------------------------
-
 def chapter_html(part):
     """One chapter's passages. Shared by the DOCX, EPUB and PDF paths."""
     blocks = [
@@ -181,7 +166,6 @@ def chapter_html(part):
         for section in part["sections"]
     ]
     return f"<h2>{part['title']}</h2>{''.join(blocks)}"
-
 
 def book_html(book):
     """The whole book in one document.
@@ -200,7 +184,6 @@ def book_html(book):
       <p class="colophon"><em>{book['colophon']}</em></p>
     </article>
     """
-
 
 def write_docx(book, path):
     doc = Document()
@@ -228,7 +211,6 @@ def write_docx(book, path):
 
     doc.save(path)
 
-
 def write_epub(book, path):
     epub_book = epub.EpubBook()
     epub_book.set_identifier(f"noblesee-{book['slug']}")
@@ -255,8 +237,6 @@ def write_epub(book, path):
         chapter = epub.EpubHtml(
             title=part["title"], file_name=f"chapter-{index}.xhtml", lang="en"
         )
-        # The title block only on the first chapter; after that the book
-        # is already open and repeating it reads as a new book each time.
         opening = (
             f"<h1>{book['title']}</h1>"
             f"<p class='byline'>{book['author']} · {book['translator']}</p>"
@@ -276,7 +256,6 @@ def write_epub(book, path):
         epub_book.add_item(chapter)
         chapters.append(chapter)
 
-    # A real table of contents now that a book has more than one chapter.
     epub_book.toc = tuple(
         epub.Link(c.file_name, p["title"], p["slug"])
         for c, p in zip(chapters, book["parts"])
@@ -284,14 +263,9 @@ def write_epub(book, path):
     epub_book.add_item(epub.EpubNcx())
     epub_book.add_item(epub.EpubNav())
 
-    # The text is the first page, not the table of contents. The nav
-    # document stays in the manifest, which is what EPUB 3 requires and
-    # what feeds the reader's chapter display; it just is not where the
-    # book opens.
     epub_book.spine = chapters
 
     epub.write_epub(path, epub_book, {})
-
 
 def pdf_css(base_pt):
     return f"""
@@ -310,14 +284,12 @@ def pdf_css(base_pt):
                   margin-top: 2em; }}
     """
 
-
 def write_pdf(book, path, base_pt):
     html = (
         f"<html><head><style>{pdf_css(base_pt)}</style></head>"
         f"<body>{book_html(book)}</body></html>"
     )
     HTML(string=html).write_pdf(path)
-
 
 def page_count(book):
     """How long the book is — what the credit price is derived from.
@@ -331,7 +303,6 @@ def page_count(book):
         f"<body>{book_html(book)}</body></html>"
     )
     return len(HTML(string=html).render().pages)
-
 
 def write_cover(book, path):
     img = Image.new("RGB", (800, 1200), color=(28, 26, 23))
@@ -350,9 +321,6 @@ def write_cover(book, path):
     center(520, book["cover_en"], font_small, (230, 225, 215))
     center(1080, "NobleSee", font_small, (120, 116, 108))
     img.save(path, quality=90)
-
-
-# --------------------------------------------------------------------------
 
 def generate(book, force=False):
     book_dir = os.path.join(SEED_ROOT, book["slug"], "whole")
@@ -373,10 +341,7 @@ def generate(book, force=False):
     emit(os.path.join(book_dir, "book.pdf"),
          lambda p: write_pdf(book, p, PDF_BODY_SIZE))
 
-    # Printed so the value can be copied into the seed, which is where
-    # the price comes from.
     print(f"  pages: {page_count(book)}")
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -388,7 +353,6 @@ def main():
     for book in selected:
         generate(book, force=args.force)
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

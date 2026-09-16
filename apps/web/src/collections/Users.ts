@@ -5,64 +5,10 @@ import { KINDLE_DOMAINS, KINDLE_SENDER_ADDRESS, checkKindleAddress } from '../do
 import { SIGNUP_GRANT } from '../domain/credits'
 import { checkPassword } from '../domain/password'
 
-/**
- * Identity lives in Payload (auth, sessions, password reset), while the
- * domain keys off `user_id` alone and never imports a Payload user
- * object. That is the boundary that keeps section 7's "NobleSee owns
- * the domain concepts" true, and leaves room to move identity out later
- * without touching business logic.
- */
 export const Users: CollectionConfig = {
   slug: 'users',
-  /**
-   * Sessions for people, and API keys for their scripts.
-   *
-   * `useAPIKey` adds an opt-in, per-user key that authenticates as that
-   * user on every Payload endpoint and on the admin API in
-   * `app/(frontend)/api/admin/`. Per-user rather than one shared
-   * secret, for a reason that is not just tidiness: publishing a book
-   * records *who* approved it (`enforcePublicationReview` reads
-   * `req.user`), and a shared token cannot answer that question. It is
-   * also revocable one holder at a time.
-   *
-   * Off until a user turns it on, so enabling this grants nobody
-   * anything. A reader who makes a key gets exactly a reader's
-   * privileges — the admin API's gate is the `admin` role, not the
-   * existence of a key.
-   *
-   * It is minted at `/account/tokens`, where it is called a personal
-   * access token, and not through the checkbox the CMS draws. The
-   * screen supplies the value itself so the token carries a
-   * recognisable prefix (`domain/tokens.ts`); Payload derives
-   * `apiKeyIndex` from whatever it is given, so a supplied token
-   * authenticates exactly as a generated one does.
-   */
   auth: {
     useAPIKey: true,
-    /**
-     * A year, where Payload's default is two hours.
-     *
-     * Two hours is what had readers signing in again in the middle of
-     * an afternoon, because this single number is the whole session:
-     * the JWT's own `exp`, the `expiresAt` on the `sessions` row it is
-     * checked against, and the lifetime of the cookie carrying it all
-     * come from here, so they expired together. Nothing about a
-     * library needs that — the acts worth guarding (spending credits,
-     * publishing a book, changing a password) each ask their own
-     * question at the moment they happen.
-     *
-     * Nothing renews a session, so a year is the whole of it: a reader
-     * who visits at least once in a year is never signed out, and one
-     * who has been away longer signs in again. The ceiling is
-     * deliberate rather than an oversight — a token that never expires
-     * can only be stopped by revoking it, and revocation is only as
-     * good as the lookup that reads it.
-     *
-     * What a long session does oblige is that signing out ends the
-     * session on the server rather than only dropping the cookie
-     * (`endSession` in `lib/auth.ts`). At two hours that was nearly
-     * academic; at a year it is not.
-     */
     tokenExpiration: 60 * 60 * 24 * 365,
   },
   admin: {
@@ -70,18 +16,8 @@ export const Users: CollectionConfig = {
     group: 'Administration',
   },
   hooks: {
-    // The password rule has to live here for the same reason the roles
-    // rule lives at field level: there is more than one door. The
-    // sign-up form, `POST /api/users`, the admin UI and the
-    // create-admin script all reach the collection, and only the first
-    // of them ever saw the check that used to sit in the server action.
-    // A hook runs on all of them, including calls made with
-    // `overrideAccess: true`, which skips access control but not hooks.
     beforeValidate: [
       ({ data, operation }) => {
-        // Only when a password is actually being set: ordinary updates
-        // carry no password field, and rejecting those would make every
-        // profile edit fail.
         if (operation === 'create' || typeof data?.password === 'string') {
           const problem = checkPassword(data?.password)
           if (problem) throw new APIError(problem.message, 400)
@@ -91,10 +27,6 @@ export const Users: CollectionConfig = {
     ],
   },
   access: {
-    // Anyone may register. What they may register *as* is constrained at
-    // the field level below, so the guarantee holds no matter which door
-    // the request came through — the sign-up form, the REST API, or
-    // anything added later.
     create: () => true,
     read: ({ req }) => {
       if (!req.user) return false
@@ -124,8 +56,6 @@ export const Users: CollectionConfig = {
           'Document E-mail List in Amazon settings, or Amazon discards what we send.',
       },
       validate: (value: unknown) => {
-        // Empty is how a reader turns delivery off, so it must stay
-        // valid — this field is optional by design.
         if (value === null || value === undefined || value === '') return true
         if (typeof value !== 'string') return 'Enter a Kindle address.'
 
@@ -153,10 +83,6 @@ export const Users: CollectionConfig = {
           'Google’s subject id, set when a reader signs in with Google. Unique so one Google account cannot be linked to two readers. Never edit by hand: it is the identity, and pointing it at another row hands that row’s account to whoever holds the Google login.',
       },
       access: {
-        // Set only by the OAuth callback, which writes with
-        // `overrideAccess: true`. Nothing a reader can reach may touch
-        // it — being able to write your own googleId is being able to
-        // claim someone else's Google identity.
         create: () => false,
         update: () => false,
       },
@@ -171,10 +97,6 @@ export const Users: CollectionConfig = {
           'A path on this site (/avatar?v=…), never Google’s URL. The picture is fetched once at sign-in and stored in R2 so readers’ browsers never call googleusercontent.com — see lib/avatars.ts. Re-checked on each sign-in, since Google changes the source URL when the reader changes their photo. Readers who registered with a password have none, and get initials instead.',
       },
       access: {
-        // Same reasoning as googleId: written only by the sign-in path,
-        // which uses `overrideAccess: true`. A reader who could set this
-        // could point it at any URL on the internet and have every page
-        // they appear on fetch it.
         create: () => false,
         update: () => false,
       },
@@ -182,17 +104,12 @@ export const Users: CollectionConfig = {
     {
       name: 'credits',
       type: 'number',
-      // Not `required`: the default supplies it, and marking it required
-      // would make every `payload.create({ collection: 'users' })` in the
-      // codebase have to pass a balance it has no business choosing.
       defaultValue: SIGNUP_GRANT,
       admin: {
         description:
           'Spendable balance. The credit-ledger collection is the account of how it got here; this is the number the delivery check reads, because summing a ledger per request would be a table scan. Only lib/credits.ts may move it.',
       },
       access: {
-        // A reader who could write their own balance would not need to
-        // read anything ever again.
         create: () => false,
         update: () => false,
       },
@@ -232,11 +149,6 @@ export const Users: CollectionConfig = {
         { label: 'Admin', value: 'admin' },
       ],
       access: {
-        // Readers must not be able to promote themselves — section 34.
-        // Both directions are needed: `update` stops an existing reader
-        // escalating, `create` stops someone registering as an admin in
-        // the first place, which is the hole that opens the moment
-        // public sign-up exists.
         create: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
         update: ({ req }) => Boolean(req.user?.roles?.includes('admin')),
       },

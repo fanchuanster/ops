@@ -23,31 +23,6 @@ import { requireAdmin } from '../../../lib/adminAuth'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Review queue' }
 
-/**
- * The submissions waiting on an editor.
- *
- * A list and a detail panel, and the panel is chosen with `?book=`
- * rather than with client-side selection. That is a deliberate
- * departure from the design's implementation, not from its layout: a
- * query parameter renders on the server, survives a decision being
- * saved, gives every row a real link, and means the whole screen needs
- * no client state at all. Only the decision form itself is interactive.
- *
- * There is one decision here and not two. Approving a submission puts
- * it in the public library in the same act — see `actions/review.ts` —
- * so the panel carries no separate Publish control and no visibility
- * setting. What it still carries is the rights declaration, because
- * that is the one gate an administrator cannot open: a book declared
- * "owns a copy" cannot be approved at all.
- *
- * What a reviewer is deciding *about* is the finished book, so the
- * panel's main affordance is Read it — `/read/<slug>`, which the Books
- * access rule opens to an administrator whatever the book's visibility.
- * `CLAUDE.md` section 3 says reviewing means reading the book, and a
- * screen that only offered files to download would be asking for a
- * judgement on something nobody had opened.
- */
-
 const FILTERS: { value: string; label: string }[] = [
   { value: 'all', label: 'All' },
   ...REVIEW_QUEUE_STATES.map((state) => ({ value: state, label: REVIEW_LABELS[state] })),
@@ -67,10 +42,6 @@ export default async function ReviewQueuePage({
 
   const books = await getReviewQueue({ state: filter })
 
-  // The panel's book is fetched separately rather than picked out of
-  // the list: a decision saved a moment ago may have moved it out of
-  // the current filter, and the panel should still show what happened
-  // rather than closing itself.
   const selectedId = Number(params.book)
   const selected = Number.isInteger(selectedId) ? await getAdminBook(selectedId) : null
 
@@ -154,9 +125,6 @@ export default async function ReviewQueuePage({
                             {face}
                           </span>
                           <span>
-                            {/* The stretched link is what makes the
-                                whole row clickable while still being
-                                one link a keyboard can reach. */}
                             <Link
                               className="admin-rowlink"
                               href={query({ book: String(book.id) })}
@@ -213,7 +181,6 @@ function SubmissionPanel({
   closeHref,
 }: {
   book: Awaited<ReturnType<typeof getAdminBook>> & object
-  /** Who is reviewing, so a book they uploaded themselves is recognised. */
   adminId: number | string
   closeHref: string
 }) {
@@ -224,13 +191,6 @@ function SubmissionPanel({
   const kind = readSourceKind(book.conversion ?? {})
   const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
 
-  // Approving is publishing, so the question "may this be approved" is
-  // literally `canPublishToLibrary`. The gate is the domain's, so the
-  // button and the write agree by construction rather than by being
-  // kept in step.
-  //
-  // `byAdmin` is unconditional here: this page is behind `requireAdmin`,
-  // so there is nobody else looking at it.
   const publication = canPublishToLibrary({
     reviewState: state,
     rightsStatus: rights,

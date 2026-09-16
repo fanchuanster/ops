@@ -8,30 +8,6 @@ import { checkAccountEmail, checkRoleChange } from '../../../domain/accounts'
 import { currentAdmin, isAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
 
-/**
- * The two things an administrator does to somebody else's account:
- * correct the email, and grant or withdraw the admin role.
- *
- * Both were the CMS's until 2026-08-24, and this is what replaces them
- * — the last screens standing between the editorial admin and deleting
- * `/cms` altogether. Everything else the CMS could do to an account is
- * deliberately *not* here:
- *
- *   credits      not editable anywhere. The field refuses writes at
- *                field level (`collections/Users.ts`) and only
- *                `lib/credits.ts` moves a balance, against a ledger.
- *                A form that could set it would be a second, unaudited
- *                answer to "how much does this reader have".
- *   password     readers reset their own. An administrator who can set
- *                a password can sign in as anybody.
- *   kindleEmail  the reader's own, on their own account page.
- *
- * The role is a checkbox rather than a role picker because there are
- * two roles that mean anything to the code — `admin`, and everyone else
- * — and offering `editor` as a third would imply a permission set that
- * nothing checks for.
- */
-
 export type ReaderState = { error?: string; ok?: string }
 
 export async function saveReader(
@@ -74,10 +50,6 @@ export async function saveReader(
     .catch(() => null)
   if (!reader) return { error: 'No such reader.' }
 
-  // Email is unique on an auth collection, and the adapter surfaces the
-  // clash as a raw failed-query message with nothing field-shaped in
-  // it. Checked here for the sentence — the same reason the Library
-  // panel checks a title before saving it.
   if (check.email !== reader.email) {
     const clash = await payload.find({
       collection: 'users',
@@ -91,13 +63,6 @@ export async function saveReader(
     }
   }
 
-  /**
-   * The roles array is rewritten wholesale rather than having `admin`
-   * added to or removed from it, so the checkbox means exactly what it
-   * shows. `reader` is kept underneath because it is the collection's
-   * default and an account with an empty roles array is a shape no
-   * other code expects.
-   */
   const roles: ('reader' | 'editor' | 'admin')[] = makeAdmin ? ['reader', 'admin'] : ['reader']
 
   try {

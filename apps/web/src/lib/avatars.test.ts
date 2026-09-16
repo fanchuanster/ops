@@ -1,15 +1,3 @@
-/**
- * Guards on the avatar mirror.
- *
- * `mirrorAvatar` is the one place NobleSee fetches a URL that came from
- * outside and re-serves the bytes from its own origin. That is a small
- * feature with a disproportionate blast radius — an SVG accepted here
- * is script on our domain — so the refusals are worth pinning down.
- *
- * R2 is stubbed rather than run: the questions are what we accept and
- * what we store, not whether Miniflare works.
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const put = vi.fn()
@@ -46,7 +34,6 @@ describe('mirroring a profile picture', () => {
 
     const path = await mirrorAvatar({ userId: 7, sourceUrl: SOURCE })
 
-    // Never Google's URL: that is the entire point of the module.
     expect(path).toMatch(/^\/avatar\?v=[0-9a-f]{12}$/)
     expect(path).not.toContain('googleusercontent')
     expect(put).toHaveBeenCalledWith(
@@ -77,8 +64,6 @@ describe('mirroring a profile picture', () => {
   })
 
   it('refuses a body over the size cap even when the header lies about it', async () => {
-    // Content-Length is advisory; the cap that matters is on the bytes
-    // actually read.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => imageResponse('image/png', 3 * 1024 * 1024, { 'content-length': '10' })),
@@ -106,7 +91,6 @@ describe('mirroring a profile picture', () => {
       currentAvatarUrl: first!,
     })
     expect(again).toBe(first)
-    // Signing in is common; changing your photo is not.
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -120,8 +104,6 @@ describe('mirroring a profile picture', () => {
       currentAvatarUrl: before!,
     })
 
-    // A changed URL must produce a changed path, or the browser serves
-    // the old face out of cache forever.
     expect(after).not.toBe(before)
   })
 
@@ -130,7 +112,6 @@ describe('mirroring a profile picture', () => {
       throw new Error('network is down')
     }))
 
-    // Sign-in must not depend on googleusercontent.com being reachable.
     await expect(mirrorAvatar({ userId: 7, sourceUrl: SOURCE })).resolves.toBeNull()
   })
 

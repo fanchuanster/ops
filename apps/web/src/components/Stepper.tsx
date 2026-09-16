@@ -2,20 +2,6 @@ import React from 'react'
 
 import { UPLOAD_STEPS } from '../domain/pipeline'
 
-/**
- * Where a book is in the conversion flow: Upload → Process → Review →
- * Publish.
- *
- * A server component with no state — the step is derived from the book
- * (`uploadStep` in `domain/pipeline.ts`) and rendered once. The design
- * puts this above every screen of the flow, and it earns its place by
- * answering the question the individual sections cannot: how much of
- * this is left.
- *
- * An ordered list rather than a row of divs, because that is what it
- * is, and `aria-current="step"` marks the one you are on — a stepper
- * drawn purely in colour says nothing to a reader who cannot see it.
- */
 export function Stepper({ step }: { step: number }) {
   return (
     <ol className="stepper">

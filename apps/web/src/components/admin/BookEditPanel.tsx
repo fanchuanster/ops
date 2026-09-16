@@ -13,54 +13,6 @@ import { BOOK_LEVELS, LEVEL_DESCRIPTIONS, LEVEL_LABELS, type BookLevel } from '.
 import { BookCoverControl } from './BookCoverControl'
 import { useOnSaved } from './useOnSaved'
 
-/**
- * The panel beside the Books list, where a book is actually edited.
- *
- * The design's right-hand panel, adopted as drawn: title, original
- * title, author, description, shelf and level, with an explicit Save
- * and a Discard that appears only once something has changed.
- *
- * One field the design does not draw: where the book sits on its shelf.
- * A book is given that number when it is filed and it is what a reader
- * browsing in the curated order is sorted by (`domain/shelfOrder.ts`),
- * so without a box for it the order could only ever be the order the
- * books happened to arrive in.
- *
- * Since the Books and Collections screens merged this is also the only
- * place a single book's level is set — the row shows it as a label
- * now, and the shelf form beside it sets a whole subtree at once.
- *
- * Which book is open is a `?book=` in the URL and not state in here —
- * the tree is server-rendered, a row is a real link, and an editor can
- * send somebody the book they are looking at. What *is* state is the
- * unsaved draft, because that is what Discard restores and what makes
- * Save able to know whether it has anything to do.
- *
- * The cover is here too, as the panel's own face rather than as a
- * field in the form. It was editable only in the CMS until 2026-08-24,
- * which made it the one property of a book that could not be changed on
- * the screen for changing books. It saves on choosing a file rather
- * than on Save — see `BookCoverControl`.
- *
- * Deleting is here and is deliberately at the bottom, outside the
- * form: it is not a field, it cannot be part of Save, and a `<form>`
- * inside a `<form>` is not valid HTML. The server decides whether it is
- * allowed (`deleteLibraryBook`) — the confirmation is courtesy.
- *
- * Saving closes the panel. An editor working down a shelf saves one
- * book and goes to the next, so leaving the panel open left them a
- * screen still occupied by the book they had finished with; the tree
- * row behind it already shows the new title, which is the confirmation
- * that matters. A save that *fails* keeps the panel open with its
- * error, because there is still something to do in it.
- *
- * Deliberately absent: rights status, visibility, ownership, review.
- * Visibility in particular is no longer a field anybody sets — a book
- * is in the library because it was approved (`actions/review.ts`), and
- * a second control that could contradict that would only be a way to
- * publish something the rights never cleared.
- */
-
 export interface BookEditValues {
   id: number
   title: string
@@ -69,34 +21,18 @@ export interface BookEditValues {
   description: string
   level: BookLevel
   collectionId: number | null
-  /**
-   * Where it sits among the books on that shelf, lowest first.
-   *
-   * Null for a book on no shelf, and for one nobody has numbered — the
-   * box is empty in both cases, and leaving it empty changes nothing.
-   */
   collectionOrder: number | null
   slug: string
-  /** In the public library — which since 2026-08-24 means "approved". */
   published: boolean
-  /** Deliveries to e-readers. Not downloads; NobleSee has none. */
   sent: number
-  /** Who uploaded it, or null for a book staff entered. */
   uploader: string | null
-  /** Their email, when the name above was not already it. */
   uploaderEmail: string | null
-  /** The day it arrived, ISO, formatted on the server. */
   uploaded: string
-  /** What a reader sees: the upload, else page one, else neither. */
   coverUrl: string | null
-  /** Whether that picture is an editor's upload, so removable. */
   hasUploadedCover: boolean
-  /** Which rendered page the book wears, and what else was rendered. */
   coverPage: number
   coverPages: number[]
-  /** Whether any page of the book has been rasterized yet. */
   hasRenderedCover: boolean
-  /** Whether a browser could render pages for it from an artifact. */
   canMakeCover: boolean
 }
 
@@ -116,15 +52,8 @@ export function BookEditPanel({
   )
   const router = useRouter()
 
-  // Close on a successful save (`useOnSaved`). `replace` rather than
-  // `push`: closing a panel is not a step an editor should have to walk
-  // back through. `scroll: false` for the same reason the tree's own
-  // rows carry it — the shelf must not move under the cursor
-  // (`LibraryTree`).
   useOnSaved(state, () => router.replace(closeHref, { scroll: false }))
 
-  // Keyed by the book's id so opening a different row resets the draft
-  // rather than carrying the last one's half-typed title across.
   const [draft, setDraft] = useState<BookEditValues>(book)
   const [openedAs, setOpenedAs] = useState(book)
   if (openedAs.id !== book.id) {
@@ -135,9 +64,6 @@ export function BookEditPanel({
   const set = <K extends keyof BookEditValues>(key: K, value: BookEditValues[K]) =>
     setDraft((current) => ({ ...current, [key]: value }))
 
-  // The cover is not part of the draft: it saves on its own, the moment
-  // a file is chosen, so comparing it here would leave Save enabled
-  // after an upload with nothing for it to write.
   const EDITED = [
     'title',
     'originalTitle',
@@ -177,18 +103,12 @@ export function BookEditPanel({
                 {book.sent} sent
               </span>
             </p>
-            {/* Where the book came from. Below the chips rather than
-                beside them, because it is a sentence and they are
-                labels — and it is the answer to the question the
-                Library screen's own column raises. */}
             <p className="admin-panel__meta admin-quiet">
               {book.uploader
                 ? `Uploaded by ${book.uploader}`
                 : 'Entered by staff — no uploader'}
               {book.uploaded ? ` · ${book.uploaded}` : null}
             </p>
-            {/* The email only when the name shown above was something
-                else — repeating it under itself says nothing. */}
             {book.uploaderEmail ? (
               <p className="admin-panel__meta admin-quiet">{book.uploaderEmail}</p>
             ) : null}
@@ -260,10 +180,6 @@ export function BookEditPanel({
               set('collectionId', event.target.value === '' ? null : Number(event.target.value))
             }
           >
-            {/* "Other", not "No collection": a book here is filed
-                somewhere an editor can find it, rather than sitting in
-                a hole in the library. The tree calls the same group the
-                same thing. */}
             <option value="">Other</option>
             {collections.map((collection) => (
               <option key={collection.id} value={collection.id}>
@@ -292,11 +208,6 @@ export function BookEditPanel({
             }
             disabled={draft.collectionId === null}
           />
-          {/* Two sentences because two things are non-obvious: that a
-              taken number shifts rather than collides, and that this is
-              a position on one shelf rather than in the library. The
-              box is disabled under "Other" — a book on no shelf has
-              nothing to be third of. */}
           <p className="admin-quiet">
             {draft.collectionId === null
               ? 'A book has a place only once it is on a shelf.'
@@ -306,9 +217,6 @@ export function BookEditPanel({
 
         <fieldset className="admin-field admin-field--level">
           <legend>Level</legend>
-          {/* Radios rather than buttons: three mutually exclusive
-              choices that are saved together with everything else, so
-              they must be form state and not their own submit. */}
           {BOOK_LEVELS.map((option) => (
             <label key={option} className="admin-levelchoice" data-on={draft.level === option}>
               <input

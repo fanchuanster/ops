@@ -1,15 +1,3 @@
-/**
- * Shelf ordering.
- *
- * `compareSequence` is what a reader actually sees, and since order ids
- * need not be unique its title tie-break is the common path rather than
- * a corner: everything nobody has placed shares `UNPLACED_ORDER_ID`, so
- * an uncurated shelf reaches the title comparison for every pair and
- * reads A-Z. The tests below are mostly about that — a shelf nobody
- * curated, one book lifted out of it, and two books at the same
- * number.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -39,8 +27,6 @@ describe('sorting a shelf', () => {
   })
 
   it('breaks ties on title, for a list covering more than one shelf', () => {
-    // Two shelves in one catalog query: both legitimately hold a book
-    // numbered 1, and the order between them must still be stable.
     const mixed = [item(1, 'Zhuangzi', 1), item(2, 'Analects', 1)]
     expect(sortShelfItems(mixed, 'sequence').map((book) => book.id)).toEqual([2, 1])
   })
@@ -61,7 +47,6 @@ describe('sorting a shelf', () => {
   })
 
   it('treats a non-numeric stored order as no order at all', () => {
-    // Null, undefined and NaN all mean "nobody numbered this".
     expect(compareSequence(item(1, 'A', Number.NaN), item(2, 'B', 5))).toBeGreaterThan(0)
   })
 })
@@ -79,8 +64,6 @@ describe('who decides how a shelf reads', () => {
   })
 
   it('takes no reader override, because there is no longer one to take', () => {
-    // The `?sort=` toggle is gone: how the library reads is the
-    // editor's judgement, not a pill a visitor can flip.
     expect(shelfSortFor({ readerSort: 'sequence', childOrder: 'alphabetical' } as never)).toBe(
       'alphabetical',
     )
@@ -91,7 +74,6 @@ describe('a place on the shelf', () => {
   it('hands an arrival the number after the highest', () => {
     expect(nextOrderId([])).toBe(FIRST_ORDER_ID)
     expect(nextOrderId([item(1, 'A', 1), item(2, 'B', 4)])).toBe(5)
-    // Past the highest, not into the gap a deleted book left.
     expect(nextOrderId([item(1, 'A', 1), item(2, 'B', 9)])).toBe(10)
     expect(nextOrderId([item(1, 'A')])).toBe(FIRST_ORDER_ID)
   })
@@ -99,16 +81,12 @@ describe('a place on the shelf', () => {
   it('clamps a typed number to something storable', () => {
     expect(orderIdFrom(3)).toBe(3)
     expect(orderIdFrom(3.7)).toBe(3)
-    // 0 and negatives mean "first" rather than being refused.
     expect(orderIdFrom(0)).toBe(FIRST_ORDER_ID)
     expect(orderIdFrom(-3)).toBe(FIRST_ORDER_ID)
-    // A slip, not a position.
     expect(orderIdFrom(50_000)).toBe(MAX_ORDER_ID)
   })
 
   it('reads two books at the same number alphabetically between them', () => {
-    // Order ids need not be unique — setting one writes one row and
-    // moves nobody else.
     const tied = [item(1, 'Mencius', 3), item(2, 'Analects', 3), item(3, 'Zhuangzi', 1)]
     expect(sortShelfItems(tied, 'sequence').map((book) => book.title)).toEqual([
       'Zhuangzi',

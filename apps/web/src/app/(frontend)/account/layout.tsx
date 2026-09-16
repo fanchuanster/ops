@@ -10,20 +10,6 @@ import { logout } from '../actions/auth'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * The shell every account page shares: who you are, what you have, and
- * the sections down the left.
- *
- * The sign-in check lives here rather than in each page. One gate for
- * the whole area means a section added later cannot be the one that
- * forgot it.
- *
- * Sign out sits with the sections for the same reason. It was at the
- * foot of the Overview page, under the ledger and the Kindle settings,
- * which made leaving something a reader had to scroll past their own
- * credit history to find — and made it the one thing about their
- * account reachable from only one of its four pages.
- */
 export default async function AccountLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser()
   if (!user) redirect('/login?next=%2Faccount')

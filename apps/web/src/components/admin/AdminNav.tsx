@@ -3,24 +3,6 @@
 import { usePathname } from 'next/navigation'
 import React from 'react'
 
-/**
- * The admin's three destinations.
- *
- * Books and Collections merged into Library on 2026-08-24 — they were
- * never two subjects, and editing a book's shelf on one screen and the
- * shelf itself on another put the two halves of one job a navigation
- * apart.
- *
- * A client component only because the current section is underlined,
- * which needs the path — the same reason and the same shape as
- * `SiteNav`. The links are plain anchors and the badge count is
- * rendered on the server and passed in, so nothing here is hydrated
- * that did not have to be.
- *
- * The icons are the design's own, copied path for path at the 16×16 it
- * draws them at.
- */
-
 const SECTIONS = [
   {
     href: '/admin',
@@ -69,9 +51,6 @@ const SECTIONS = [
 export function AdminNav({ awaiting }: { awaiting: number }) {
   const pathname = usePathname()
 
-  // Exact match for the queue, prefix for the rest: /admin is the
-  // parent of every other section, so a prefix test would light it up
-  // on all four.
   const isCurrent = (href: string) =>
     href === '/admin' ? pathname === '/admin' : pathname.startsWith(href)
 

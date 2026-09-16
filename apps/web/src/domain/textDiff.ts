@@ -1,23 +1,3 @@
-/**
- * Python's `difflib.SequenceMatcher`, faithfully.
- *
- * The correction guardrails were written against it — a similarity
- * ratio, and an opcode walk that counts how many *content* characters an
- * edit touches (`proofread.ts`). Both numbers are compared against
- * constants that were tuned on real OCR output, so an approximation here
- * would silently move where the line between "an OCR repair" and "a
- * rewrite" falls. This is the Ratcliff/Obershelp algorithm as CPython
- * implements it, with `isjunk=None` and `autojunk=False` — the two
- * settings the caller uses, and the two that make the heuristics in the
- * original no-ops.
- *
- * Everything works on **code points**, not UTF-16 code units. Python
- * strings are sequences of code points, so `len()` and every index in
- * the original count them that way; classical Chinese genuinely reaches
- * past the BMP, and a surrogate pair counted as two characters would
- * make a one-character correction look like a two-character one.
- */
-
 export interface MatchingBlock {
   a: number
   b: number
@@ -34,7 +14,6 @@ export interface Opcode {
   j2: number
 }
 
-/** Code points, so indices and lengths mean what they mean in Python. */
 export function codePoints(value: string): string[] {
   return Array.from(value)
 }
@@ -48,8 +27,6 @@ export class SequenceMatcher {
   constructor(a: string[] | string, b: string[] | string) {
     this.a = typeof a === 'string' ? codePoints(a) : a
     this.b = typeof b === 'string' ? codePoints(b) : b
-    // Ascending by construction, which is what lets the scan below stop
-    // at the first index past the window rather than filtering.
     this.b.forEach((ch, index) => {
       const at = this.b2j.get(ch)
       if (at) at.push(index)
@@ -103,8 +80,6 @@ export class SequenceMatcher {
 
     found.sort((x, y) => x.a - y.a || x.b - y.b || x.size - y.size)
 
-    // Adjacent blocks are merged, exactly as CPython does, so an opcode
-    // walk never sees two `equal` runs touching.
     const merged: MatchingBlock[] = []
     let i1 = 0
     let j1 = 0

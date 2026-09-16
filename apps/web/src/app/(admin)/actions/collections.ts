@@ -17,23 +17,8 @@ import type { BookCollection } from '../../../payload-types'
 import { currentAdmin } from '../../../lib/adminAuth'
 import { logError } from '../../../lib/logError'
 
-/**
- * The shelves: naming them, describing them, filing them under one
- * another, and putting them in order.
- *
- * A collection is a piece of editorial writing as much as a filter —
- * the description is what a reader is told a shelf is *for* — so this
- * screen edits the words, and the order they are read in.
- *
- * Nesting is checked here *and* in a hook on the collection, because
- * this screen is not the only door into the table — the REST API under
- * `(payload)/api` is another, and so is a script written next year. The
- * rule lives in `domain/collectionTree.ts`; both callers only ask it.
- */
-
 export type CollectionsState = { error?: string; ok?: string }
 
-/** "Chinese Classics" → "chinese-classics". */
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -43,12 +28,6 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-/**
- * The parent a form is asking for: an id, or null for a root.
- *
- * An empty string is the "No parent" option in the select and means
- * unfiled, which is a real instruction rather than a missing field.
- */
 function requestedParent(formData: FormData): number | null {
   const raw = String(formData.get('parentId') ?? '').trim()
   if (raw === '') return null
@@ -56,7 +35,6 @@ function requestedParent(formData: FormData): number | null {
   return Number.isInteger(id) ? id : null
 }
 
-/** Every collection, for the nesting rules to be checked against. */
 async function allCollections(payload: Awaited<ReturnType<typeof getPayload>>) {
   const result = await payload.find({
     collection: 'book-collections',
@@ -86,17 +64,12 @@ export async function createCollection(
   const description = String(formData.get('description') ?? '').trim()
   if (title === '') return { error: 'A collection needs a name.' }
 
-  // A Chinese-only title slugifies to nothing useful, and a slug is a
-  // required unique column — so fall back to something guaranteed to
-  // exist rather than failing on a perfectly good name.
   const slug = slugify(title) || `collection-${Date.now()}`
 
   const payload = await getPayload({ config })
 
   const parent = requestedParent(formData)
   if (parent !== null) {
-    // A collection that does not exist yet has nothing hanging beneath
-    // it, so only the parent's own depth can refuse this.
     const decision = canNest({ collections: await allCollections(payload), id: null, parentId: parent })
     if (!decision.allowed) return { error: NESTING_ERRORS[decision.reason!] }
   }
@@ -116,14 +89,6 @@ export async function createCollection(
   return {}
 }
 
-/**
- * Everything one card edits: the name, the description, and the shelf
- * this one stands on.
- *
- * One action rather than three, because the card is one form and an
- * administrator changing "Confucian" to "Confucian classics" while also
- * filing it under "Chinese Classics" has made one decision, not two.
- */
 export async function saveCollection(
   _prev: CollectionsState,
   formData: FormData,
@@ -148,28 +113,12 @@ export async function saveCollection(
   const before = collections.find((collection) => collection.id === id)
   if (!before) return { error: 'No collection named.' }
 
-  // The number an editor typed into the order box, if they typed one.
-  // Blank is not zero and not "put it back at the end" — it is "I did
-  // not touch this", so the shelf keeps the place it has.
   const order = requestedOrder(formData)
   if (order === 'invalid') return { error: 'An order is a whole number.' }
 
-  // How this shelf's own children are ordered. A select with two
-  // options, so anything else is a form that did not come from our
-  // screen and is ignored rather than stored.
   const childOrder = String(formData.get('childOrder') ?? '')
 
-  // Moving to a new parent puts it among strangers, so it goes to the
-  // end of them rather than landing in the middle on whatever number it
-  // happened to carry from its old siblings. That is the collection's
-  // own hook (`assignSiblingOrder`), which every door into the table
-  // passes through — not something this screen has to remember.
-
   try {
-    // The slug is deliberately left alone. It is in every link a reader
-    // has ever saved to this shelf, and renaming "Chinese History" to
-    // "History of China" is a change of wording, not a decision to
-    // break those links.
     await payload.update({
       collection: 'book-collections',
       id,
@@ -177,12 +126,7 @@ export async function saveCollection(
         title,
         description: description || null,
         parent,
-        // One field on one row: numbers may repeat, so nothing has to
-        // be shifted out of the way and this needs no second pass after
-        // the move. A cleared box leaves the number alone.
         sortOrder: order === null ? undefined : orderIdFrom(order),
-        // How this shelf's own children are ordered. Absent from the
-        // form means unchanged, not "reset to A–Z".
         childOrder: isShelfSort(childOrder) ? childOrder : undefined,
       },
       overrideAccess: true,
@@ -193,24 +137,9 @@ export async function saveCollection(
   }
 
   revalidateCollections()
-  // An `ok` is what closes the card. `useOnSaved` fires on it and
-  // nothing else, so returning a bare `{}` here left the form sitting
-  // open over a row that had already saved — indistinguishable, to the
-  // editor, from a save that had not happened. Nothing renders this
-  // string: the tree behind the form reads back the new name, parent
-  // and order, which is the confirmation that matters.
   return { ok: 'Saved.' }
 }
 
-/**
- * The order number a form is asking for: a number, null for "leave it
- * where it is", or `invalid` for something that is not a whole number.
- *
- * Blank means untouched rather than zero. The box is pre-filled with
- * the number the shelf already has, so an editor who clears it has said
- * nothing about the order — and reading that as "move it to the front"
- * would reorder the library every time somebody fixed a description.
- */
 function requestedOrder(formData: FormData): number | null | 'invalid' {
   const raw = String(formData.get('sortOrder') ?? '').trim()
   if (raw === '') return null
@@ -218,20 +147,6 @@ function requestedOrder(formData: FormData): number | null | 'invalid' {
   return Number.isInteger(order) ? order : 'invalid'
 }
 
-/**
- * Move a collection one place up or down **among its own siblings**.
- *
- * Since collections nest, the order is per-parent: moving "Daoist" up
- * moves it past "Confucian" on the same shelf, and can never lift it
- * out from under "Chinese Classics". Changing where a collection is
- * filed is `saveCollection` above, and is a different decision.
- *
- * Rewrites `sortOrder` across the sibling group rather than swapping two
- * values. Swapping only works when every row already has a distinct
- * number, and most of them have null. Rewriting is a handful of updates
- * on a group of a few rows, and it leaves the column in a state the next
- * move can rely on.
- */
 export async function moveCollection(
   _prev: CollectionsState,
   formData: FormData,
@@ -263,17 +178,11 @@ export async function moveCollection(
     .map((doc) => doc.id)
   const from = order.indexOf(id)
   const to = direction === 'up' ? from - 1 : from + 1
-  // Already at the end it is being moved towards: not an error, just
-  // nothing to do. The button is disabled there anyway.
   if (from === -1 || to < 0 || to >= order.length) return {}
 
   ;[order[from], order[to]] = [order[to], order[from]]
 
   try {
-    // Numbered from one, like every other order id in the library
-    // (`resequence` in `domain/shelfOrder.ts`) — the arrows and the
-    // order box on the same card must not disagree about what the first
-    // shelf is called.
     await Promise.all(
       resequence(order.map((collectionId) => ({ id: collectionId, title: '' }))).map((write) =>
         payload.update({
@@ -293,35 +202,6 @@ export async function moveCollection(
   return {}
 }
 
-/**
- * Level every book on a shelf, and on every shelf standing on it.
- *
- * A shelf of eighty books cannot be levelled eighty clicks at a time,
- * so the level is handed down the subtree in one act. The subtree and
- * not just the shelf, because CLAUDE.md section 5.3 says a parent
- * carries everything beneath it — an editor levelling "Chinese
- * Classics" means the Confucian shelf standing on it too, and a version
- * that quietly stopped at the first level would be the more surprising
- * of the two behaviours.
- *
- * Two modes, and `domain/levels.ts` owns the difference: a **cap** can
- * only ever move a book shallower and leaves a curated one alone; an
- * **exact** level overwrites whatever was there. Neither is a default
- * worth guessing at, so the form asks, and cap is what it offers first.
- *
- * Only books that would actually change are written. Applying a cap to
- * a large shelf typically moves a handful of them, and a write per book
- * regardless would be a round trip to D1 for every row to change three
- * — which is what a Worker is billed for.
- */
-/**
- * How many books one shelf-levelling will touch, and how many at a time.
- *
- * The ceiling is not arithmetic: every update is a Worker subrequest,
- * and a run that quietly stopped halfway through a shelf would be worse
- * than one that never started. 500 is comfortably inside the budget for
- * a library this size; past it the honest answer is a script.
- */
 const BOOK_LIMIT = 500
 const BATCH = 20
 
@@ -351,16 +231,11 @@ export async function applyShelfLevel(
       overrideAccess: true,
     })
     const docs = all.docs as BookCollection[]
-    // `subtreeIds` walks down from whatever it is given and always
-    // returns at least that id, so it cannot tell us the shelf is gone.
-    // The list it walked can.
     if (!docs.some((shelf) => shelf.id === collectionId)) {
       return { error: 'That shelf is no longer there.' }
     }
     const shelves = subtreeIds(docs, collectionId)
 
-    // Every book filed on any shelf in the subtree, in one query. The
-    // `in` is over an indexed join rather than a query per shelf.
     const books = await payload.find({
       collection: 'books',
       where: { collection: { in: shelves } },
@@ -374,10 +249,6 @@ export async function applyShelfLevel(
       return next === null ? [] : [{ id: book.id, level: levelId(next) }]
     })
 
-    // In batches rather than all at once. Each update is a subrequest
-    // and a Worker has a bounded number of them, so a shelf of hundreds
-    // must not fan out into one flight — and each is an independent row,
-    // so there is nothing to gain from doing them strictly in turn.
     for (let at = 0; at < changes.length; at += BATCH) {
       await Promise.all(
         changes.slice(at, at + BATCH).map((change) =>
@@ -406,7 +277,6 @@ export async function applyShelfLevel(
 
 function revalidateCollections() {
   revalidatePath('/admin/library')
-  // The home page is a row of these shelves, in this order.
   revalidatePath('/')
   revalidatePath('/collections')
   revalidatePath('/books')

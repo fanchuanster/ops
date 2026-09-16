@@ -1,18 +1,3 @@
-/**
- * The default cover: a page of the book.
- *
- * Two things are worth holding still here. The page numbering, because
- * the key a page is stored under is derived from it — page one keeps
- * the unsuffixed name every cover rendered before candidates existed
- * still lives at. And the precedence: an uploaded cover is an editor's
- * decision and outranks anything rendered.
- *
- * The containment rules that used to be here went with the converter on
- * 2026-08-25. Nothing reports a key from outside any more — the browser
- * posts images and this side names every key — so there is no longer a
- * door to check.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -38,10 +23,6 @@ describe('choosing what to render the opening pages from', () => {
   })
 
   it('will not take a master: a browser has no DOCX renderer', () => {
-    // It waits for the PDF phase 2 builds anyway. This is the one thing
-    // the browser cannot do that the converter could, and what it
-    // produced — the first typeset page — was the unhappy case even
-    // when it worked.
     expect(coverSourceFormat(['docx'])).toBeNull()
   })
 
@@ -53,8 +34,6 @@ describe('choosing what to render the opening pages from', () => {
 
 describe('which cover a page shows', () => {
   it('shows an uploaded cover ahead of a rendered one', () => {
-    // The book's own address, not the Media file's: both covers go
-    // through the route that checks who may see the book.
     expect(
       coverImageUrl({
         uploadedId: 7,
@@ -73,16 +52,12 @@ describe('which cover a page shows', () => {
   it('shows nothing while the cover is unrendered or failed', () => {
     expect(coverImageUrl({ bookId: 42, generated: { state: 'pending' } })).toBeNull()
     expect(coverImageUrl({ bookId: 42, generated: { state: 'failed' } })).toBeNull()
-    // A "ready" state with no key is a bug somewhere, and the honest
-    // answer is the same as no cover rather than a URL that 404s.
     expect(coverImageUrl({ bookId: 42, generated: { state: 'ready', key: '' } })).toBeNull()
   })
 })
 
 describe('the candidate pages', () => {
   it('keeps page one at the name it has always had', () => {
-    // Every cover rendered before candidates existed is at this key,
-    // and stays readable without a backfill.
     expect(coverKey('a-book')).toBe(coverKey('a-book', 1))
     expect(coverKey('a-book', 1).endsWith('cover.jpg')).toBe(true)
     expect(coverKey('a-book', 2).endsWith('cover-2.jpg')).toBe(true)
@@ -99,8 +74,6 @@ describe('the candidate pages', () => {
   })
 
   it('clamps a choice to the pages that exist', () => {
-    // The count can shrink under a stored choice when a book is
-    // re-rendered. Pointing at a page nobody made is a cover that 404s.
     expect(chosenCoverPage({ page: 3, candidates: 3 })).toBe(3)
     expect(chosenCoverPage({ page: 3, candidates: 2 })).toBe(2)
     expect(chosenCoverPage({ page: 0, candidates: 3 })).toBe(1)
@@ -129,8 +102,6 @@ describe('checkCoverUpload', () => {
     expect(checkCoverUpload(jpeg).ok).toBe(true)
   })
 
-  // The reason the allowlist exists: media is served from our own
-  // origin, so an SVG cover would be stored XSS.
   it('refuses SVG, which `image/*` would have accepted', () => {
     expect(checkCoverUpload({ size: 900, type: 'image/svg+xml' })).toEqual({
       ok: false,

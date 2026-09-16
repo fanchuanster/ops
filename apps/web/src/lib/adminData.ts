@@ -4,39 +4,12 @@ import { getPayload } from 'payload'
 import { REVIEW_QUEUE_STATES, type ReviewState } from '../domain/moderation'
 import type { Book, BookCollection, User } from '../payload-types'
 
-/**
- * Reads for the editorial admin.
- *
- * Every query here runs with `overrideAccess: true`, which is the one
- * thing that makes this module dangerous and the reason it is a module
- * rather than inline queries: nothing in it may be called from a page
- * that has not already passed `requireAdmin`. Collected in one file so
- * that rule has one place to be checked rather than fifteen.
- *
- * The admin is deliberately allowed to see private uploads — reviewing
- * a submission means reading a book that is, by definition, not public
- * yet. `readBooks` in `collections/Books.ts` grants an administrator
- * exactly that, so these overrides are a shortcut past a rule that
- * would have said yes, not a way around one that would have said no.
- */
-
-/** How many rows any one admin screen will load. Bounded on purpose. */
 const PAGE_LIMIT = 200
 
 export interface QueueFilter {
-  /** Null means every state that has ever been submitted. */
   state: ReviewState | null
 }
 
-/**
- * Books that have been submitted for the public library.
- *
- * `unsubmitted` is excluded whatever the filter says. A draft nobody
- * has offered is not a queue item — it is somebody's private
- * workspace, and putting it in front of a reviewer would both waste
- * their time and quietly turn "you may keep this private forever" into
- * "we are looking at it anyway".
- */
 export async function getReviewQueue({ state }: QueueFilter) {
   const payload = await getPayload({ config })
   const result = await payload.find({
@@ -44,18 +17,14 @@ export async function getReviewQueue({ state }: QueueFilter) {
     where: {
       'review.state': { in: state ? [state] : [...REVIEW_QUEUE_STATES] },
     },
-    // Newest submission first: the queue is worked from the top and a
-    // book that has waited longest is the one at the bottom.
     sort: '-review.submittedAt',
     limit: PAGE_LIMIT,
-    // The owner is who submitted it, and the queue names them.
     depth: 1,
     overrideAccess: true,
   })
   return result.docs
 }
 
-/** How many submissions are actually waiting on a decision. */
 export async function countAwaitingReview(): Promise<number> {
   const payload = await getPayload({ config })
   const result = await payload.count({
@@ -66,15 +35,6 @@ export async function countAwaitingReview(): Promise<number> {
   return result.totalDocs
 }
 
-/**
- * One book, whole, for a detail panel.
- *
- * Shared by the review queue and the Books screen — they show different
- * things about it, but neither wants a different read. `depth: 1` so
- * the owner and the collections arrive populated; `catch` rather than
- * a throw because a stale `?book=` in somebody's URL should close the
- * panel, not break the page around it.
- */
 export async function getAdminBook(id: number): Promise<Book | null> {
   const payload = await getPayload({ config })
   return payload
@@ -83,19 +43,10 @@ export async function getAdminBook(id: number): Promise<Book | null> {
 }
 
 export interface LibraryFilter {
-  /** Free text over title, original title and author. */
   query: string
-  /** A collection id, or null for all of them. */
   collectionId: number | null
 }
 
-/**
- * The whole library, as an editor sees it.
- *
- * Every book, public and private, published and draft — this is the
- * screen for finding one and changing where it sits, so hiding any of
- * them would only mean the editor goes to the CMS instead.
- */
 export async function getLibrary({ query, collectionId }: LibraryFilter) {
   const payload = await getPayload({ config })
   const filters = []
@@ -111,11 +62,6 @@ export async function getLibrary({ query, collectionId }: LibraryFilter) {
   }
   if (collectionId !== null) filters.push({ collection: { equals: collectionId } })
 
-  // The order the books sit in on their shelves, which is the order a
-  // reader browsing the library meets them in — an editor arranging
-  // that order has to be looking at it. Title underneath, for the books
-  // nobody has numbered and for the "Other" group, which has no shelf
-  // to be ordered on.
   const result = await payload.find({
     collection: 'books',
     where: filters.length > 0 ? { and: filters } : {},
@@ -127,21 +73,6 @@ export async function getLibrary({ query, collectionId }: LibraryFilter) {
   return result.docs
 }
 
-/**
- * How many times each of these books has actually been sent to a
- * device, keyed by book id.
- *
- * One query for the whole page rather than a count per row: the books
- * on screen are already bounded by `PAGE_LIMIT`, so this is a single
- * `in` over an indexed column instead of two hundred round trips to
- * D1 — which on a Worker is the difference between one wait and two
- * hundred.
- *
- * It is a delivery count, not a download count. NobleSee does not hand
- * a reader a file to collect (`CLAUDE.md` section 1); the ledger this
- * reads is the record of books sent to e-readers, which is the number
- * an editor actually wants when asking whether anyone is reading this.
- */
 export async function countDeliveries(bookIds: (number | string)[]): Promise<Map<number, number>> {
   const tally = new Map<number, number>()
   if (bookIds.length === 0) return tally
@@ -150,9 +81,6 @@ export async function countDeliveries(bookIds: (number | string)[]): Promise<Map
   const result = await payload.find({
     collection: 'downloads',
     where: { book: { in: bookIds } },
-    // Bounded rather than unlimited. A ledger longer than this means
-    // the count shown is a floor, which is a far better failure than a
-    // page that will not load.
     limit: 5000,
     depth: 0,
     pagination: false,
@@ -167,7 +95,6 @@ export async function countDeliveries(bookIds: (number | string)[]): Promise<Map
   return tally
 }
 
-/** Collections in the order they are shown, for the admin's own screen. */
 export async function getAdminCollections(): Promise<BookCollection[]> {
   const payload = await getPayload({ config })
   const result = await payload.find({
@@ -180,14 +107,6 @@ export async function getAdminCollections(): Promise<BookCollection[]> {
   return result.docs
 }
 
-/**
- * Which books sit in each collection, keyed by collection id.
- *
- * Book *ids* rather than a count, because collections nest: a parent
- * shelf's total is the union of its subtree, and a book filed on both a
- * parent and one of its children must be counted once. Summing counts
- * would count it twice.
- */
 export async function booksPerCollection(): Promise<Map<number, Set<number>>> {
   const payload = await getPayload({ config })
   const result = await payload.find({
@@ -216,14 +135,6 @@ export interface AdminUserRow {
   published: number
 }
 
-/**
- * Readers, with what each of them has contributed.
- *
- * The two counts come from one pass over the owned books rather than
- * two queries per reader, for the same reason `countDeliveries` does:
- * a per-row query on a list screen is how a Worker page becomes slow
- * without anyone noticing which line did it.
- */
 export async function getAdminUsers(query: string): Promise<AdminUserRow[]> {
   const payload = await getPayload({ config })
 

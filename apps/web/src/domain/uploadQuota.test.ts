@@ -1,16 +1,3 @@
-/**
- * The monthly conversion quota.
- *
- * The case the rule exists for: a reader with 200 pages of allowance
- * left and a 201-page book arriving. There is room, but not enough
- * room, and letting it through "because some was left" would make the
- * limit meaningless on exactly the books that cost the most.
- *
- * Everything here is written against the constants rather than against
- * their current values, so changing a limit does not mean rewriting the
- * suite — which is what happened the first time these numbers moved.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -74,7 +61,6 @@ describe('the upload limit', () => {
   })
 
   it('is checked before the page limit, being the cheaper answer', () => {
-    // Both are exceeded; the reader is told the simpler thing.
     expect(
       request({ uploads: MONTHLY_UPLOAD_LIMIT, pages: MONTHLY_PAGE_LIMIT, pagesRequested: 500 }),
     ).toMatchObject({ reason: 'upload_limit' })
@@ -91,7 +77,6 @@ describe('administrators', () => {
 
 describe('an unmeasurable book', () => {
   it('is not a way through the page limit', () => {
-    // It costs an upload, which is what catches it.
     const decision = request({ uploads: 0, pages: MONTHLY_PAGE_LIMIT - 1, pagesRequested: 0 })
     expect(decision.allowed).toBe(true)
     expect(request({ uploads: MONTHLY_UPLOAD_LIMIT, pagesRequested: 0 }).allowed).toBe(false)

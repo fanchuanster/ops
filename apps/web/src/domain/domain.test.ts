@@ -1,13 +1,3 @@
-/**
- * Parity tests for the domain rules.
- *
- * These mirror the behaviours asserted by the previous implementation's
- * smoke test (`tools/smoke-test.sh`), which was the only executable
- * specification of how NobleSee actually behaves. Porting them here
- * first means the rebuild is measured against real behaviour rather
- * than against a fresh set of assumptions.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -84,7 +74,6 @@ describe('rights', () => {
 
   it('lets a part be more restricted than its book, never less', () => {
     expect(effectiveRightsStatus('public_domain', 'restricted')).toBe('restricted')
-    // The permissive override is ignored — this is the direction that matters.
     expect(effectiveRightsStatus('restricted', 'public_domain')).toBe('restricted')
     expect(effectiveRightsStatus('licensed', undefined)).toBe('licensed')
   })
@@ -115,8 +104,6 @@ describe('rights', () => {
     ).toEqual({ allowed: false, reason: 'rights_not_cleared' })
   })
 })
-
-
 
 describe('password policy', () => {
   it('accepts a password at the minimum length', () => {
@@ -159,7 +146,6 @@ describe('kindle delivery', () => {
   })
 
   it('leaves the local part alone rather than "helpfully" stripping it', () => {
-    // Amazon assigns these; dot- and plus-stripping would break real addresses.
     expect(checkKindleAddress('a.b+c@kindle.com')).toEqual({
       valid: true,
       address: 'a.b+c@kindle.com',
@@ -175,8 +161,6 @@ describe('kindle delivery', () => {
   it('limits the raw file, not the encoded one', () => {
     const MB = 1024 * 1024
 
-    // The book that found this: refused at 17.4 MB by a limit that
-    // measured base64 output against a number that read as a file size.
     expect(isEmailableSize(17.4 * MB)).toBe(true)
 
     expect(isEmailableSize(MAX_ATTACHMENT_BYTES)).toBe(true)
@@ -186,28 +170,18 @@ describe('kindle delivery', () => {
   })
 
   it('stays inside what Resend will accept once encoded', () => {
-    // Ours is the tighter limit, and must stay that way: raising it past
-    // what the provider takes after base64 would turn a refusal we
-    // explain into a 4xx from Resend that a reader reads as "try again".
     expect(encodedSize(MAX_ATTACHMENT_BYTES) + ENVELOPE_ALLOWANCE_BYTES).toBeLessThanOrEqual(
       RESEND_MAX_ENCODED_BYTES,
     )
 
-    // And close enough to it to be worth the reader having: a limit
-    // that drifted far under the provider's would be throwing away
-    // books it could carry.
     expect(encodedSize(MAX_ATTACHMENT_BYTES)).toBeGreaterThan(RESEND_MAX_ENCODED_BYTES * 0.95)
   })
 
   it('names the file and the limit when refusing, never a download', () => {
-    // The reader meets this twice — greyed out before the click, and
-    // from the server after it — so it is one sentence, and it has to
-    // carry both numbers to be actionable.
     const message = tooLargeMessage(41.2 * 1024 * 1024)
 
     expect(message).toContain('41.2 MB')
     expect(message).toContain(describeBytes(MAX_ATTACHMENT_BYTES))
-    // There is no download to send anyone to.
     expect(message.toLowerCase()).not.toContain('download')
   })
 
@@ -245,8 +219,6 @@ describe('kindle delivery', () => {
   it('subjects a delivery with the filename, and a conversion with Amazon\'s word', () => {
     expect(kindleSubject({ filename: 'Analects.epub' })).toBe('Analects.epub')
     expect(kindleSubject({ filename: 'Analects.epub', convert: false })).toBe('Analects.epub')
-    // The subject *is* the instruction, so asking for conversion
-    // replaces the filename rather than decorating it.
     expect(kindleSubject({ filename: 'Analects.pdf', convert: true })).toBe(
       KINDLE_CONVERT_SUBJECT,
     )
@@ -272,8 +244,6 @@ describe('reading levels', () => {
   })
 
   it('keeps the id comparison and the level list in agreement', () => {
-    // The catalog queries `level <= id`; the UI uses levelsVisibleAt. If
-    // the two disagreed, the catalog would show what the rule hides.
     for (const browse of BOOK_LEVELS) {
       const allowed = new Set(levelsVisibleAt(browse))
       for (const book of BOOK_LEVELS) {
@@ -295,13 +265,11 @@ describe('reading levels', () => {
   })
 
   it('degrades an unrecognised stored id to the default, not to everything', () => {
-    // An id written by a later schema must not widen the catalog.
     expect(levelFromId(999)).toBe('normal')
     expect(levelId(levelFromId(999))).toBeLessThan(LEVEL_IDS.extensive)
   })
 
   it('falls back to the default rather than widening on a bad level', () => {
-    // A stale bookmark must not become "show me everything".
     expect(parseBrowseLevel('extenzive')).toBe(DEFAULT_BROWSE_LEVEL)
     expect(parseBrowseLevel(undefined)).toBe(DEFAULT_BROWSE_LEVEL)
     expect(parseBrowseLevel('')).toBe(DEFAULT_BROWSE_LEVEL)
@@ -316,8 +284,6 @@ describe('reading levels', () => {
   describe('levelling a whole shelf', () => {
     it('as a cap, only ever moves a book shallower', () => {
       expect(shelfLevelFor('cap', 'normal', 'extensive')).toBe('normal')
-      // Already shallower — a curated essential title is left alone,
-      // which is the whole reason cap exists beside exact.
       expect(shelfLevelFor('cap', 'normal', 'essential')).toBe(null)
       expect(shelfLevelFor('cap', 'normal', 'normal')).toBe(null)
     })
@@ -345,8 +311,6 @@ describe('reading levels', () => {
     })
 
     it('refuses a mode it does not know rather than picking one', () => {
-      // The destructive mode must never be what an unrecognised value
-      // falls through to.
       expect(isLevelApplyMode('cap')).toBe(true)
       expect(isLevelApplyMode('exact')).toBe(true)
       expect(isLevelApplyMode('')).toBe(false)
@@ -373,8 +337,6 @@ describe('publication review', () => {
   })
 
   it('does not let approval stand in for rights clearance', () => {
-    // An admin saying "this belongs in the library" is not a finding
-    // that it is legally distributable. Both gates, independently.
     for (const rightsStatus of ['unknown', 'restricted', 'user_owned'] as const) {
       expect(canPublishToLibrary({ reviewState: 'approved', rightsStatus })).toEqual({
         allowed: false,
@@ -392,9 +354,6 @@ describe('publication review', () => {
 
 describe('an administrator publishing directly', () => {
   it('does not have to approve a submission first', () => {
-    // Publishing *is* the approval — one person, one judgement — so
-    // requiring the recorded state beforehand was asking them to take
-    // the same decision twice.
     expect(
       canPublishToLibrary({
         reviewState: 'submitted',
@@ -415,9 +374,6 @@ describe('an administrator publishing directly', () => {
   })
 
   it('may not publish somebody else’s book that was never offered', () => {
-    // The other gate, and it is not an administrator's. CLAUDE.md
-    // section 6.2 promises an upload may stay private forever, and an
-    // unsubmitted book has never been offered to anyone.
     expect(
       canPublishToLibrary({
         reviewState: 'unsubmitted',
@@ -496,15 +452,10 @@ describe('an administrator publishing directly', () => {
   })
 
   it('leaves level an administrator field even though it can be proposed', () => {
-    // The uploader may suggest one with their submission; nothing in
-    // the flow applies it. Asking and deciding are different acts.
     expect(requiresAdmin('level')).toBe(true)
   })
 
   it('makes a book\u2019s position on its shelf an administrator\u2019s', () => {
-    // Filing a book onto a shelf is its uploader's and gets the next
-    // free number. Choosing the number shifts other people's books
-    // along, so it is a curator's act — see ADMIN_ONLY_BOOK_FIELDS.
     expect(requiresAdmin('collectionOrder')).toBe(true)
     expect(requiresAdmin('collection')).toBe(false)
   })
@@ -518,9 +469,6 @@ describe('proposing a level with a submission', () => {
   })
 
   it('reads anything else as no preference', () => {
-    // No preference is the ordinary answer, so it must be storable as
-    // one: a fallback to the default would put a suggestion in the
-    // uploader's mouth that a reviewer would then read as theirs.
     expect(parseProposedLevel('')).toBe(null)
     expect(parseProposedLevel(null)).toBe(null)
     expect(parseProposedLevel('ESSENTIAL')).toBe(null)
@@ -572,7 +520,6 @@ describe('google sign-in', () => {
   })
 
   it('rejects a token minted for another OAuth client', () => {
-    // A perfectly valid Google token that must not sign anyone in here.
     expect(verify({ aud: 'someone-else.apps.googleusercontent.com' })).toEqual({
       ok: false,
       reason: 'wrong_audience',
@@ -599,8 +546,6 @@ describe('google sign-in', () => {
   })
 
   it('treats anything but a literal true as unverified', () => {
-    // Google sends a boolean; a string "true" from anywhere else must
-    // not be read as verification.
     const result = verify({ email_verified: 'true' })
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.profile.emailVerified).toBe(false)
@@ -632,8 +577,6 @@ describe('google sign-in', () => {
   })
 
   it('refuses to link an unverified address, which would be account takeover', () => {
-    // Without this, anyone could register a Google account claiming
-    // someone else's address and click their way into that account.
     expect(
       decideGoogleSignIn({
         profile: { ...profile, emailVerified: false },
@@ -666,9 +609,6 @@ describe('google sign-in', () => {
   })
 
   it('refuses a picture that is not plainly an https URL', () => {
-    // The token is signed, so this is defence in depth rather than the
-    // load-bearing check — but nothing that is not https should ever
-    // reach an <img src>.
     for (const picture of [
       'javascript:alert(1)',
       'data:image/svg+xml,<svg onload="alert(1)"/>',
@@ -711,7 +651,6 @@ describe('reader name and initials', () => {
   })
 
   it('falls back to the local part rather than the whole address', () => {
-    // The header is on screen constantly; the full address is not for it.
     expect(readerName({ email: 'reader@example.com' })).toBe('reader')
     expect(readerName({ email: 'reader@example.com', displayName: '   ' })).toBe('reader')
     expect(readerName({ email: 'reader@example.com', displayName: null })).toBe('reader')
@@ -720,7 +659,6 @@ describe('reader name and initials', () => {
   it('takes two initials from a two-part name and one otherwise', () => {
     expect(readerInitials({ email: 'a@b.com', displayName: 'Wen Dong' })).toBe('WD')
     expect(readerInitials({ email: 'a@b.com', displayName: 'Ada' })).toBe('A')
-    // First and last, so a middle name does not displace the surname.
     expect(readerInitials({ email: 'a@b.com', displayName: 'Ada King Lovelace' })).toBe('AL')
   })
 
@@ -729,8 +667,6 @@ describe('reader name and initials', () => {
   })
 
   it('does not return half a surrogate pair', () => {
-    // string[0] on an astral character yields a lone surrogate, which
-    // renders as a replacement box.
     const initials = readerInitials({ email: 'a@b.com', displayName: '𠮷田' })
     expect([...initials]).toHaveLength(1)
     expect(initials).toBe('𠮷')
@@ -763,8 +699,6 @@ describe('reading online is free of the account requirement', () => {
   const publicDomain = { rightsStatus: 'public_domain' as const, visibility: 'public' as const }
 
   it('lets a signed-out visitor read a cleared public book', () => {
-    // The difference that matters between the two rules, and the reason
-    // canReadOnline exists at all.
     expect(canReadOnline({ book: publicDomain, userId: null })).toEqual({ allowed: true })
     expect(canAccessArtifact({ book: publicDomain, userId: null })).toEqual({
       allowed: false,
@@ -808,10 +742,6 @@ describe('what an uploader may claim about their own file', () => {
   })
 
   it('never offers unknown or restricted', () => {
-    // `unknown` is excluded because the uploader is the one person who
-    // can answer, and accepting "don't know" defers it to someone with
-    // less information. `restricted` because nobody uploads a book in
-    // order to declare it undistributable.
     for (const value of ['unknown', 'restricted']) {
       expect(isUploaderSelectableRights(value)).toBe(false)
     }
@@ -824,8 +754,6 @@ describe('what an uploader may claim about their own file', () => {
   })
 
   it('offers user_owned, which can never clear public distribution', () => {
-    // Safe to offer precisely because owning a copy is not a right to
-    // publish it to everyone else.
     expect(isUploaderSelectableRights('user_owned')).toBe(true)
     expect(isPubliclyDistributable('user_owned')).toBe(false)
   })
@@ -844,15 +772,10 @@ describe('deleting your own upload', () => {
   })
 
   it('lets an administrator delete a book they do not own', () => {
-    // Withdrawing a book from the library is the library's own act,
-    // and ownership is the one thing an administrator will not have.
     expect(request({ isOwner: false, isAdmin: true })).toEqual({ allowed: true })
   })
 
   it('lets both of them delete a book other readers have bought', () => {
-    // The entitlement gate is gone on purpose: it could leave a book
-    // that nobody at all — not its owner, not an administrator — was
-    // able to take down.
     expect(request()).toEqual({ allowed: true })
     expect(request({ isOwner: false, isAdmin: true })).toEqual({ allowed: true })
   })
@@ -866,8 +789,6 @@ describe('deleting your own upload', () => {
 
 describe('what a reviewer is shown about a submission', () => {
   it('names every rights status and every review state', () => {
-    // A missing key here is a blank cell in the queue, which reads as
-    // "no rights declared" rather than as a gap in this table.
     for (const status of RIGHTS_STATUSES) {
       expect(RIGHTS_LABELS[status]).toBeTruthy()
     }
@@ -879,9 +800,6 @@ describe('what a reviewer is shown about a submission', () => {
   it('marks a status as blocking exactly when publication is impossible', () => {
     for (const status of RIGHTS_STATUSES) {
       const risk = rightsRisk(status)
-      // The badge and the gate must never disagree: an "ok" badge on a
-      // book the publish hook would refuse is the one failure that
-      // wastes a reviewer's decision.
       expect(risk === 'ok').toBe(isPubliclyDistributable(status))
     }
   })
@@ -889,24 +807,15 @@ describe('what a reviewer is shown about a submission', () => {
   it('separates "we know it cannot be published" from "nobody has said"', () => {
     expect(rightsRisk('user_owned')).toBe('block')
     expect(rightsRisk('restricted')).toBe('block')
-    // Unknown is an unanswered question, not a refusal, and only the
-    // uploader can answer it.
     expect(rightsRisk('unknown')).toBe('warn')
   })
 
   it('keeps drafts out of the review queue', () => {
-    // A private upload nobody has offered is a workspace, not a queue
-    // item — reviewing one would quietly undo "you may keep this
-    // private forever".
     expect(REVIEW_QUEUE_STATES).not.toContain('unsubmitted')
     expect(REVIEW_QUEUE_STATES).toContain('submitted')
   })
 
   it('calls a rejection what the uploader was told it was', () => {
-    // canSubmitForReview lets a rejected book be submitted again, so
-    // the state means "not yet", and the uploader's own screen says
-    // "Changes requested". The queue must not call the same row
-    // something harsher.
     expect(canSubmitForReview({
       reviewState: 'rejected',
       rightsStatus: 'public_domain',

@@ -35,8 +35,6 @@ describe('correctionStateForMaster', () => {
   })
 
   it('reads an unanswered question as no', () => {
-    // Every book uploaded before the checkbox existed has null here.
-    // Consent to send text to a third party must never be inferred.
     expect(correctionStateForMaster(null)).toBe('none')
     expect(correctionStateForMaster(undefined)).toBe('none')
     expect(correctionStateForMaster('true')).toBe('none')
@@ -67,8 +65,6 @@ describe('the claim states', () => {
   })
 
   it('moves off the claimed state, so a second converter cannot take it', () => {
-    // The claim is a compare-and-swap on this field. A swap that left
-    // the state alone would hand the same book to every poller.
     for (const kind of ['correct', 'apply'] as const) {
       const from = kind === 'correct' ? 'pending' : 'decided'
       expect(correctionInProgressState(kind)).not.toBe(from)
@@ -106,8 +102,6 @@ describe('canRequestCorrection', () => {
     expect(canRequestCorrection({ ...base, state: 'running' })).toBe(false)
     expect(canRequestCorrection({ ...base, state: 'applying' })).toBe(false)
     expect(canRequestCorrection({ ...base, state: 'decided' })).toBe(false)
-    // The important one: re-proposing here would throw away decisions
-    // the owner has already made on screen.
     expect(canRequestCorrection({ ...base, state: 'ready' })).toBe(false)
   })
 
@@ -132,8 +126,6 @@ describe('readSuggestions', () => {
   })
 
   it('drops a suggestion a reviewer could not judge', () => {
-    // No `original` means no before-text on the page, so there is
-    // nothing to compare the proposal against.
     expect(readSuggestions({ suggestions: [{ block: 1, line: 0, suggested: 'x' }] })).toEqual([])
     expect(readSuggestions({ suggestions: [{ ...suggestion(), block: -1 }] })).toEqual([])
     expect(readSuggestions({ suggestions: [{ ...suggestion(), line: 1.5 }] })).toEqual([])
@@ -160,15 +152,11 @@ describe('acceptDecisions', () => {
       [1, 0, true],
       [4, 2, false],
     ])
-    // The original travels with the decision, so the converter can
-    // refuse a line that has changed since the suggestion was made.
     expect(decisions[0]!.original).toBe('不能自巳')
     expect(decisions[0]!.suggested).toBe('不能自己')
   })
 
   it('ignores an address that was never offered', () => {
-    // The containment rule. Without it a crafted post could rewrite any
-    // line of any master.
     const decisions = acceptDecisions({ offered, approved: ['9:9', '1:0'] })
     expect(decisions).toHaveLength(2)
     expect(decisions.filter((d) => d.approved).map((d) => suggestionId(d))).toEqual(['1:0'])
@@ -186,12 +174,6 @@ describe('acceptDecisions', () => {
 })
 
 describe('the file the converter actually writes', () => {
-  /**
-   * Captured from a real run: xAI reading a DOCX master of Chinese
-   * Chan-diary prose through `app/llm/correct.py`, serialized by
-   * `suggestion_to_dict`. Invented fixtures agree with whatever the
-   * parser happens to do; this one agrees with the converter.
-   */
   const real = {
     title: '参禅日记',
     model: 'xai:grok-4.20-0309-non-reasoning',
@@ -231,9 +213,6 @@ describe('the file the converter actually writes', () => {
   })
 
   it('round-trips into the decisions file the converter reads back', () => {
-    // The decisions file is the suggestions file with `approved` filled
-    // in — the same shape `serialize.read_suggestions` parses. Anything
-    // dropped here is a line the apply step could not act on.
     const decisions = acceptDecisions({
       offered: readSuggestions(real),
       approved: ['4:1'],
@@ -263,9 +242,6 @@ describe('readDecisions', () => {
   })
 
   it('keeps an adopted decision adopted', () => {
-    // `readSuggestions` drops this field on purpose; reading a decisions
-    // file with it would make every decision read as undecided, and the
-    // apply step would report success having changed nothing.
     expect(readDecisions(file(true))[0].approved).toBe(true)
   })
 
@@ -274,8 +250,6 @@ describe('readDecisions', () => {
   })
 
   it('leaves an absent decision undecided rather than declining it', () => {
-    // "Nobody looked" and "somebody declined" are different facts, and
-    // applySuggestions counts them separately.
     expect(readDecisions(file(undefined))[0].approved).toBeNull()
   })
 

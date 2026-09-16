@@ -1,13 +1,5 @@
 import React from 'react'
 
-/**
- * The invitation to contribute, at the foot of the library and the
- * homepage alike.
- *
- * One component because the design uses one — the two pages showed
- * slightly different wording of the same offer until 2026-08-21, which
- * is the kind of drift a shared component exists to prevent.
- */
 export function ShareCta() {
   return (
     <div className="invite">

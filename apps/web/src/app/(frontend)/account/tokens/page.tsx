@@ -9,21 +9,6 @@ import { getCurrentUser } from '../../../../lib/auth'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Access tokens' }
 
-/**
- * Where a reader mints a personal access token.
- *
- * This lived in the generated CMS until 2026-08-24, as a checkbox on
- * the user's own record — which meant the one legitimate reason a
- * *reader* ever had to open `/cms` was to tick it. It belongs here:
- * `/account` is already the place for things about you, and a token is
- * as much yours as your Kindle address is.
- *
- * The token is read straight off the user row rather than from the
- * session object. `enableAPIKey` is what decides whether one exists —
- * a revoked account keeps neither, but a row written by some older path
- * could hold a stale value behind a false flag, and printing that would
- * hand someone a token that does not authenticate.
- */
 export default async function TokensPage() {
   const user = await getCurrentUser()
   if (!user) return null

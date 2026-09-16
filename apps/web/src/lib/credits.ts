@@ -1,18 +1,3 @@
-/**
- * Moving credits.
- *
- * The only module permitted to change a reader's balance. Everything
- * that spends or grants goes through `applyCredits`, which writes the
- * ledger row and the new balance together — so the account of how a
- * reader got their credits can never disagree with the number the
- * delivery check reads.
- *
- * The decisions themselves are in `domain/credits.ts`: what a book
- * costs, what a month is worth, whether a reader can afford a send.
- * This module loads the state those functions need and records what
- * they decided.
- */
-
 import type { Payload } from 'payload'
 
 import {
@@ -33,17 +18,6 @@ export interface CreditMovement {
   month?: string
 }
 
-/**
- * Apply one movement: ledger row plus balance, in that order.
- *
- * Ledger first, so a crash between the two leaves an explained credit
- * that was never spendable rather than a balance nobody can account
- * for. Under-crediting a reader is a bug we can find and fix; a balance
- * with no story behind it is one we cannot.
- *
- * D1 has no transaction across these two writes through Payload's local
- * API, which is why the ordering carries the weight instead.
- */
 export async function applyCredits(
   payload: Payload,
   userId: string | number,
@@ -80,14 +54,6 @@ export async function applyCredits(
   return balance
 }
 
-/**
- * Record the opening balance for a newly created account.
- *
- * The `credits` field already defaults to `SIGNUP_GRANT`, so this does
- * not move the balance — it writes the ledger row that explains it, and
- * sets the accrual baseline so the reader's first month is not also
- * granted a moment later as a backdated inactive one.
- */
 export async function grantSignupCredits(
   payload: Payload,
   userId: string | number,
@@ -111,16 +77,6 @@ export async function grantSignupCredits(
   })
 }
 
-/**
- * Pay a reader whatever the calendar owes them.
- *
- * Called on sign-in. Cheap and idempotent in the common case: a reader
- * who has already been granted for this month causes one read and no
- * writes, which matters because it runs on every sign-in.
- *
- * Never throws. A reader must be able to sign in even if their grant
- * cannot be recorded; they will get it on the next attempt.
- */
 export async function accrueMonthlyCredits(
   payload: Payload,
   userId: string | number,
@@ -141,9 +97,6 @@ export async function accrueMonthlyCredits(
       })),
     )
 
-    // Written after the grants, so an interrupted accrual is retried
-    // rather than skipped. The month key is what makes the retry safe:
-    // `accrualFor` will not re-grant a month already recorded here.
     await payload.update({
       collection: 'users',
       id: userId,
@@ -153,15 +106,11 @@ export async function accrueMonthlyCredits(
 
     return { granted: totalCredits(grants), grants }
   } catch (error) {
-    // A reader silently not being paid is exactly the kind of fault
-    // nobody reports, because nobody knows what their balance should
-    // have been.
     logError('credits: accrue monthly grant', error)
     return { granted: 0, grants: [] }
   }
 }
 
-/** Does this reader already own this book? */
 export async function ownsBook(
   payload: Payload,
   userId: string | number,
@@ -177,7 +126,6 @@ export async function ownsBook(
   return found.docs.length > 0
 }
 
-/** The books this reader has bought, newest first. */
 export async function ownedBooks(payload: Payload, userId: string | number, limit = 200) {
   const found = await payload.find({
     collection: 'entitlements',
@@ -190,7 +138,6 @@ export async function ownedBooks(payload: Payload, userId: string | number, limi
   return found.docs
 }
 
-/** Records the purchase that a first delivery represents. */
 export async function recordEntitlement(
   payload: Payload,
   {
@@ -206,17 +153,6 @@ export async function recordEntitlement(
   })
 }
 
-/**
- * Pay an uploader their share of a delivery someone else paid for.
- *
- * Called after the reader has been charged, and only then — the share
- * is a fraction of credits that actually moved, so paying it before the
- * charge succeeded would create credits out of nothing.
- *
- * Never throws. A share that cannot be recorded must not fail the
- * delivery the reader already paid for; the loss is one fraction of one
- * credit, and the book still arrives.
- */
 export async function payUploaderShare(
   payload: Payload,
   {
@@ -226,7 +162,6 @@ export async function payUploaderShare(
   }: {
     bookId: string | number
     creditsSpent: number
-    /** The reader who paid, so an uploader is never paid by themselves. */
     paidBy: string | number
   },
 ): Promise<void> {
@@ -241,8 +176,6 @@ export async function payUploaderShare(
     })
     const ownerId = typeof book.owner === 'object' ? book.owner?.id : book.owner
 
-    // No uploader, or the uploader is the one sending it. Their own
-    // delivery is free anyway, so this is belt and braces.
     if (!ownerId || String(ownerId) === String(paidBy)) return
 
     const points = shareForDelivery({
@@ -260,9 +193,6 @@ export async function payUploaderShare(
 
     const settled = settleShare({ carry: owner.creditSharePoints ?? 0, points })
 
-    // The carry always moves; the balance only when a whole credit has
-    // accumulated. Written together so the two cannot disagree about
-    // what has been paid.
     await payload.update({
       collection: 'users',
       id: ownerId,
@@ -276,8 +206,6 @@ export async function payUploaderShare(
       ])
     }
   } catch (error) {
-    // See above: never at the cost of the delivery — but an uploader
-    // quietly losing their share is worth knowing about.
     logError('credits: settle uploader share', error)
   }
 }

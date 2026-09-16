@@ -1,14 +1,3 @@
-/**
- * The DOCX round trip.
- *
- * "The DOCX master is the source of truth" (CLAUDE.md section 5) only
- * means something if the approved master can be read back into the same
- * book. A silent mismatch between the writer's style names and the
- * reader's map would flatten verse into prose, or read a section head as
- * a chapter — which is the corrected master coming back as a different
- * book from the one the editor approved.
- */
-
 import { unzipSync, strFromU8 } from 'fflate'
 import { describe, expect, it } from 'vitest'
 
@@ -54,8 +43,6 @@ describe('a master read back', () => {
   })
 
   it('keeps a section head a section rather than promoting it', () => {
-    // A section read back as a chapter starts a new page and a new EPUB
-    // document at every subheading.
     const out = roundTrip(BOOK)
     expect(out.blocks[2]).toMatchObject({ kind: 'section', lines: ['一、打坐'] })
   })
@@ -97,9 +84,6 @@ describe('a master read back', () => {
 
 describe('reading a DOCX from elsewhere', () => {
   it("understands Word's internal lower-case heading names", () => {
-    // Adobe's export writes `<w:name w:val="heading 1"/>`. Without the
-    // BabelFish mapping every Adobe heading reads as an unstyled
-    // paragraph and the book arrives with no chapters at all.
     const out = roundTrip({ title: 'T', blocks: [makeBlock('chapter', ['卷一'])] })
     expect(out.blocks[0].kind).toBe('chapter')
   })
@@ -110,8 +94,6 @@ describe('reading a DOCX from elsewhere', () => {
   })
 
   it('drops a character XML cannot carry rather than writing an unopenable file', () => {
-    // A control character is always damage from a bad decode upstream,
-    // and Word refuses to open a file that contains one.
     const damaged = `前${String.fromCharCode(1)}後`
     const doc: Document = { title: 'T', blocks: [makeBlock('body', [damaged])] }
     expect(roundTrip(doc).blocks[0].lines).toEqual(['前後'])

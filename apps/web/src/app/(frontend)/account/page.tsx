@@ -20,7 +20,6 @@ import { getCurrentUser } from '../../../lib/auth'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account' }
 
-/** Overview: what credits are, what you have, and where books go. */
 export default async function AccountPage() {
   const user = await getCurrentUser()
   if (!user) return null

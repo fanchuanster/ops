@@ -18,32 +18,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title: book ? `Reading ${book.title}` : 'Not found' }
 }
 
-/**
- * Reading a book, whole.
- *
- * No sign-in, no credits, no limit. Credits pay for taking a book away
- * to a device; they never pay for reading, and this page is the reason
- * the whole project exists. A reader who arrives with no account and no
- * balance still gets every word.
- *
- * Signing in adds exactly one thing here: the book is recorded as
- * started, so it appears in their history.
- *
- * Which reader opens depends on what the book actually has. Almost
- * always the EPUB one; for a book published as it stands there is no
- * EPUB to reflow, so the book itself is shown instead rather than the
- * reader failing at a book that is sitting right there in storage — a
- * PDF in the browser's own viewer, a text file set as prose.
- */
 export default async function ReadPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
   const user = await getCurrentUser()
 
-  // The session goes into the lookup, not just into the authorization
-  // below it: a private upload is invisible to an anonymous query, and
-  // an owner opening their own book would get a bare 404 here rather
-  // than ever reaching a decision about it.
   const book = await getBookBySlug(slug, user)
   if (!book) notFound()
 

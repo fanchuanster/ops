@@ -1,12 +1,3 @@
-/**
- * Metadata extraction.
- *
- * Every case here came from a real shape these formats take. The junk
- * filters especially: "Microsoft Word - chapter1.doc" is a title field
- * Word writes by itself, and letting it through would fill the library
- * with books named after the program that made them.
- */
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -89,12 +80,10 @@ describe('PDF metadata', () => {
   })
 
   it('decodes UTF-16BE hex strings, which is how CJK titles arrive', () => {
-    // FEFF BOM + 論語 (U+8AD6 U+8A9E)
     expect(fromPdfText('/Title <FEFF8AD68A9E>').title).toBe('論語')
   })
 
   it('prefers XMP over the Info dictionary when both exist', () => {
-    // XMP is the one that gets updated when a file is re-saved.
     const pdf = `
       <dc:title><rdf:Alt><rdf:li xml:lang="x-default">The Real Title</rdf:li></rdf:Alt></dc:title>
       <dc:creator><rdf:Seq><rdf:li>The Real Author</rdf:li></rdf:Seq></dc:creator>
@@ -130,8 +119,6 @@ describe('plain text and Markdown', () => {
   })
 
   it('refuses a first line that is prose, rather than truncating it', () => {
-    // A truncated paragraph makes a confidently wrong title, which is
-    // worse than none — the reader skims past it.
     expect(fromPlainText('x'.repeat(200)).title).toBeUndefined()
   })
 
@@ -185,7 +172,6 @@ describe('language normalisation', () => {
 
 describe('page counts stated by the file', () => {
   it('takes the page tree root count, not an intermediate node', () => {
-    // A PDF may nest page-tree nodes, each with its own smaller /Count.
     expect(pdfPageCount('/Type /Pages /Count 12 ... /Type /Pages /Count 342')).toBe(342)
   })
 
@@ -204,7 +190,6 @@ describe('page counts stated by the file', () => {
   })
 
   it('is empty for a generator that writes no statistics', () => {
-    // python-docx and most libraries write no page count at all.
     expect(fromAppXml('<Properties><Application>python-docx</Application></Properties>')).toEqual({})
   })
 
@@ -214,10 +199,6 @@ describe('page counts stated by the file', () => {
 })
 
 describe('CJK text that arrives mis-decoded', () => {
-  // A PDF must be read one code unit per byte so the hex strings stay
-  // intact, which means any UTF-8 text in it arrives wrong. These are
-  // the three ways a producer really writes 論語別裁, and two of them
-  // depend on the repair.
   const asBytes = (value: string) =>
     bytesToBinaryString(new TextEncoder().encode(value))
 
@@ -236,8 +217,6 @@ describe('CJK text that arrives mis-decoded', () => {
   })
 
   it('leaves genuine Latin-1 text alone', () => {
-    // é is a single code unit that is not valid UTF-8 on its own, so the
-    // strict decode throws and the original survives.
     expect(repairUtf8('Café Littéraire')).toBe('Café Littéraire')
   })
 
@@ -249,18 +228,6 @@ describe('CJK text that arrives mis-decoded', () => {
 
 describe('byte strings', () => {
   it('preserves every byte, which TextDecoder("latin1") does not promise', () => {
-    // 0x96 is the trap. Per the WHATWG encoding standard the "latin1"
-    // label selects *windows-1252*, not ISO-8859-1, and windows-1252
-    // maps 0x96 to U+2013 — so the byte is lost and the later
-    // GBK/Big5 detection never sees what it needs.
-    //
-    // Only our own helper is asserted here. Which way TextDecoder
-    // actually goes is a property of the host: workerd follows the spec
-    // and yields U+2013, while Node 20 on this machine yields 0x96. The
-    // production runtime is the one that loses the byte, so the helper
-    // is required regardless — but pinning a third party's behaviour in
-    // an assertion makes the suite fail when a runtime is upgraded,
-    // which tells us nothing about this code.
     const bytes = new Uint8Array([0x00, 0x7f, 0x80, 0x96, 0x9f, 0xff])
     const encoded = bytesToBinaryString(bytes)
     expect([...encoded].map((c) => c.charCodeAt(0))).toEqual([...bytes])
@@ -273,16 +240,11 @@ describe('byte strings', () => {
 })
 
 describe('Chinese PDFs that are not UTF-8', () => {
-  // GBK and Big5 are what Chinese-language software writes into a PDF
-  // literal string, and they are exactly the books this library is for.
-  // Neither can fail to decode — both turn almost any bytes into valid
-  // CJK — so the detector has to judge whether the result is real
-  // Chinese, not merely Chinese-shaped.
   const asBytes = (bytes: number[]) => bytesToBinaryString(new Uint8Array(bytes))
 
   it('reads a GBK title and author', () => {
-    const title = asBytes([0xd5, 0x93, 0xd5, 0x5a, 0x84, 0x65, 0xb2, 0xc3]) // 論語別裁
-    const author = asBytes([0xc4, 0xcf, 0x91, 0xd1, 0xe8, 0xaa]) // 南懷瑾
+    const title = asBytes([0xd5, 0x93, 0xd5, 0x5a, 0x84, 0x65, 0xb2, 0xc3])
+    const author = asBytes([0xc4, 0xcf, 0x91, 0xd1, 0xe8, 0xaa])
     expect(fromPdfText(`/Title (${title}) /Author (${author})`)).toMatchObject({
       title: '論語別裁',
       author: '南懷瑾',
@@ -290,20 +252,16 @@ describe('Chinese PDFs that are not UTF-8', () => {
   })
 
   it('reads a Big5 title', () => {
-    const title = asBytes([0xbd, 0xd7, 0xbb, 0x79, 0xa7, 0x4f, 0xb5, 0xf4]) // 論語別裁
+    const title = asBytes([0xbd, 0xd7, 0xbb, 0x79, 0xa7, 0x4f, 0xb5, 0xf4])
     expect(fromPdfText(`/Title (${title})`).title).toBe('論語別裁')
   })
 
   it('leaves European text alone rather than inventing Chinese', () => {
-    // The guard that matters: a legacy decoding is only preferred when
-    // it produces characters people actually use.
     expect(repairUtf8('Café Littéraire')).toBe('Café Littéraire')
     expect(repairUtf8('München')).toBe('München')
   })
 
   it('keeps title and author on the same encoding', () => {
-    // Three characters is far too little to tell GBK from Big5 alone,
-    // so the fields are judged together and must agree.
     const [title, author] = repairTogether(['論語別裁', '南懷瑾'])
     expect(title).toBe('論語別裁')
     expect(author).toBe('南懷瑾')
@@ -315,11 +273,6 @@ describe('Chinese PDFs that are not UTF-8', () => {
 })
 
 describe('a PDF that mixes encodings between fields', () => {
-  // The real-world shape that broke: title as UTF-16BE hex, author as
-  // raw UTF-8 in a literal string. Grouping them naively does nothing —
-  // the already-decoded title contains characters above U+00FF, so the
-  // repair concludes the whole string was decoded and leaves the author
-  // garbled.
   const utf8Bytes = (value: string) => bytesToBinaryString(new TextEncoder().encode(value))
 
   it('decodes a hex title and a UTF-8 author in the same file', () => {
@@ -341,14 +294,7 @@ describe('a PDF that mixes encodings between fields', () => {
 })
 
 describe('UTF-16 inside a PDF literal string', () => {
-  // The shape that was actually reported. PDF allows a byte-order mark
-  // in an ordinary (…) string, not only the <hex> form, and this is how
-  // producers that handle CJK correctly usually write it.
   const bytes = (values: number[]) => bytesToBinaryString(new Uint8Array(values))
-  // Escaped as PDF requires. This is not incidental: 作 is U+4F5C, so
-  // its low byte is 0x5C — a backslash — and an unescaped one would be
-  // read as an escape introducer and swallow the next byte. Real
-  // producers escape it, which is why the reported file contained `\\`.
   const pdfLiteral = (values: number[]) => {
     const out: number[] = []
     for (const byte of values) {
@@ -381,23 +327,16 @@ describe('UTF-16 inside a PDF literal string', () => {
   })
 
   it('keeps a character whose low byte is a carriage return', () => {
-    // 复 is U+590D. Collapsing whitespace *before* decoding turns that
-    // 0x0D into a space and silently yields 夠 — so decoding has to come
-    // first. This is the regression that produced 夠旦大学 for 复旦大学.
     expect(fromPdfText(`/Title (${utf16be('复旦大学出版社')})`).title).toBe('复旦大学出版社')
   })
 
   it('does not group a UTF-16 field with another field', () => {
-    // Joining them on a newline puts an odd byte in the middle and
-    // misaligns every character after it.
     const [title, author] = repairTogether([utf16be('南怀瑾'), utf16be('Wen Dong')])
     expect(title).toBe('南怀瑾')
     expect(author).toBe('Wen Dong')
   })
 
   it('strips a file extension from a title rather than discarding it', () => {
-    // Producers routinely put the filename in the title field; the rest
-    // of it is usually the best title available.
     expect(fromPdfText(`/Title (${utf16be('南怀瑾著作.pdf')})`).title).toBe('南怀瑾著作')
   })
 })

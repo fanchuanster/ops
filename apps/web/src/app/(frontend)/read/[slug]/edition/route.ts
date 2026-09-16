@@ -10,32 +10,6 @@ import {
   streamLocalArtifact,
 } from '../../../../../lib/storage'
 
-/**
- * Streams a book's reading edition to the in-browser reader.
- *
- * Usually the EPUB. For a book published as it stands there is no EPUB
- * and never will be, so this serves its PDF — or, for a plain text
- * upload, the text itself. The route was called `epub` until 2026-08-21
- * and it lied about half the library. `authorizeReading` picks which
- * one; nothing here chooses.
- *
- * Deliberately not a redirect to a public object URL: epub.js fetches
- * with XHR, and a cross-origin URL would mean opening CORS on the
- * bucket. Streaming keeps the bucket private.
- *
- * No session required, because reading requires no account. The
- * authorization that does apply — rights clearance, and ownership for a
- * private upload — is re-run here rather than trusted from the page:
- * this URL is guessable, and the page having rendered a moment ago is
- * not a permission.
- */
-/**
- * What each edition is served as.
- *
- * The charset on the text one is load-bearing rather than tidiness:
- * `response.text()` in the reader decodes by what this header says, and
- * a UTF-8 book read as Latin-1 is mojibake from the first character.
- */
 const EDITION_CONTENT_TYPES = {
   epub: 'application/epub+zip',
   pdf: 'application/pdf',
@@ -61,17 +35,8 @@ export async function GET(
   if (!decision.allowed) return Response.json({ error: 'Not available' }, { status: 404 })
 
   const headers = {
-    // The reader is told which edition it is getting; the browser has
-    // to be told too, and a PDF served as an EPUB is a download prompt
-    // rather than a rendered page.
     'Content-Type': EDITION_CONTENT_TYPES[decision.format],
-    // The PDF is rendered by the browser's own viewer in a frame, not
-    // handed over as a file. Books are read here or sent to a device;
-    // they are never a file to collect (CLAUDE.md section 1).
     'Content-Disposition': 'inline',
-    // Public-domain library text served to anyone, but a private upload
-    // is served only to its owner through the same route — so the safe
-    // default is to let nothing cache it.
     'Cache-Control': 'private, no-store',
   }
 

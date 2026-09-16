@@ -31,7 +31,6 @@ import { useOnSaved } from './useOnSaved'
 export interface ParentOption {
   id: number
   title: string
-  /** Only to indent the option, so a nested choice reads as nested. */
   depth: number
 }
 
@@ -39,34 +38,13 @@ export interface LibraryBookRow {
   id: number
   title: string
   author: string
-  /** First character of the original-script title, for the tile face. */
   face: string
   level: BookLevel
-  /** In the public library — which since 2026-08-24 means "approved". */
   published: boolean
-  /** Deliveries to e-readers. Not downloads; NobleSee has none. */
   sent: number
-  /**
-   * Who uploaded it — a display name, else an email. Null for a book
-   * staff entered, which has no uploader rather than a missing one.
-   */
   uploader: string | null
-  /** The day the book arrived, ISO, formatted on the server. */
   uploaded: string
-  /**
-   * Where it sits among the books on its own shelf, lowest first.
-   *
-   * Null for a book on no shelf: an order id is a position among a
-   * collection's books, and the "Other" group is not a collection.
-   */
   order: number | null
-  /**
-   * Where clicking this row goes — built on the server.
-   *
-   * A string and not a callback: a function cannot cross into a client
-   * component, and the server is where the rest of the query string
-   * lives anyway.
-   */
   href: string
 }
 
@@ -74,55 +52,18 @@ export interface LibraryRow {
   id: number
   title: string
   description: string
-  /** 1 for a top-level shelf; deeper rows are indented by it. */
   depth: number
   parentId: number | null
-  /** Where it sits among the shelves on the same parent, lowest first. */
   sortOrder: number | null
   parentOptions: ParentOption[]
   first: boolean
   last: boolean
-  /** Books on this shelf and every shelf beneath it, counted once. */
   booksInSubtree: number
-  /** The books filed *directly* here, after the search filter. */
   books: LibraryBookRow[]
-  /** How many of its own books the search is hiding. */
   hidden: number
-  /** How this shelf orders its own children: A–Z, or by order id. */
   childOrder: ShelfSort
 }
 
-/**
- * The shelves, with their books on them.
- *
- * One screen instead of two, from the design. The tree is the spine and
- * a book is a row on it, so an editor arranges the library while
- * looking at what a reader will find — which is the one view neither of
- * the two screens this replaced could show.
- *
- * Flattened on the server and indented by depth rather than nested in
- * the DOM, so a shelf row is the same row wherever it sits.
- *
- * Client state covers exactly three ephemeral things: which shelf is
- * open for editing, whether its levelling form is showing, and whether
- * an add form is showing. Every write is a form posting to a server
- * action, so nothing here holds a copy of the library — a save that
- * fails leaves the row showing what is actually stored rather than what
- * somebody hoped.
- *
- * Two controls the design does not draw are kept deliberately:
- *
- *   the reorder arrows, and the order box beside the parent picker —
- *     `sortOrder` is what decides the order a reader meets the shelves
- *     in, and the homepage shows the first two. With no control for it
- *     that order goes back to being whatever the database returns. The
- *     arrows are for "one place up"; the box is for "third", which on a
- *     long shelf is a great many clicks otherwise.
- *   the parent picker — the design's "+ sub" *creates* a shelf under a
- *     parent, which is not the same as moving one that already exists.
- *     Without it a mis-filed shelf can only be fixed by hand through
- *     the REST API.
- */
 export function LibraryTree({
   rows,
   loose,
@@ -130,7 +71,6 @@ export function LibraryTree({
   selectedBook,
 }: {
   rows: LibraryRow[]
-  /** Books nobody has filed yet. */
   loose: LibraryBookRow[]
   newParentOptions: ParentOption[]
   selectedBook: number | null
@@ -143,8 +83,6 @@ export function LibraryTree({
     {},
   )
 
-  // The new shelf appears in the tree behind the form, so the form has
-  // said everything it has to say (`useOnSaved`).
   useOnSaved(createState, () => setAdding(false))
 
   return (
@@ -253,16 +191,11 @@ function ShelfRow({
   const [levelling, setLevelling] = useState(false)
   const [addingChild, setAddingChild] = useState(false)
 
-  // Saved shelves close, like the book panel on the Library screen and
-  // the reader panel on Readers (`useOnSaved`). The row underneath
-  // already reads back the new name, the new parent and the new order.
   useOnSaved(saveState, onDone)
 
   return (
     <section
       className="admin-lib__group"
-      // Indented by depth rather than nested, so the arrows keep working
-      // and a row is the same row wherever it sits.
       style={{ '--depth': row.depth - 1 } as React.CSSProperties}
     >
       <div
@@ -289,9 +222,6 @@ function ShelfRow({
             <label className="visually-hidden" htmlFor={`parent-${row.id}`}>
               Stands on
             </label>
-            {/* Only shelves this one may legally stand on are offered,
-                so an editor is never shown a choice that will be
-                refused when they save it. */}
             <select id={`parent-${row.id}`} name="parentId" defaultValue={row.parentId ?? ''}>
               <option value="">A shelf of its own</option>
               {row.parentOptions.map((option) => (
@@ -301,12 +231,6 @@ function ShelfRow({
                 </option>
               ))}
             </select>
-            {/* How this shelf's own children read — its books and the
-                shelves standing on it, both. A–Z unless the shelf has
-                an order of its own, which is the case order ids exist
-                for: a volume set, a reading path. Until an editor
-                switches this, the numbers below are recorded and never
-                consulted (`domain/shelfOrder.ts`). */}
             <label className="visually-hidden" htmlFor={`childorder-${row.id}`}>
               How its contents are ordered
             </label>
@@ -322,11 +246,6 @@ function ShelfRow({
                 </option>
               ))}
             </select>
-            {/* The same number the arrows above move, typed rather than
-                stepped. The arrows are for "one place up"; this is for
-                "third", which on a shelf of twenty is nine clicks
-                otherwise. Two shelves may share a number and then read
-                alphabetically between themselves — nothing shifts. */}
             <label className="visually-hidden" htmlFor={`order-${row.id}`}>
               Order among its siblings
             </label>
@@ -369,10 +288,6 @@ function ShelfRow({
             </span>
 
             <span className="admin-lib__tools">
-              {/* Order is a decision somebody took, and the homepage
-                  shows the first two shelves. The design has no control
-                  for it; without one it reverts to whatever the
-                  database returns. */}
               <form action={move} className="admin-lib__move">
                 <input type="hidden" name="collectionId" value={row.id} />
                 <button
@@ -440,30 +355,6 @@ function ShelfRow({
   )
 }
 
-/**
- * One book on a shelf.
- *
- * The title is a `Link` with `scroll={false}`, and both halves of that
- * matter. A plain `<a>` reloaded the page, which threw away the tree's
- * scroll position — so an editor working down a long shelf was returned
- * to the top of the library after every book they opened, and had to
- * scroll back to find the next one. `Link` keeps `.admin-scroll` the
- * same DOM node across the navigation; `scroll={false}` stops Next
- * scrolling the new segment into view, which walks up the ancestors and
- * would undo exactly what the first half bought.
- *
- * The uploader and the date sit between the title and the level, and
- * are the reason an editor can tell a reader's submission from a book
- * staff entered without opening either. Both are quiet: they are
- * provenance, not the subject of the row.
- *
- * The level is a label here and not a control. It was three buttons
- * that saved on click, which was the right shape when this list was the
- * only place a level could be set; the panel sets it now, and the shelf
- * form sets a whole subtree at once, so a third writer sitting under
- * the cursor in a dense list was one too many. The full word rather
- * than an initial, because two of the three levels start with "E".
- */
 function BookRow({
   book,
   depth,
@@ -475,12 +366,6 @@ function BookRow({
 }) {
   const row = useRef<HTMLDivElement>(null)
 
-  // On mount only. A *fresh* load of `?book=25` — a bookmark, a link
-  // somebody was sent, the redirect after a delete — starts the tree at
-  // the top with the selected book somewhere below the fold. Selecting
-  // from the tree is a client navigation that does not remount the row,
-  // so this never fires on a click and never moves the shelf out from
-  // under the editor.
   useEffect(() => {
     if (row.current?.dataset.selected) row.current.scrollIntoView({ block: 'center' })
   }, [])
@@ -497,10 +382,6 @@ function BookRow({
       </span>
       <span className="admin-lib__booktext">
         <Link className="admin-rowlink" href={book.href} scroll={false}>
-          {/* Its place on the shelf, before the title, because that is
-              the order the rows are already in — a number a reader can
-              follow down the column is the whole point of showing it.
-              Absent for an unfiled book, which has no place to show. */}
           {book.order === null ? null : (
             <span className="admin-lib__order admin-num" aria-hidden="true">
               {book.order}
@@ -510,14 +391,6 @@ function BookRow({
         </Link>
         {book.author ? <em>{book.author}</em> : null}
       </span>
-      {/* Who put it here, and when. A column of its own rather than a
-          third line under the title: an editor scanning for a reader's
-          upload is comparing this down the page, and a value that
-          starts at a different x each row cannot be compared.
-          Truncated rather than wrapped — an email is as long as
-          somebody's email happens to be, and the panel shows it whole.
-          No tooltip, deliberately: the stretched row link covers this
-          span, so a `title` on it would never appear. */}
       <span className="admin-lib__origin admin-quiet">
         <span className="admin-lib__uploader">{book.uploader ?? '—'}</span>
         <span className="admin-num">{book.uploaded || '—'}</span>
@@ -537,7 +410,6 @@ function BookRow({
   )
 }
 
-/** Create a shelf directly under this one. */
 function AddChild({ parentId, onDone }: { parentId: number; onDone: () => void }) {
   const [state, create, creating] = useActionState<CollectionsState, FormData>(
     createCollection,
@@ -565,26 +437,10 @@ function AddChild({ parentId, onDone }: { parentId: number; onDone: () => void }
   )
 }
 
-/**
- * Hand a reading level down a whole shelf.
- *
- * Two modes, and the form makes an editor choose rather than guessing
- * for them: a **cap** can only move a book shallower and leaves a
- * curated one alone; an **exact** level overwrites whatever was there.
- * `domain/levels.ts` owns both rules and the server applies them.
- *
- * Nothing is stored on the collection. A shelf has no level of its own;
- * this is an act performed on the books, and the result shows up in
- * their own chips a few rows below.
- */
 function ShelfLevel({ row, onDone }: { row: LibraryRow; onDone: () => void }) {
   const [state, apply, applying] = useActionState<CollectionsState, FormData>(applyShelfLevel, {})
   const [mode, setMode] = useState<(typeof LEVEL_APPLY_MODES)[number]>('cap')
 
-  // Closes when it has been applied. What it did is not lost by
-  // closing: the books it moved are a few rows below with their new
-  // level on them, which is the same answer the form's own message gave
-  // and is the one an editor was going to check anyway.
   useOnSaved(state, onDone)
 
   return (

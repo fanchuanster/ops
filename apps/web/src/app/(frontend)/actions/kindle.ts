@@ -16,38 +16,12 @@ import { authorizeDownload, chargeForDelivery } from '../../../lib/authorizeDown
 import { kindleTransport } from '../../../lib/kindle/transport'
 import { artifactBytes } from '../../../lib/storage'
 
-/**
- * Saving a delivery address, and sending a book to it.
- *
- * Both are server actions rather than route handlers because both are
- * form submissions from a page that already knows who the reader is.
- *
- * Sending goes through `authorizeDownload`: rights, availability and
- * price are decided there, and deciding them again here would create a
- * second answer free to drift from the first. Kindle delivery is a
- * download that happens to arrive by email, so it is authorized like
- * one and charged like one.
- *
- * The order below is deliberate and worth keeping: authorize, fetch,
- * send, *then* charge. Credits only ever leave a reader's balance after
- * a book has actually left the building.
- */
-
-/**
- * `sent` is what the send button reads, rather than the presence of a
- * notice string. A delivery that succeeded is a state the UI reacts to;
- * making that depend on whether some prose happens to be non-empty
- * couples the button to the wording.
- */
 export type KindleState = {
   error?: string
   notice?: string
   sent?: boolean
-  /** Whether the send asked Amazon to convert it, for the label. */
   converted?: boolean
-  /** Credits this send cost, so the button can say what was spent. */
   spent?: number
-  /** The reader's balance afterwards, for the next confirmation. */
   balance?: number
 }
 
@@ -61,7 +35,6 @@ export async function saveKindleAddress(
   const raw = String(formData.get('kindleEmail') || '').trim()
   const payload = await getPayload({ config })
 
-  // Empty clears it, which is how a reader turns delivery off.
   if (!raw) {
     await payload.update({
       collection: 'users',
@@ -99,9 +72,6 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
 
   const bookId = String(formData.get('bookId') || '')
   const format = String(formData.get('format') || 'epub')
-  // Set by the second button in the split control. The submitter's own
-  // name/value is what distinguishes the two sends, so an ordinary
-  // click cannot ask for conversion by accident.
   const convert = formData.get('convert') === '1'
   if (!bookId) return { error: 'Nothing to send.' }
 
@@ -128,7 +98,6 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
 
   const payload = await getPayload({ config })
 
-  // Rights, availability and price, decided in one place.
   const decision = await authorizeDownload({
     payload,
     bookId,
@@ -148,8 +117,6 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
       case 'format_unavailable':
         return { error: 'That format is not available for this book.' }
       default:
-        // Least-informative-first: a reader who may not see the book is
-        // not told it exists.
         return { error: 'That book is not available to you.' }
     }
   }
@@ -157,8 +124,6 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
   const bytes = await artifactBytes(decision.storageKey)
   if (!bytes) return { error: 'That file is missing from storage.' }
 
-  // Size is only knowable once the bytes are in hand, so it is checked
-  // here rather than in the eligibility pass above.
   const sizeCheck = checkKindleDelivery({
     kindleAddress: user.kindleEmail,
     format,
@@ -166,28 +131,16 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
     transportConfigured: true,
   })
   if (!sizeCheck.ok) {
-    // Never "download it instead": there is no download. A book is read
-    // here or sent to a device, which is a product decision rather than
-    // a missing feature, so the refusal points at the reader that does
-    // exist. The two sizes are both named because "too large" without a
-    // number leaves a reader with nothing to act on — knowing the book
-    // is 41 MB against a 25 MB limit at least explains the silence.
     return { error: tooLargeMessage(bytes.byteLength) }
   }
 
   const result = await transport!.send({
     to: eligibility.address,
-    // Amazon reads the subject as an instruction, so asking for
-    // conversion spends the line the filename would otherwise have.
     subject: kindleSubject({ filename: decision.filename, convert }),
     attachment: { filename: decision.filename, content: bytes },
   })
 
   if (!result.sent) {
-    // Nothing charged and nothing recorded: the book never left, and
-    // billing a reader for our failure would be wrong. This ordering —
-    // send first, charge second — is the whole reason the decision
-    // above only decides.
     return { error: 'Could not send it just now. Try again in a moment.' }
   }
 
@@ -201,8 +154,6 @@ export async function sendToKindle(_prev: KindleState, formData: FormData): Prom
 
   revalidatePath('/account')
   revalidatePath('/account/history')
-  // No notice: the button turns green and says "Sent", which is the
-  // whole message. A line of prose next to it said the same thing twice.
   return {
     sent: true,
     converted: convert,

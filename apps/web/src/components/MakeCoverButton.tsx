@@ -5,33 +5,6 @@ import { useState } from 'react'
 
 import { coverImagesFor, type CoverSource } from '../lib/client/coverImages'
 
-/**
- * Makes a cover for a book that is already in the library.
- *
- * The upload page renders the candidates while the file is still in the
- * browser, which is free and covers every book from here on. This is
- * for the ones that came before, and for a render that failed.
- *
- * It is offered *once*, and only while nothing has been rendered
- * (`hasRenderedPages` in `domain/cover.ts`). Rasterizing the same
- * opening pages of the same file is deterministic, so a "render again"
- * could only ever hand back the pictures already in the bucket after
- * downloading the whole book to make them — a wait in exchange for
- * nothing. Choosing among the three pages is the control that does the
- * work a re-render looked like it might.
- *
- * The work happens here, in whoever's browser pressed it: the book's
- * PDF is streamed back through `/covers/<id>/source` (owner or
- * administrator only), rasterized, and posted to `/covers/<id>`. That
- * means downloading the book to make a picture of its first page, which
- * for a 60 MB scan is a real wait on a slow connection — the button
- * says so rather than pretending otherwise.
- *
- * Nothing about this is a job, a queue or a poll. That is the point: a
- * cover used to be job kind three on a converter that claimed it and
- * never reported, and every book in the library had no picture as a
- * result.
- */
 export function MakeCoverButton({
   bookId,
   label = 'Make a cover from the book',
@@ -50,8 +23,6 @@ export function MakeCoverButton({
       const response = await fetch(`/covers/${bookId}/source`)
       if (!response.ok) return setState('failed')
 
-      // The route says which of the two it sent, so the renderer does
-      // not have to sniff the bytes.
       const source = (response.headers.get('X-Cover-Source') ?? 'pdf') as CoverSource
       const file = await response.blob()
 
@@ -66,9 +37,6 @@ export function MakeCoverButton({
       if (!stored.ok) return setState('failed')
 
       setState('idle')
-      // The picture is on this page and on several others; the server
-      // has already revalidated them, and this is what redraws the one
-      // being looked at.
       router.refresh()
     } catch {
       setState('failed')
