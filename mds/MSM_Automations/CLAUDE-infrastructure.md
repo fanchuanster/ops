@@ -8,8 +8,14 @@ shared — identical for EC2-based and EKS-based (`k8s/`) farms.
   MSM backoffice, **not** by the name: `_SA` active is not a default state, and `_SA_CPY`
   can be (and often is) the active one.
 - An upgrade (`copyAndUpgrade`) copies the active slot's data into the *other* slot at
-  the new version, cuts the farm over, then drops the old slot — so the active name
-  flips between `_SA` and `_SA_CPY` across successive upgrades.
+  the new version and cuts the farm over — so the active name flips between `_SA` and
+  `_SA_CPY` across successive upgrades.
+- The slot it copied *from* is left behind, holding the data as it was before the
+  upgrade: that is the way back from a bad one. It is reclaimed only by the next upgrade
+  in the other direction, whose "ensure `<slot>` is free" step prompts (30 min timeout,
+  showing the schema's `admin_version`) before dropping it. So the steady state is both
+  slots populated, and an upgrade needing its target slot is a confirmation the operator
+  has to answer, not something the job decides.
 - `Upgrade.get_upgrade_type_from_versions` compares **only the major version** parsed
   from each side's `admin_version`. A target major lower than the active schema's is
   `NONE`/`ABORT` (downgrade guard), whatever Jenkins action triggered it. This surprises
