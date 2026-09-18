@@ -9,7 +9,7 @@ import {
   withinSizeLimit,
 } from '../domain/adobe'
 import type { ArtifactFormat } from '../domain/conversion'
-import { artifactKey } from '../domain/bookStorage'
+import { type BookId, artifactKey } from '../domain/bookStorage'
 import { type CorrectionState, correctionStateForMaster } from '../domain/correction'
 import {
   type ConversionState,
@@ -43,7 +43,6 @@ import {
   startExport,
   uploadAsset,
 } from './adobe/client'
-import { freeStem } from './bookObjects'
 import { artifactBytes, copyObject, objectBucket } from './storage'
 import { logError } from './logError'
 
@@ -222,7 +221,7 @@ async function attachMaster(
 }
 
 async function fileUnderBook(
-  book: { artifacts?: Book['artifacts'] },
+  book: { id: BookId; artifacts?: Book['artifacts'] },
   {
     kind,
     format,

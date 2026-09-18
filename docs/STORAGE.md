@@ -20,62 +20,78 @@ cheap on a Worker.
 
 ## Naming
 
-**Every file of a book shares one stem: the name of the first file
-uploaded**, differing only by type suffix. A source added later is filed
-under the stem the book already has, never its own name — including when
-the first upload has not been filed yet, where stemming each from its
-own name would give one book two stems and nothing would notice.
+**A book is a folder named after its id, and every object it owns lives
+in it.** The filename says what the file *is*, because the folder
+already says which book it belongs to:
 
-**Never build a book's artifact key from the slug.** An editor can
-correct a slug, and a corrected title renames the link on its own, so a
-key built from one would move when a book is renamed. The name of an
-uploaded file does not change, ever.
+    books/{id}/
+      book.pdf           the upload, kept as uploaded
+      master.docx        the master
+      book.epub          the reading edition
+      book.txt           a text upload, kept as itself
+      cover.jpg          the cover
+      cover-2.jpg        the other rendered candidates, written by the
+      cover-3.jpg        browser (POST /covers/{id})
+      suggestions.json   what the model proposed
+      decisions.json     the same file with `approved` filled in
 
-Covers are the exception, and only because they are never *found* that
-way: a rendered cover lives under its own prefix, named for the book,
-and the key it was written to is recorded on the book. A rename
-therefore strands nothing — an existing cover keeps the key it has, and
-only a fresh render after a rename picks up the new name. The exception
-survives exactly as long as that stays true; the moment something
-recomputes a cover key instead of reading it back, a rename starts
-losing covers.
+    covers/{filename}    an uploaded cover image (the Media collection's
+                         own prefix, MEDIA_PREFIX)
 
-Two rules bound that rename: **only a generated slug is rebuilt**, so
-one an editor wrote by hand is never touched; and **the uniqueness
-suffix is kept**, so a rename that collides with another book still
-resolves. A renamed book's old URL stops working, which is the honest
-cost and the reason this is keyed on the title actually changing rather
-than run on every save.
+    conversion/{job}/input/   where an upload lands before it is filed
 
-**The path is not the link.** A book reaches its objects through the
-keys it stores, read back and never recomputed — production proves it,
-since the seed books record keys that do not match their own ids and
-everything about them works. The stem exists to give keys a name a human
-can read in a bucket listing, not to find them.
+Everything is derived from the id in `domain/bookStorage.ts`, and there
+is nothing else to derive it from. Seven names, the same for every book.
 
-## The number belongs to the book
+This replaced two earlier schemes on 2026-09-18, and what it deleted is
+the argument for it. Keys were built from a **stem** — the name of the
+first file uploaded — which had to be unique across the whole library,
+so it carried an incrementing number (`scan`, `scan-2`), a footprint
+check that reserved every slot the stem *would* occupy so a book could
+not end up as `scan.docx` beside `scan-2.epub`, and a bucket lookup per
+upload to find a free one. All of it existed to make one flat namespace
+behave like a folder. A folder per id is unique by construction, so
+`stemFromFilename`, `bookStem`, `numberedStem`, `stemFootprint` and
+`freeStem` are gone, `lib/bookObjects.ts` with them, and so is
+`masterKey` — Adobe's exported master now lands at the same
+`artifactKey(id, 'docx')` as a built one, which it always should have.
 
-Uploaded names are not unique — two readers both have a `scan.pdf` — so
-a taken name gets an incrementing number.
+**The uploaded filename is not in the key, and never needs to be.** It
+is a fact about the book, recorded on the book: `conversion.sourceFilename`
+for the master source and `filename` on each entry of
+`conversion.sources`, which is what the upload panel and the account
+page display. Encoding it in the key made it *look* preserved while
+quietly mangling it — the stem stripped punctuation, collapsed spaces,
+truncated at 80 characters and appended a collision number, so what a
+listing showed was never quite what anyone uploaded.
 
-**It is reserved for the whole book at once, not per file.** A stem
-counts as taken when any key it would occupy exists, which stops a book
-ending up as `scan.docx` beside `scan-2.epub`. Naming variations after
-one original only means something if they keep agreeing, and agreeing at
-the first write is not the same as agreeing.
+**Re-uploads are caught by content, not by name.** `conversion.sourceHash`
+is a SHA-256 of the bytes, indexed, and `alreadyExported` in
+`lib/masterPipeline.ts` looks for a twin before paying Adobe for an
+export — attaching the master the twin already has instead. Names could
+never have done this job: two readers both have a `scan.pdf`, and the
+same scan renamed is still the same scan. Worth knowing that the hash is
+currently written only in the export path, so most rows predate it and
+carry none; widening it to every intake is the obvious next step and has
+not been taken.
 
-The reservation happens once, when the first object is filed;
-afterwards the stem is read back off a recorded key rather than
-recomputed, so it cannot drift. The runner reserves too, for a book that
-somehow arrives with nothing filed — a can't-happen whose failure,
-writing over another book's object and reporting success, is worth a
-redundant check.
+**Never build a key from the slug.** An editor can correct a slug, and a
+corrected title renames the link on its own, so a key built from one
+would move when a book is renamed. An id does not change, ever. Two
+rules bound that rename: **only a generated slug is rebuilt**, so one an
+editor wrote by hand is never touched; and **the uniqueness suffix is
+kept**, so a rename that collides with another book still resolves. A
+renamed book's old URL stops working, which is the honest cost and the
+reason this is keyed on the title actually changing rather than run on
+every save.
 
-**Nothing was migrated and nothing needs to be.** A slot a book already
-fills keeps its key, so a rebuild overwrites the object the book points
-at rather than filing a second one, and a book stored under the older
-layout simply yields a stem from that layout and files its next artifact
-beside the ones it has.
+**The path is not the link.** A book still reaches its objects through
+the keys it stores, read back and never recomputed, and that rule did
+not relax because the keys became derivable. It is what let the layout
+change at all: a rebuild overwrites the object the book points at
+instead of filing a second one, and a row left on an older key keeps
+working. The derivation names a *new* object; the stored key finds an
+existing one.
 
 Uploads land in a staging area that a lifecycle rule sweeps after 30
 days, which is why every source is also filed under its own book

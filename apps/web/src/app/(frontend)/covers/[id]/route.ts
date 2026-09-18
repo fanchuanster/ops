@@ -156,7 +156,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const base =
     typeof existing === 'string' && existing.length > 0
       ? existing
-      : coverKey(book.slug)
+      : coverKey(book.id)
 
   try {
     for (const [index, page] of wanted.entries()) {
