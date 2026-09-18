@@ -27,6 +27,7 @@ import * as migration_20260826_140000_correction_review from './20260826_140000_
 import * as migration_20260914_120000_book_sources from './20260914_120000_book_sources';
 import * as migration_20260914_160000_export_retries from './20260914_160000_export_retries';
 import * as migration_20260916_220000_drop_original_title from './20260916_220000_drop_original_title';
+import * as migration_20260918_120000_media_prefix from './20260918_120000_media_prefix';
 
 export const migrations = [
   {
@@ -173,5 +174,10 @@ export const migrations = [
     up: migration_20260916_220000_drop_original_title.up,
     down: migration_20260916_220000_drop_original_title.down,
     name: '20260916_220000_drop_original_title'
+  },
+  {
+    up: migration_20260918_120000_media_prefix.up,
+    down: migration_20260918_120000_media_prefix.down,
+    name: '20260918_120000_media_prefix'
   },
 ];

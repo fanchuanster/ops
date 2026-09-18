@@ -91,7 +91,3 @@ export function needsExport(filename: string, mimeType?: string | null): boolean
   if (mimeType && mimeType !== 'application/octet-stream') return false
   return /\.pdf$/i.test(filename.trim())
 }
-
-export function masterKey(bookId: string | number): string {
-  return `books/${bookId}/book/master.docx`
-}

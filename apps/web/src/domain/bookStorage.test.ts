@@ -5,7 +5,6 @@ import {
   artifactKey,
   bookStem,
   coverCandidateKey,
-  coverKey,
   decisionsKey,
   numbered,
   numberedStem,
@@ -85,9 +84,7 @@ describe('every variation shares the stem', () => {
     expect(artifactKey(stem, 'txt')).toBe('books/參禪日記.txt')
   })
 
-  it('names the cover and the correction pair from it too', () => {
-    expect(coverKey(stem)).toBe('books/參禪日記-cover.jpg')
-    expect(coverKey(stem, 2)).toBe('books/參禪日記-cover-2.jpg')
+  it('names the correction pair from it too', () => {
     expect(suggestionsKey(stem)).toBe('books/參禪日記-suggestions.json')
     expect(decisionsKey(stem)).toBe('books/參禪日記-decisions.json')
   })
@@ -115,18 +112,16 @@ describe('numbering a name that is already taken', () => {
     const stem = numberedStem('scan', 1)
     expect(stem).toBe('scan-2')
     expect(artifactKey(stem, 'epub')).toBe('books/scan-2.epub')
-    expect(coverKey(stem)).toBe('books/scan-2-cover.jpg')
   })
 
   it('belongs to the book, so one taken type takes the whole name', () => {
     expect(stemFootprint('scan')).toContain('books/scan.docx')
     expect(stemFootprint('scan')).toContain('books/scan.epub')
-    expect(stemFootprint('scan')).toContain('books/scan-cover.jpg')
     expect(stemFootprint('scan')).toContain('books/scan-suggestions.json')
   })
 
-  it('does not list cover candidates past the first', () => {
-    expect(stemFootprint('scan')).not.toContain('books/scan-cover-2.jpg')
+  it('leaves the cover out, because a cover is named after the book', () => {
+    expect(stemFootprint('scan').some((key) => key.startsWith('covers/'))).toBe(false)
   })
 })
 

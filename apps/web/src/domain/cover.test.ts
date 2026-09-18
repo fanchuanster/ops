@@ -78,10 +78,10 @@ describe('which cover a page shows', () => {
 })
 
 describe('the candidate pages', () => {
-  it('keeps page one at the name it has always had', () => {
+  it('names every page after the book, in a folder of its own', () => {
     expect(coverKey('a-book')).toBe(coverKey('a-book', 1))
-    expect(coverKey('a-book', 1).endsWith('cover.jpg')).toBe(true)
-    expect(coverKey('a-book', 2).endsWith('cover-2.jpg')).toBe(true)
+    expect(coverKey('a-book', 1)).toBe('covers/a-book.jpg')
+    expect(coverKey('a-book', 2)).toBe('covers/a-book-2.jpg')
   })
 
   it('never counts more pages than are offered', () => {

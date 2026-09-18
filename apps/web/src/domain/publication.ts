@@ -1,5 +1,5 @@
 import type { ArtifactFormat } from './conversion'
-import { artifactKey } from './bookStorage'
+import { type BookId, artifactKey } from './bookStorage'
 
 export type SourceKind = 'pdf' | 'docx' | 'epub' | 'text'
 
@@ -75,8 +75,8 @@ export function originalArtifact(kind: SourceKind): ArtifactFormat | null {
 
 const ORIGINAL_FORMAT = { pdf: 'pdf', docx: 'docx', epub: 'epub', text: 'txt' } as const
 
-export function originalKey(stem: string, kind: SourceKind): string {
-  return artifactKey(stem, ORIGINAL_FORMAT[kind])
+export function originalKey(bookId: BookId, kind: SourceKind): string {
+  return artifactKey(bookId, ORIGINAL_FORMAT[kind])
 }
 
 export function formatsToGenerate(kind: SourceKind): ArtifactFormat[] {
