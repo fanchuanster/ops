@@ -23,12 +23,50 @@ mds/
   MSM_Automations/CLAUDE-octane.md
   MSM_Automations/CLAUDE-environment.md
   MSM_Automations/CLAUDE-infrastructure.md
+  MSM_Automations/skills/octane/SKILL.md
   MSM_Automations/Aviator/CLAUDE.md
 ```
 
 A nested file covers its own sub-repo; the parent file covers everything above
 it. Adding a repo means recreating its path here, dropping in a `CLAUDE.md`, and
 running `sync.sh`.
+
+## Skills
+
+A repo's `skills/` directory holds the skills written for it, one directory per
+skill, each with a `SKILL.md`. They are here for the same reason the instruction
+files are: MSM_Automations gitignores `.claude/`, so a skill left in the checkout
+is untracked, unbacked-up and invisible to the other assistant.
+
+Only skills written for this project belong here. A skill installed from a
+marketplace or shipped with a plugin is already versioned by whoever publishes
+it, and most carry a licence that does not permit a second copy.
+
+**One source, two shapes.** Claude Code takes a skill like this as a slash
+command in `.claude/commands/<name>.md`; Copilot takes it as a skill in
+`.github/skills/<name>/SKILL.md`. `sync.sh` writes both from the one `SKILL.md`,
+and the differences it reconciles are small:
+
+- **Frontmatter.** Copilot requires `name` and understands `description`,
+  `license` and `allowed-tools`. A Claude command uses `description` and
+  `argument-hint`. The source carries all of them; each output loses the keys
+  the other assistant owns.
+- **`$ARGUMENTS`.** Claude Code substitutes the text typed after the command
+  into it. Copilot has no equivalent — the request simply arrives in the
+  conversation — so on that side it becomes `<the user's request>`, a
+  placeholder the model fills from what was actually asked. Write `$ARGUMENTS`
+  in the source; it keeps working on the Claude side and reads correctly on the
+  other.
+
+Anything beside the `SKILL.md` — references, scripts — is copied to the Copilot
+side unchanged. A Claude command is a single file, so supporting files reach it
+only through the repo itself.
+
+Repository-scoped is the right scope for these. `octane` reads
+`Aviator/libs/octane.py` and `Aviator/libs/.octane.env` by relative path, so it
+means nothing outside that checkout; a skill genuinely independent of any repo
+would belong in `~/.copilot/skills` and `~/.claude/skills` instead, which
+`sync.sh` does not write.
 
 ## One repo, several files
 
@@ -74,6 +112,11 @@ repo with no checkout is skipped and reported; a missing import is an error
 rather than a silently short file, since that is the failure nobody would
 notice.
 
+Then, for each skill under that repo's `skills/`, writes the two shapes above —
+`.claude/commands/<name>.md` and `.github/skills/<name>/`. The Copilot directory
+is replaced rather than merged, so a supporting file deleted here does not linger
+there.
+
 Run it after every edit. The flow is one-way — **edit here, sync out** — and a
 change made only in a repo's own copy is invisible to the other environment and
 will be overwritten by the next run.
@@ -82,7 +125,10 @@ will be overwritten by the next run.
 
 - `CLAUDE.md` and the `CLAUDE-*.md` files are gitignored in both MSM_Automations
   and Aviator (pattern `CL*.md`), which is why they live here.
-- `.github/copilot-instructions.md` is **not** ignored by either, so after a
-  sync it shows up as untracked in both. It is a generated file — ignore it
-  there, or commit it there if that repo wants it; either way it is never
-  edited, and the next sync overwrites it.
+- `.github/` is ignored by MSM_Automations but not by Aviator, so
+  `copilot-instructions.md` shows up as untracked in Aviator alone. Everything
+  `sync.sh` writes is generated — never edit it in a checkout, and expect the
+  next run to overwrite it. Commit it in Aviator if that repo wants it.
+- MSM_Automations therefore tracks none of this: `.claude/` and `.github/` are
+  both ignored, which is why `skills/` here is the only copy of `octane` that
+  survives a fresh clone.
