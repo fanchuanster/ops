@@ -1,8 +1,7 @@
 # NobleSee — Roadmap
 
-The platform was rebuilt on Next.js + Payload in August 2026 (NR-31; see
-`docs/MODERNIZATION_ASSESSMENT.md`), and moved from PostgreSQL in a container
-to Cloudflare D1 + Workers on 2026-08-13 (see
+The platform was rebuilt on Next.js + Payload in August 2026 (NR-31), and moved
+from PostgreSQL in a container to Cloudflare D1 + Workers on 2026-08-13 (see
 `docs/CLOUDFLARE_ARCHITECTURE.md`).
 
 What exists today is a working reading site: a catalog, book pages, an

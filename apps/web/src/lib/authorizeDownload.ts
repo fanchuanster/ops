@@ -2,7 +2,7 @@ import type { Payload } from 'payload'
 
 import { type DeliveryDecision, decideDelivery, priceInCredits } from '../domain/credits'
 import type { Book } from '../payload-types'
-import { readingFormat } from '../domain/publication'
+import { requestedReadingFormat } from '../domain/publication'
 import { canAccessArtifact, canReadOnline, isPubliclyDistributable } from '../domain/rights'
 import { logError } from './logError'
 
@@ -47,10 +47,12 @@ export async function authorizeReading({
   payload,
   bookId,
   userId,
+  format: wanted,
 }: {
   payload: Payload
   bookId: string | number
   userId: string | number | null
+  format?: string | null
 }): Promise<
   | { allowed: true; storageKey: string; format: 'epub' | 'pdf' | 'txt' }
   | { allowed: false; refusal: DownloadRefusal }
@@ -62,7 +64,10 @@ export async function authorizeReading({
   if (gate) return { allowed: false, refusal: gate }
 
   const artifacts = (book.artifacts ?? []).filter((a) => Boolean(a.storageKey))
-  const format = readingFormat(artifacts.map((a) => a.format))
+  const format = requestedReadingFormat(
+    artifacts.map((a) => a.format),
+    wanted,
+  )
 
   if (!format) return { allowed: false, refusal: { reason: 'format_unavailable' } }
 

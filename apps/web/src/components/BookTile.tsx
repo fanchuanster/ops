@@ -1,7 +1,6 @@
 import React from 'react'
 
 import { coverImageUrl, uploadedCoverId } from '../domain/cover'
-import { readingFormat } from '../domain/publication'
 
 export interface BookTileData {
   id: string | number
@@ -26,11 +25,9 @@ export function BookTile({ book }: { book: BookTileData }) {
   })
   const face = book.title.trim()
 
-  const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
-
   return (
     <li className="tile">
-      <a href={readable ? `/read/${book.slug}` : `/books/${book.slug}`}>
+      <a href={`/books/${book.slug}`}>
         <span className="tile__face cjk" aria-hidden="true">
           {cover ? (
             <img src={cover} alt="" loading="lazy" />

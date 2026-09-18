@@ -24,10 +24,9 @@ Business rules live in `apps/web/src/domain` — a framework-independent layer
 that may not import Payload, Next or a database client. That boundary is
 enforced by a check in `npm run verify`, not just documented.
 
-> This replaced a WordPress implementation in August 2026. The reasoning is in
-> `docs/MODERNIZATION_ASSESSMENT.md`; the deciding factor was that there were no
-> users and no data to preserve. The old code is in git history — nothing was
-> migrated.
+> This replaced a WordPress implementation in August 2026. The deciding factor
+> was that there were no users and no data to preserve. The old code is in git
+> history — nothing was migrated.
 
 ## Running it
 

@@ -1,7 +1,7 @@
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-import { coverSourceFormat } from '../../../../../domain/cover'
+import { coverSourceFrom } from '../../../../../domain/cover'
 import { isAdmin } from '../../../../../lib/adminAuth'
 import { getCurrentUser } from '../../../../../lib/auth'
 import {
@@ -32,10 +32,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const mine = Boolean(ownerId) && String(ownerId) === String(user.id)
   if (!book || (!mine && !isAdmin(user))) return new Response(null, { status: 404 })
 
-  const artifacts = book.artifacts ?? []
-  const format = coverSourceFormat(artifacts.map((artifact) => artifact.format))
-  const source = artifacts.find((artifact) => artifact.format === format)
-  if (!format || !source?.storageKey) return new Response(null, { status: 404 })
+  const source = coverSourceFrom(book.artifacts ?? [])
+  if (!source?.storageKey) return new Response(null, { status: 404 })
+
+  const format = source.format
 
   const headers = {
     'Content-Type': TYPES[format] ?? 'application/octet-stream',

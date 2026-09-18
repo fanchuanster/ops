@@ -18,8 +18,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title: book ? `Reading ${book.title}` : 'Not found' }
 }
 
-export default async function ReadPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ReadPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ format?: string }>
+}) {
   const { slug } = await params
+  const { format: wanted } = await searchParams
 
   const user = await getCurrentUser()
 
@@ -32,6 +39,7 @@ export default async function ReadPage({ params }: { params: Promise<{ slug: str
     payload,
     bookId: book.id,
     userId: user?.id ?? null,
+    format: wanted,
   })
 
   if (!decision.allowed) {
@@ -52,6 +60,8 @@ export default async function ReadPage({ params }: { params: Promise<{ slug: str
 
   if (user) await markBookStarted(payload, { userId: user.id, bookId: book.id })
 
+  const edition = `/read/${slug}/edition?format=${decision.format}`
+
   return (
     <main className="reader-page">
       <nav className="reader-nav">
@@ -60,14 +70,14 @@ export default async function ReadPage({ params }: { params: Promise<{ slug: str
 
       {decision.format === 'epub' ? (
         <Reader
-          epubUrl={`/read/${slug}/edition`}
+          epubUrl={edition}
           bookTitle={book.title}
           partTitle={book.author ?? ''}
           progressKey={`noblesee-position-${slug}`}
         />
       ) : decision.format === 'txt' ? (
         <TextReader
-          url={`/read/${slug}/edition`}
+          url={edition}
           bookTitle={book.title}
           subtitle={book.author ?? ''}
           progressKey={`noblesee-position-${slug}`}
@@ -75,7 +85,7 @@ export default async function ReadPage({ params }: { params: Promise<{ slug: str
         />
       ) : (
         <PdfReader
-          url={`/read/${slug}/edition`}
+          url={edition}
           bookTitle={book.title}
           subtitle={book.author ?? ''}
         />

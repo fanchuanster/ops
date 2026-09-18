@@ -3,6 +3,12 @@
 Everything in the parent `MSM_Automations/CLAUDE.md` applies here. This file covers only
 what is specific to this repo.
 
+The shared commit rules are imported here as well, so the generated
+`.github/copilot-instructions.md` carries them too — Copilot reads only this repo's own
+file and would otherwise never see them.
+
+@../CLAUDE-git.md
+
 ## Git workflow
 
 Single-maintainer repo — **no merge request, no review**. Merge `wen_dev` straight into

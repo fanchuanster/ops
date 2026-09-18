@@ -11,9 +11,10 @@ import {
   originalArtifact,
   originalKey,
   plansFor,
-  reopensForConversion,
   readSourceKind,
   readingFormat,
+  reopensForConversion,
+  requestedReadingFormat,
   resolvePlan,
   sourceKindOf,
 } from './publication'
@@ -220,5 +221,26 @@ describe('which edition the reader opens', () => {
   it('never offers the master, whatever else is missing', () => {
     expect(readingFormat(['docx'])).toBe(null)
     expect(readingFormat([])).toBe(null)
+  })
+})
+
+describe('a reader asking for one particular edition', () => {
+  it('gets the format they asked for, even when a better one exists', () => {
+    expect(requestedReadingFormat(['epub', 'pdf'], 'pdf')).toBe('pdf')
+    expect(requestedReadingFormat(['epub', 'pdf', 'txt'], 'txt')).toBe('txt')
+  })
+
+  it('falls back to the best edition when that format is not there', () => {
+    expect(requestedReadingFormat(['epub'], 'pdf')).toBe('epub')
+  })
+
+  it('ignores anything the reader cannot open, including the master', () => {
+    expect(requestedReadingFormat(['epub', 'docx'], 'docx')).toBe('epub')
+    expect(requestedReadingFormat(['epub'], '../etc/passwd')).toBe('epub')
+  })
+
+  it('picks for the reader who asked for nothing', () => {
+    expect(requestedReadingFormat(['pdf', 'txt'], undefined)).toBe('pdf')
+    expect(requestedReadingFormat([], null)).toBe(null)
   })
 })

@@ -297,9 +297,19 @@ export function fromPlainText(text: string): ExtractedMetadata {
   return {}
 }
 
+const CATALOGUE_DIGITS = /^[0-9-]+|[0-9-]+$/g
+const EXPOSED_SEPARATOR = /^[\s._]+|[\s._]+$/g
+
+export function titleFromStem(stem: string): string {
+  const stripped = stem.replace(CATALOGUE_DIGITS, '').replace(EXPOSED_SEPARATOR, '')
+  return stripped || stem
+}
+
 export function fromFilename(filename: string): ExtractedMetadata {
-  const stem = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ')
-  const title = clean(stem)
+  const stem = filename.replace(/\.[^.]+$/, '')
+  if (!clean(stem.replace(/[_-]+/g, ' '))) return {}
+
+  const title = clean(titleFromStem(stem).replace(/[_-]+/g, ' '))
   return title ? { title } : {}
 }
 

@@ -17,10 +17,11 @@ const EDITION_CONTENT_TYPES = {
 } as const
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params
+  const wanted = new URL(request.url).searchParams.get('format')
   const payload = await getPayload({ config })
 
   const user = await getCurrentUser()
@@ -31,6 +32,7 @@ export async function GET(
     payload,
     bookId: book.id,
     userId: user?.id ?? null,
+    format: wanted,
   })
   if (!decision.allowed) return Response.json({ error: 'Not available' }, { status: 404 })
 

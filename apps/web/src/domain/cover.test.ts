@@ -11,6 +11,7 @@ import {
   coverKey,
   coverPageUrl,
   coverSourceFormat,
+  coverSourceFrom,
 } from './cover'
 
 describe('choosing what to render the opening pages from', () => {
@@ -29,6 +30,26 @@ describe('choosing what to render the opening pages from', () => {
   it('has nothing to render from a book with no artifacts yet', () => {
     expect(coverSourceFormat([])).toBeNull()
     expect(coverSourceFormat(['mobi'])).toBeNull()
+  })
+})
+
+describe('choosing which artifact to render from', () => {
+  const pdf = { format: 'pdf', storageKey: 'books/scan.pdf' }
+  const epub = { format: 'epub', storageKey: 'books/scan.epub' }
+
+  it('takes the PDF when both are there and both are stored', () => {
+    expect(coverSourceFrom([epub, pdf])).toBe(pdf)
+  })
+
+  it('passes over a PDF that was never stored, rather than failing on it', () => {
+    expect(coverSourceFrom([epub, { format: 'pdf', storageKey: null }])).toBe(epub)
+    expect(coverSourceFrom([epub, { format: 'pdf' }])).toBe(epub)
+  })
+
+  it('offers nothing when no renderable artifact has a key', () => {
+    expect(coverSourceFrom([{ format: 'pdf', storageKey: '' }])).toBeNull()
+    expect(coverSourceFrom([{ format: 'docx', storageKey: 'books/master.docx' }])).toBeNull()
+    expect(coverSourceFrom([])).toBeNull()
   })
 })
 

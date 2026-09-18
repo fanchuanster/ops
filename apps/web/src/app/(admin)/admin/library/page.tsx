@@ -14,7 +14,7 @@ import {
   chosenCoverPage,
   coverCandidatePages,
   coverImageUrl,
-  coverSourceFormat,
+  coverSourceFrom,
   hasRenderedPages,
   uploadedCoverId,
 } from '../../../../domain/cover'
@@ -166,8 +166,7 @@ export default async function AdminLibraryPage({
         coverPage: chosenCoverPage(selected.generatedCover ?? {}),
         coverPages: coverCandidatePages(selected.generatedCover ?? {}),
         hasRenderedCover: hasRenderedPages(selected.generatedCover ?? {}),
-        canMakeCover:
-          coverSourceFormat((selected.artifacts ?? []).map((a) => a.format)) !== null,
+        canMakeCover: coverSourceFrom(selected.artifacts ?? []) !== null,
       }
     : null
 
