@@ -52,7 +52,10 @@ cd apps/web
 - Site: http://localhost:8787
 - Admin: http://localhost:8787/admin — the editorial UI: review queue, library,
   collections, readers. Administrators only.
-- REST/GraphQL: http://localhost:8787/api — Payload's API. There is no
+- REST: http://localhost:8787/api — Payload's API. GraphQL is disabled
+  (`graphQL.disable`) and its two routes are deleted, so `/api/graphql` and the
+  playground answer the REST handler's own "route not found"; REST and the
+  site's own routes are the whole programmable surface. There is no
   generated admin panel; it was deleted on 2026-08-24 once `/admin` covered
   everything still needed (see `payload.config.ts`), which is also how the
   Worker bundle stopped growing towards the 10 MB limit. Bootstrap the first
@@ -63,12 +66,6 @@ cd apps/web
   to anyone else, because the document names every collection and its whole
   field shape. Authorize with a personal access token from `/account/tokens`,
   or just stay signed in — the session cookie works too.
-- GraphQL playground: http://localhost:8787/api/graphql-playground — off unless
-  `PAYLOAD_GRAPHQL_PLAYGROUND=1` is in `.dev.vars`, which never reaches a
-  deploy. Administrators only on top of that, and `wrangler dev` reads
-  `.dev.vars` at startup — adding the line to a running server does nothing
-  until it is restarted. `/api/graphql` itself is POST-only, and the schema can
-  also be dumped without any of this: `./cf npx payload-graphql generate:schema`.
 - Health: http://localhost:8787/health — checks D1, not just the process
 - Analytics: Google Analytics 4, configured by `GA_MEASUREMENT_ID` in
   `wrangler.jsonc` vars (not a secret — a measurement ID is served inside every
@@ -172,7 +169,7 @@ binaries nobody can regenerate.
 
 This used to stand in for a conversion pipeline that did not yet generate
 EPUB. It no longer stands in for anything — the pipeline runs in the Worker
-and builds real editions (CLAUDE.md section 13) — but the seed is still how
+and builds real editions (docs/PIPELINE.md section 13) — but the seed is still how
 the catalog gets books without uploading any.
 
 ### Preparing a downloaded scan
@@ -245,7 +242,7 @@ reads a `.ps1` as ANSI without one and turns the Chinese in them into mojibake.
 
 The upload limit is 100 MB, and it is not a number we chose: it is Adobe's
 ceiling for the Export PDF call and Cloudflare's request cap on this plan
-(CLAUDE.md sections 3 and 14). A 400-page book scanned at 300dpi goes past it
+(docs/ARCHITECTURE.md and docs/STORAGE.md). A 400-page book scanned at 300dpi goes past it
 easily, and those are the books this library is for.
 
 `tools/shrink-pdf.py` re-encodes the page images at a lower resolution and
