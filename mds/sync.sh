@@ -3,12 +3,16 @@ set -euo pipefail
 
 MDS="$(cd "$(dirname "$0")" && pwd)"
 WS_ROOT="${WS_ROOT:-$(cd "$MDS/../.." && pwd)}"
+HOST="$(cd "$MDS/.." && pwd)"
 BANNER='<!-- Generated from CLAUDE.md by mds/sync.sh. Edit the CLAUDE.md in the mds repo, not this file. -->'
+HOST_BANNER='<!-- Generated from CLAUDE.md by mds/sync.sh. Edit CLAUDE.md in this repo, not this file. -->'
 SKILL_BANNER='<!-- Generated from skills/<name>/SKILL.md by mds/sync.sh. Edit it in the mds repo, not this file. -->'
 MAX_DEPTH=5
 ARGUMENTS_PLACEHOLDER="<the user's request>"
 COMMAND_DROPS=' name '
 SKILL_DROPS=' argument-hint '
+HOST_REFERENCE='.github/reference'
+HOST_PRUNE=(-path '*/node_modules' -o -path '*/.git' -o -path "$MDS" -o -path "$HOST/tmp" -o -path "$HOST/content" -o -path "$HOST/.github")
 
 import_re='s/^@\(\.\/\)\?\([A-Za-z0-9._-][A-Za-z0-9._/-]*\)[[:space:]]*$/\2/p'
 
@@ -51,6 +55,12 @@ flatten() {
         flatten "${dir}/${child}" $((depth + 1))
         printf '\n'
     done < "$file"
+}
+
+emit_copilot() {
+    local source="$1" dest="$2" banner="$3"
+    mkdir -p "$dest/.github"
+    { printf '%s\n\n' "$banner"; flatten "$source"; } > "$dest/.github/copilot-instructions.md"
 }
 
 emit_skill() {
@@ -99,6 +109,36 @@ sync_skills() {
     [ "$count" -eq 0 ] || echo "synced $repo -> $count skill(s) as .claude/commands/ and .github/skills/"
 }
 
+sync_reference() {
+    local dest="$1" source rel count=0
+
+    rm -rf "${dest:?}/$HOST_REFERENCE"
+
+    while IFS= read -r source; do
+        rel="${source#"$HOST"/}"
+        install -Dm644 "$source" "$dest/$HOST_REFERENCE/$rel"
+        count=$((count + 1))
+    done < <(find "$HOST" \( "${HOST_PRUNE[@]}" \) -prune -o \
+        -name '*.md' ! -name 'CLAUDE.md' ! -name 'CLAUDE-*.md' -print | sort)
+
+    [ "$count" -eq 0 ] || echo "synced $(basename "$HOST") -> $count markdown file(s) as $HOST_REFERENCE/"
+}
+
+sync_host() {
+    local name
+    name="$(basename "$HOST")"
+
+    if ! import_paths "$HOST/CLAUDE.md" >/dev/null; then
+        echo "aborting $name: unresolvable imports in CLAUDE.md" >&2
+        exit 1
+    fi
+
+    emit_copilot "$HOST/CLAUDE.md" "$HOST" "$HOST_BANNER"
+    echo "synced $name -> .github/copilot-instructions.md"
+    sync_reference "$HOST"
+    sync_skills "$HOST" "$HOST"
+}
+
 cd "$MDS"
 while IFS= read -r rel; do
     repo="$(dirname "$rel")"
@@ -123,8 +163,9 @@ while IFS= read -r rel; do
         copied="$copied, ${part#"$repo/"}"
     done <<< "$parts"
 
-    mkdir -p "$dest/.github"
-    { printf '%s\n\n' "$BANNER"; flatten "$rel"; } > "$dest/.github/copilot-instructions.md"
+    emit_copilot "$rel" "$dest" "$BANNER"
     echo "synced $repo -> $copied, .github/copilot-instructions.md"
     sync_skills "$repo" "$dest"
 done < <(find . -name 'CLAUDE.md' -printf '%P\n' | sort)
+
+sync_host

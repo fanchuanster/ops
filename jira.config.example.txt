@@ -1,14 +1,14 @@
-# Copy this file to .jira.env and fill in your own credentials:
+# Copy this file to jira.config.env and fill in your own credentials:
 #
-#   cp .jira.env.example.txt .jira.env
+#   cp jira.config.example.txt jira.config.env
 #
-# .jira.env is git-ignored — never commit a real API token.
+# jira.config.env is git-ignored — never commit a real API token.
 #
 # NobleSee task management lives in Jira:
 #   https://fanchuanster.atlassian.net/jira/software/projects/SCRUM/summary
 #
 # Load into a shell with:
-#   set -a; . ./.jira.env; set +a
+#   set -a; . ./jira.config.env; set +a
 #
 # Then e.g.:
 #   curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \

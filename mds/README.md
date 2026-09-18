@@ -99,6 +99,29 @@ place, producing one complete document. The split is a convenience for whoever
 edits the rules, and it must never become a difference in what the two
 assistants are told.
 
+## The repo that hosts this folder
+
+`ops` is the exception. Its `CLAUDE.md` is tracked in its own checkout rather
+than here, because nothing about that repo makes the checkout a bad place to
+edit guidance — so there is no `mds/ops/` and the loop above never sees it. It
+still needs the Copilot half, and the development server that runs Copilot has
+`ops` sitting beside `MSM_Automations` exactly as this machine does.
+
+So `sync.sh` treats its own host repo as one more destination, reading
+`CLAUDE.md` in place and writing, under `.github/`:
+
+- `copilot-instructions.md`, the flattened document, same as anywhere else.
+- `reference/`, every other Markdown file in the repo at its original relative
+  path — `docs/`, the root `README.md`, `infra/README.md`. The `docs/` table in
+  `CLAUDE.md` points at files Claude Code opens on demand, and the Copilot side
+  needs the same set reachable from the folder it is given. Book content under
+  `content/` is data, not guidance, and is left out.
+- `skills/`, if the repo ever grows a `skills/` directory of its own.
+
+`reference/` is replaced wholesale on every run, so a deleted document does not
+linger. All three paths are gitignored: they are generated copies of files the
+repo already tracks, and a diff showing the same prose twice helps nobody.
+
 ## sync.sh
 
 ```bash
@@ -115,7 +138,7 @@ notice.
 Then, for each skill under that repo's `skills/`, writes the two shapes above —
 `.claude/commands/<name>.md` and `.github/skills/<name>/`. The Copilot directory
 is replaced rather than merged, so a supporting file deleted here does not linger
-there.
+there. The host repo is done last, on its own terms.
 
 Run it after every edit. The flow is one-way — **edit here, sync out** — and a
 change made only in a repo's own copy is invisible to the other environment and

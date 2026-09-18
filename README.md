@@ -37,7 +37,7 @@ runtime, and workerd needs glibc 2.32+. On an older host — this one is Ubuntu
 behind `getPlatformProxy`, and every Payload CLI command that needs a binding.
 
 ```bash
-cp .env.example.txt .env                  # CLOUDFLARE_API_TOKEN for Terraform
+cp config.example.txt config.env                  # CLOUDFLARE_API_TOKEN for Terraform
 cp apps/web/.dev.vars.example.txt apps/web/.dev.vars
 # set PAYLOAD_SECRET in .dev.vars — there is no default:  openssl rand -hex 32
 

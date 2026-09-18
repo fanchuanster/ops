@@ -19,11 +19,11 @@ REPO="$(dirname "$HERE")"
 
 # shellcheck disable=SC1091
 set -a
-. "$REPO/.env"
+. "$REPO/config.env"
 set +a
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-    echo "CLOUDFLARE_API_TOKEN is empty in .env." >&2
+    echo "CLOUDFLARE_API_TOKEN is empty in config.env." >&2
     exit 1
 fi
 

@@ -1,6 +1,6 @@
-# Copy this file to .env before running Terraform or the deploy.
+# Copy this file to config.env before running Terraform or the deploy.
 #
-#   cp .env.example.txt .env
+#   cp config.example.txt config.env
 #
 # This file is for OPERATOR tooling — Terraform and wrangler. The
 # application itself reads almost nothing from here: on Workers it gets
@@ -70,7 +70,7 @@ XAI_API_KEY=
 
 # --- Google sign-in ---
 # Both are read by the Worker at runtime, so they must ALSO exist as
-# Worker secrets — `.env` is only for local tooling:
+# Worker secrets — `config.env` is only for local tooling:
 #
 #   cd apps/web
 #   ./cf npx wrangler secret put GOOGLE_OAUTH_CLIENT_ID

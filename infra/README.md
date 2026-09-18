@@ -16,7 +16,7 @@ tools fighting over one resource.
 
 ## Required token permissions
 
-NobleSee keeps a **single** Cloudflare token: `CLOUDFLARE_API_TOKEN` in `.env`,
+NobleSee keeps a **single** Cloudflare token: `CLOUDFLARE_API_TOKEN` in `config.env`,
 which is the name the provider reads. `infra/tf` loads it for you. The token is
 never a Terraform variable, so it stays out of `.tfvars` and out of state.
 
@@ -56,7 +56,7 @@ first, which says nothing useful about what to fix.
 <summary>Equivalent by hand</summary>
 
 ```bash
-set -a; . ./.env; set +a
+set -a; . ./config.env; set +a
 ACC=<account-id>; ZONE=<zone-id>
 for p in "accounts/$ACC/r2/buckets" "accounts/$ACC/d1/database" \
          "accounts/$ACC/workers/scripts" "zones/$ZONE/rulesets" \
@@ -79,7 +79,7 @@ check first.
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # fill in account_id, zone_id
-# CLOUDFLARE_API_TOKEN in .env, scoped as above
+# CLOUDFLARE_API_TOKEN in config.env, scoped as above
 
 ./tf init
 ./tf plan
@@ -87,7 +87,7 @@ cp terraform.tfvars.example terraform.tfvars   # fill in account_id, zone_id
 ```
 
 `infra/tf` is a thin wrapper around `terraform` — same subcommands and flags.
-It loads `.env` and fails with a usable message when the token is missing;
+It loads `config.env` and fails with a usable message when the token is missing;
 the provider's own error in that case is an unexplained authentication
 failure. Bare `terraform -chdir=infra` works too if you export the token
 yourself.
@@ -152,7 +152,7 @@ Locking is native (`use_lockfile`), via a conditional PUT of
 
 `backend.tf` is a **partial** configuration: the endpoint embeds the Cloudflare
 account id and the keys are secrets, so `infra/tf` exports all three from the
-repo's `.env` as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+repo's `config.env` as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
 `AWS_ENDPOINT_URL_S3`. Bare `terraform` without those will fail to initialise
 rather than quietly fall back to a local file.
 
