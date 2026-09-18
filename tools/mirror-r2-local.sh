@@ -6,13 +6,13 @@ BUCKET="noblesee"
 
 set -a
 # shellcheck disable=SC1091
-. "$REPO/.env"
+. "$REPO/config.env"
 set +a
 
 ACCOUNT="$(grep -E '^\s*account_id' "$REPO/infra/terraform.tfvars" | cut -d'"' -f2)"
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "$ACCOUNT" ]; then
-    echo "Need CLOUDFLARE_API_TOKEN in .env and account_id in infra/terraform.tfvars." >&2
+    echo "Need CLOUDFLARE_API_TOKEN in config.env and account_id in infra/terraform.tfvars." >&2
     exit 1
 fi
 

@@ -3,6 +3,6 @@ provider "cloudflare" {
   # a Terraform variable — a variable would put it in terraform.tfvars
   # and in state.
   #
-  # `infra/tf` loads it from the repo's .env. Required scopes are listed
+  # `infra/tf` loads it from the repo's config.env. Required scopes are listed
   # in infra/README.md.
 }

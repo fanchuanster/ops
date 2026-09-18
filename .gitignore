@@ -157,9 +157,9 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-# Jira credentials for task management (.jira.env.example.txt IS committed).
-.jira.env
+config.env
+# Jira credentials for task management (jira.config.example.txt IS committed).
+jira.config.env
 .envrc
 .venv
 env/
