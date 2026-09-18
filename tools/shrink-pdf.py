@@ -4,7 +4,7 @@
 NobleSee refuses a source over 100 MB, and that refusal is not ours to
 relax: it is Adobe's published ceiling for the Export PDF call that turns
 a scan into a DOCX master, and it is Cloudflare's request cap on the plan
-the Worker runs under (CLAUDE.md sections 3 and 14). A 400-page book
+the Worker runs under (docs/ARCHITECTURE.md, docs/STORAGE.md). A 400-page book
 scanned at 300dpi clears 100 MB without difficulty, and those are exactly
 the historical scans this library exists to preserve. This is the tool
 for those books.
@@ -17,7 +17,7 @@ for those books.
 
 It re-encodes the page images at a lower resolution and does nothing
 else. Pages are never dropped and the book is never split: a book is
-whole (CLAUDE.md section 5), so half a scan is not an answer to an
+whole (docs/BOOKS.md section 5), so half a scan is not an answer to an
 oversized one. Text and vector content are carried through as text and
 vectors, so a born-digital PDF keeps the text layer it arrived with.
 

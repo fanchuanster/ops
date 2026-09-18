@@ -23,7 +23,7 @@ NOTE ON TEXT FIDELITY: the passages below are transcribed for
 demonstration purposes. NobleSee's whole point is faithful
 reproduction, so any text destined for real publication must be
 proofread against an authoritative source first — see the human-review
-step in CLAUDE.md section 7.
+step in docs/PIPELINE.md section 7.
 """
 
 import argparse
