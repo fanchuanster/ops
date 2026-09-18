@@ -1,6 +1,6 @@
 # Secrets for the local Worker (`./cf npx wrangler dev`).
 #
-#   cp .dev.vars.example .dev.vars
+#   cp .dev.vars.example.txt .dev.vars
 #
 # .dev.vars is git-ignored. Everything here is a SECRET — non-secret
 # configuration belongs in the `vars` block of wrangler.jsonc, which is

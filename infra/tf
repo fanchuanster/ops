@@ -19,7 +19,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(dirname "$HERE")"
 
 if [ ! -f "$REPO/.env" ]; then
-    echo "infra/tf: $REPO/.env not found — copy .env.example and fill it in." >&2
+    echo "infra/tf: $REPO/.env not found — copy .env.example.txt and fill it in." >&2
     exit 1
 fi
 
