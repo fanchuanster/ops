@@ -46,7 +46,7 @@
   // `GET /api/conversion` every few seconds and that poll was the tick —
   // which meant nothing advanced while nothing was polling, and for most
   // of the day nothing was. The container is gone and the pipeline runs
-  // in this Worker (CLAUDE.md section 13), so the tick is a cron.
+  // in this Worker (docs/PIPELINE.md section 13), so the tick is a cron.
   //
   // Every minute, and one job per tick. A tick claims a book with a
   // compare-and-swap before touching it, so an overrun — a slow tick is

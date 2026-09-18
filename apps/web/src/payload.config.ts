@@ -16,6 +16,7 @@ import { Media } from './collections/Media'
 import { ReadingProgress } from './collections/ReadingProgress'
 import { Users } from './collections/Users'
 import { apiDocs } from './plugins/apiDocs'
+import { MEDIA_PREFIX } from './domain/bookStorage'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -24,15 +25,12 @@ const { env } = await getCloudflareContext({ async: true })
 
 const serverURL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8787'
 
-const graphqlPlayground = process.env.PAYLOAD_GRAPHQL_PLAYGROUND === '1'
-
 export default buildConfig({
   serverURL,
   cors: [serverURL],
   csrf: [serverURL],
   graphQL: {
-    disablePlaygroundInProduction: !graphqlPlayground,
-    disableIntrospectionInProduction: !graphqlPlayground,
+    disable: true,
   },
   admin: {
     user: Users.slug,
@@ -59,7 +57,7 @@ export default buildConfig({
   plugins: [
     r2Storage({
       collections: {
-        [Media.slug]: true,
+        [Media.slug]: { prefix: MEDIA_PREFIX },
       },
       bucket: env.ARTIFACTS,
     }),

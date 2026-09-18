@@ -4,7 +4,7 @@ import config from '@payload-config'
 import { getPayload } from 'payload'
 
 import { applySuggestions } from '../../domain/applySuggestions'
-import { artifactKey, bookStem, suggestionsKey } from '../../domain/bookStorage'
+import { artifactKey, suggestionsKey } from '../../domain/bookStorage'
 import {
   type CorrectionJobKind,
   type CorrectionState,
@@ -25,7 +25,6 @@ import {
 import { originalArtifact, readSourceKind } from '../../domain/publication'
 import { suggestCorrections } from '../../domain/proofread'
 import { readText } from '../../domain/textSource'
-import { freeStem } from '../bookObjects'
 import { artifactBytes, putObject } from '../storage'
 import { logError } from '../logError'
 import { readDocx } from './docxRead'
@@ -45,19 +44,6 @@ const CONTENT_TYPES: Record<string, string> = {
 
 function keyFor(wanted: string, current?: string | null): string {
   return typeof current === 'string' && current.length > 0 ? current : wanted
-}
-
-async function stemOf(book: Book): Promise<string> {
-  const filed = (book.artifacts ?? []).some(
-    (artifact) => typeof artifact.storageKey === 'string' && artifact.storageKey.length > 0,
-  )
-  const wanted = bookStem({
-    artifacts: book.artifacts,
-    sourceFilename: book.conversion?.sourceFilename,
-    preferred: originalArtifact(readSourceKind(book.conversion ?? {})),
-  })
-  if (filed) return wanted
-  return freeStem({ wanted, owned: [] })
 }
 
 function currentKey(book: Book, format: 'docx' | 'epub'): string | null {
@@ -138,7 +124,7 @@ async function runMaster(payload: Payload, book: Book): Promise<TickResult> {
   }
   document.author = book.author ?? document.author
 
-  const key = keyFor(artifactKey(await stemOf(book), 'docx'), currentKey(book, 'docx'))
+  const key = keyFor(artifactKey(book.id, 'docx'), currentKey(book, 'docx'))
   if (!(await putObject(key, buildDocx(document, book.author), CONTENT_TYPES.docx))) {
     throw new Error('object storage is not configured')
   }
@@ -172,7 +158,7 @@ async function runFormats(payload: Payload, book: Book): Promise<TickResult> {
 
   const document = await fetchDocument(masterKey, book.title, book.author ?? null)
 
-  const key = keyFor(artifactKey(await stemOf(book), 'epub'), currentKey(book, 'epub'))
+  const key = keyFor(artifactKey(book.id, 'epub'), currentKey(book, 'epub'))
   const epub = buildEpub(document, { identifier: `noblesee-${bookId}` })
   if (!(await putObject(key, epub, CONTENT_TYPES.epub))) {
     throw new Error('object storage is not configured')
@@ -210,7 +196,7 @@ async function runCorrect(payload: Payload, book: Book, env: Record<string, unkn
   const report = await suggestCorrections(document, client.complete, { model: client.model })
 
   const key = keyFor(
-    suggestionsKey(await stemOf(book)),
+    suggestionsKey(book.id),
     book.conversion?.correction?.suggestionsKey,
   )
   const body = JSON.stringify({
@@ -272,7 +258,7 @@ async function runApply(payload: Payload, book: Book): Promise<TickResult> {
 
   const wrote = report.applied.length > 0
   if (wrote) {
-    const key = keyFor(artifactKey(await stemOf(book), 'docx'), currentKey(book, 'docx'))
+    const key = keyFor(artifactKey(book.id, 'docx'), currentKey(book, 'docx'))
     if (!(await putObject(key, buildDocx(document, book.author), CONTENT_TYPES.docx))) {
       throw new Error('object storage is not configured')
     }

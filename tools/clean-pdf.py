@@ -99,7 +99,7 @@ def unique_path(path: Path) -> Path:
     """Avoid clobbering an unrelated file already at the clean name.
 
     Numbered the same way NobleSee's own storage numbers a repeated stem
-    (CLAUDE.md section 14): stem, stem-2, stem-3, ...
+    (docs/STORAGE.md section 14): stem, stem-2, stem-3, ...
     """
     if not path.exists():
         return path

@@ -177,7 +177,7 @@ resolves to a tunnel with nothing behind it.
 
 Nothing in this configuration touches OCR any more. Phase 1 runs on
 **Adobe PDF Services**, whose Export PDF operation OCRs a scan and
-returns a DOCX master in one call — see CLAUDE.md section 8.
+returns a DOCX master in one call — see docs/PIPELINE.md section 8.
 
 Adobe is not provisioned as infrastructure and never appears here. It has
 no resources to create: the Worker holds `ADOBE_CLIENT_ID` and

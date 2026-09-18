@@ -104,11 +104,11 @@ describe('the slot the original occupies', () => {
 
   it('keeps every original under books/, away from the sweep', () => {
     for (const kind of ['pdf', 'docx', 'epub', 'text'] as const) {
-      expect(originalKey('a-book', kind).startsWith('books/a-book')).toBe(true)
+      expect(originalKey(42, kind).startsWith('books/42/')).toBe(true)
     }
-    expect(originalKey('a-book', 'pdf')).toBe('books/a-book.pdf')
-    expect(originalKey('a-book', 'docx')).toBe('books/a-book.docx')
-    expect(originalKey('a-book', 'text')).toBe('books/a-book.txt')
+    expect(originalKey(42, 'pdf')).toBe('books/42/book.pdf')
+    expect(originalKey(42, 'docx')).toBe('books/42/master.docx')
+    expect(originalKey(42, 'text')).toBe('books/42/book.txt')
   })
 })
 

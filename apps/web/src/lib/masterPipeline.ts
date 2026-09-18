@@ -6,11 +6,10 @@ import {
   exportHasExpired,
   exportLocaleFor,
   isTransientExportFailure,
-  masterKey,
   withinSizeLimit,
 } from '../domain/adobe'
 import type { ArtifactFormat } from '../domain/conversion'
-import { bookStem } from '../domain/bookStorage'
+import { type BookId, artifactKey } from '../domain/bookStorage'
 import { type CorrectionState, correctionStateForMaster } from '../domain/correction'
 import {
   type ConversionState,
@@ -44,7 +43,6 @@ import {
   startExport,
   uploadAsset,
 } from './adobe/client'
-import { freeStem } from './bookObjects'
 import { artifactBytes, copyObject, objectBucket } from './storage'
 import { logError } from './logError'
 
@@ -180,7 +178,7 @@ async function attachMaster(
     return true
   }
 
-  const key = masterKey(book.id)
+  const key = artifactKey(book.id, 'docx')
   await bucket.put(key, bytes, {
     httpMetadata: {
       contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -223,30 +221,22 @@ async function attachMaster(
 }
 
 async function fileUnderBook(
-  book: { artifacts?: Book['artifacts'] },
+  book: { id: BookId; artifacts?: Book['artifacts'] },
   {
     kind,
     format,
     sourceKey,
     filename,
-    anchorFilename,
   }: {
     kind: SourceKind
     format: ArtifactFormat
     sourceKey: string
     filename: unknown
-    anchorFilename: unknown
   },
 ): Promise<{ artifacts: NonNullable<Book['artifacts']>; source: BookSource } | null> {
   const existing = book.artifacts ?? []
 
-  const filed = existing.some(
-    (artifact) => typeof artifact.storageKey === 'string' && artifact.storageKey.length > 0,
-  )
-  const wanted = bookStem({ artifacts: existing, sourceFilename: anchorFilename })
-  const stem = filed ? wanted : await freeStem({ wanted, owned: [] })
-
-  const key = originalKey(stem, kind)
+  const key = originalKey(book.id, kind)
   const size = await copyObject(sourceKey, key, CONTENT_TYPES[kind])
   if (size === null) return null
 
@@ -296,7 +286,6 @@ async function fileOriginal(
     format,
     sourceKey: conversion.sourceKey as string,
     filename: conversion.sourceFilename,
-    anchorFilename: conversion.sourceFilename,
   })
   if (!filed) {
     await fail(payload, book, 'The uploaded file could not be read from storage.')
@@ -343,7 +332,6 @@ export async function addSourceToBook(
     format: decision.slot,
     sourceKey,
     filename,
-    anchorFilename: conversion.sourceFilename,
   })
   if (!filed) return 'That file could not be stored. Please try again.'
 

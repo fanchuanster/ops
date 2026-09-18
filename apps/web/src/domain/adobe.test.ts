@@ -8,7 +8,6 @@ import {
   exportHasExpired,
   exportLocaleFor,
   isTransientExportFailure,
-  masterKey,
   needsExport,
   readExportStatus,
   withinSizeLimit,
@@ -141,12 +140,6 @@ describe('deciding what needs an export', () => {
   it('falls back to the extension when the type is unhelpful', () => {
     expect(needsExport('scan.PDF ', 'application/octet-stream')).toBe(true)
     expect(needsExport('notes.txt', 'application/octet-stream')).toBe(false)
-  })
-})
-
-describe('where the master lives', () => {
-  it('sits under its own book’s prefix', () => {
-    expect(masterKey(7)).toBe('books/7/book/master.docx')
   })
 })
 

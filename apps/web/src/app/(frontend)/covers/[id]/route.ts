@@ -15,8 +15,7 @@ import { isAdmin } from '../../../../lib/adminAuth'
 import { getCurrentUser } from '../../../../lib/auth'
 import { logError } from '../../../../lib/logError'
 import { revalidateCover } from '../../../../lib/revalidateCover'
-import { bookStem } from '../../../../domain/bookStorage'
-import { originalArtifact, readSourceKind } from '../../../../domain/publication'
+import { MEDIA_PREFIX } from '../../../../domain/bookStorage'
 import {
   artifactStream,
   localArtifactPath,
@@ -36,7 +35,7 @@ async function uploadedCoverResponse(
   if (!media?.filename) return null
 
   const { fileKey } = getFileKey({
-    collectionPrefix: '',
+    collectionPrefix: MEDIA_PREFIX,
     docPrefix: (media as { prefix?: string }).prefix,
     filename: media.filename,
   })
@@ -157,13 +156,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const base =
     typeof existing === 'string' && existing.length > 0
       ? existing
-      : coverKey(
-          bookStem({
-            artifacts: book.artifacts,
-            sourceFilename: book.conversion?.sourceFilename,
-            preferred: originalArtifact(readSourceKind(book.conversion ?? {})),
-          }),
-        )
+      : coverKey(book.id)
 
   try {
     for (const [index, page] of wanted.entries()) {

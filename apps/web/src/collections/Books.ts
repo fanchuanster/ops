@@ -464,7 +464,7 @@ export const Books: CollectionConfig = {
           admin: {
             readOnly: true,
             description:
-              'Whether the uploader asked for AI-assisted correction, which sends their text to a third-party model (CLAUDE.md sections 4 and 6.1). Theirs to decide, on the details form; false unless they said otherwise, so a book nobody answered for is never sent.',
+              'Whether the uploader asked for AI-assisted correction, which sends their text to a third-party model (docs/PIPELINE.md section 4, docs/RIGHTS.md section 6.1). Theirs to decide, on the details form; false unless they said otherwise, so a book nobody answered for is never sent.',
           },
         },
         {
