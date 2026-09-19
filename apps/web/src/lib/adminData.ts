@@ -6,6 +6,16 @@ import type { Book, BookCollection, User } from '../payload-types'
 
 const PAGE_LIMIT = 200
 
+const MAX_IN_VALUES = 40
+
+function inBatches<T>(values: readonly T[]): T[][] {
+  const batches: T[][] = []
+  for (let start = 0; start < values.length; start += MAX_IN_VALUES) {
+    batches.push(values.slice(start, start + MAX_IN_VALUES))
+  }
+  return batches
+}
+
 export interface QueueFilter {
   state: ReviewState | null
 }
@@ -77,19 +87,22 @@ export async function countDeliveries(bookIds: (number | string)[]): Promise<Map
   if (bookIds.length === 0) return tally
 
   const payload = await getPayload({ config })
-  const result = await payload.find({
-    collection: 'downloads',
-    where: { book: { in: bookIds } },
-    limit: 5000,
-    depth: 0,
-    pagination: false,
-    overrideAccess: true,
-  })
 
-  for (const row of result.docs) {
-    const bookId = typeof row.book === 'object' && row.book ? row.book.id : row.book
-    if (typeof bookId !== 'number') continue
-    tally.set(bookId, (tally.get(bookId) ?? 0) + 1)
+  for (const batch of inBatches(bookIds)) {
+    const result = await payload.find({
+      collection: 'downloads',
+      where: { book: { in: batch } },
+      limit: 5000,
+      depth: 0,
+      pagination: false,
+      overrideAccess: true,
+    })
+
+    for (const row of result.docs) {
+      const bookId = typeof row.book === 'object' && row.book ? row.book.id : row.book
+      if (typeof bookId !== 'number') continue
+      tally.set(bookId, (tally.get(bookId) ?? 0) + 1)
+    }
   }
   return tally
 }
