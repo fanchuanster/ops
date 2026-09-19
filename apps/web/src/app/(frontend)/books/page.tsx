@@ -17,7 +17,7 @@ import {
   parseBrowseLevel,
 } from '../../../domain/levels'
 import { shelfSortFor, sortShelfItems } from '../../../domain/shelfOrder'
-import { getCatalog, getCollections } from '../../../lib/catalog'
+import { CATALOG_LIMIT, getCatalog, getCollections } from '../../../lib/catalog'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,7 +45,7 @@ export default async function BooksPage({
   }
 
   const [{ books }, collections] = await Promise.all([
-    getCatalog({ collectionSlug: collection, level }),
+    getCatalog({ collectionSlug: collection, level, limit: CATALOG_LIMIT }),
     getCollections(),
   ])
 
