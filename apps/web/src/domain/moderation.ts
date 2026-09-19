@@ -1,5 +1,17 @@
 import { type RightsStatus, isPubliclyDistributable } from './rights'
 
+export interface LibraryMembership {
+  status: string
+  owner?: unknown
+  review?: { state?: ReviewState | string | null } | null
+}
+
+export function isInPublicLibrary(book: LibraryMembership): boolean {
+  if (book.status !== 'published') return false
+  if (!book.owner) return true
+  return book.review?.state === 'approved'
+}
+
 export const REVIEW_STATES = ['unsubmitted', 'submitted', 'approved', 'rejected'] as const
 
 export type ReviewState = (typeof REVIEW_STATES)[number]
@@ -90,7 +102,6 @@ export function canPublishToLibrary(request: PublicationRequest): PublicationDec
 }
 
 export const ADMIN_ONLY_BOOK_FIELDS = [
-  'visibility',
   'rightsStatus',
   'level',
   'review',

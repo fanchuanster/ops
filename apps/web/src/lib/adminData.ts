@@ -1,7 +1,7 @@
 import config from '@payload-config'
 import { getPayload } from 'payload'
 
-import { REVIEW_QUEUE_STATES, type ReviewState } from '../domain/moderation'
+import { REVIEW_QUEUE_STATES, isInPublicLibrary, type ReviewState } from '../domain/moderation'
 import type { Book, BookCollection, User } from '../payload-types'
 
 const PAGE_LIMIT = 200
@@ -161,7 +161,7 @@ export async function getAdminUsers(query: string): Promise<AdminUserRow[]> {
     const ownerId = typeof book.owner === 'object' && book.owner ? book.owner.id : book.owner
     if (typeof ownerId !== 'number') continue
     uploads.set(ownerId, (uploads.get(ownerId) ?? 0) + 1)
-    if (book.visibility === 'public') {
+    if (isInPublicLibrary(book)) {
       published.set(ownerId, (published.get(ownerId) ?? 0) + 1)
     }
   }

@@ -7,6 +7,7 @@ import {
   REVIEW_LABELS,
   REVIEW_QUEUE_STATES,
   canPublishToLibrary,
+  isInPublicLibrary,
   type ReviewState,
 } from '../../../domain/moderation'
 import { readSourceKind, readingFormat } from '../../../domain/publication'
@@ -197,7 +198,7 @@ function SubmissionPanel({
     byAdmin: true,
     ownedByRequester: String(owner?.id ?? '') === String(adminId),
   })
-  const alreadyPublic = book.visibility === 'public'
+  const alreadyPublic = isInPublicLibrary(book)
 
   return (
     <aside className="admin-panel">

@@ -30,6 +30,7 @@ import {
   readCorrectionState,
 } from '../../../../../domain/correction'
 import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
+import { isInPublicLibrary } from '../../../../../domain/moderation'
 import { isConversionState, isInFlight, uploadStep } from '../../../../../domain/pipeline'
 import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
 import { readSources } from '../../../../../domain/sources'
@@ -185,7 +186,7 @@ export default async function BookDetailsPage({
         canOrderShelf={isAdmin}
       />
 
-      {share && book.visibility === 'public' ? <p className="hint">{share}</p> : null}
+      {share && isInPublicLibrary(book) ? <p className="hint">{share}</p> : null}
 
       {finished ? null : (
         <ConversionProgress
@@ -238,7 +239,7 @@ export default async function BookDetailsPage({
                 <CoverImageUpload
                   bookId={Number(book.id)}
                   hasUploadedCover={uploadedCover !== null}
-                  bookIsPrivate={book.visibility !== 'public'}
+                  bookIsPrivate={!isInPublicLibrary(book)}
                 />
               </div>
             </div>

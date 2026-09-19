@@ -58,9 +58,18 @@ this closes is the correlation that a given set of books shares an
 uploader. Field access is skipped when access is overridden, which is
 how every internal ownership check still reads it.
 
-Rights status, visibility and reading level are administrator fields —
-an uploader who could set their own would walk their upload into the
-front of the library.
+Rights status and reading level are administrator fields — an uploader
+who could set their own would walk their upload into the front of the
+library.
+
+There is no stored "public" flag. Whether a book is in the public
+catalog is computed from what is already there: `status` reaching
+`published`, and, if it has an owner, `review.state` having reached
+`approved`. An ownerless, staff-entered library book needs nothing more
+than `published` — there is no uploader to review. `domain/moderation.ts`
+exports this as `isInPublicLibrary`; every reader-facing screen and the
+`books` collection's own read access call it rather than re-deriving it,
+so "public" cannot drift out of step with "approved".
 
 ### Tell the uploader who else will see their file
 

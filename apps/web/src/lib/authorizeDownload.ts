@@ -2,6 +2,7 @@ import type { Payload } from 'payload'
 
 import { type DeliveryDecision, decideDelivery, priceInCredits } from '../domain/credits'
 import type { Book } from '../payload-types'
+import { isInPublicLibrary } from '../domain/moderation'
 import { requestedReadingFormat } from '../domain/publication'
 import { canAccessArtifact, canReadOnline, isPubliclyDistributable } from '../domain/rights'
 import { logError } from './logError'
@@ -164,7 +165,7 @@ function gateBook(
       : (book.owner as string | number | undefined)
 
   const access = rule({
-    book: { rightsStatus: book.rightsStatus, visibility: book.visibility },
+    book: { rightsStatus: book.rightsStatus, public: isInPublicLibrary(book) },
     userId: userId ? String(userId) : null,
     ownerId: ownerId ? String(ownerId) : undefined,
   })

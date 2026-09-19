@@ -137,7 +137,6 @@ async function seed() {
       language: spec.language,
       description: spec.description,
       rightsStatus: 'public_domain' as const,
-      visibility: 'public' as const,
       level: LEVEL_IDS[spec.level],
       pageCount: spec.pageCount,
       artifacts: artifactsFor(spec),

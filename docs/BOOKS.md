@@ -53,8 +53,8 @@ administrator** — the one place uploader and editors have equal power. A
 cover is not a claim about the book, only which photograph of it looks
 right, and the person holding the physical copy is at least as well
 placed to say. Everything else on that boundary stays asymmetric: rights
-and visibility are the administrator's, the bibliographic fields the
-uploader's.
+and publication (docs/RIGHTS.md 6.1) are the administrator's, the
+bibliographic fields the uploader's.
 
 Covers are served through the same door as everything else, behind the
 book's own access rule. The media collection itself is

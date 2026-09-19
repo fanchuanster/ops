@@ -4,8 +4,6 @@ import { SHELF_SORTS, orderIdFrom } from './shelfOrder'
 
 export const BOOK_LANGUAGES = ['zh-Hans', 'zh-Hant', 'en', 'zh-en'] as const
 
-export const BOOK_VISIBILITIES = ['public', 'private'] as const
-
 export interface FieldError {
   field: string
   message: string
@@ -26,7 +24,6 @@ export const BOOK_WRITABLE = [
   'collection',
   'collectionOrder',
   'rightsStatus',
-  'visibility',
 ] as const
 
 export const COLLECTION_WRITABLE = [
@@ -49,7 +46,6 @@ export function parseBookUpdate(body: unknown): Parsed {
     collection: nullableId,
     collectionOrder: shelfPlace,
     rightsStatus: oneOf('rightsStatus', RIGHTS_STATUSES as readonly RightsStatus[]),
-    visibility: oneOf('visibility', BOOK_VISIBILITIES),
   })
 }
 

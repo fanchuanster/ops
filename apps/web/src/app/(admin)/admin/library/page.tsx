@@ -19,6 +19,7 @@ import {
   uploadedCoverId,
 } from '../../../../domain/cover'
 import { levelFromId } from '../../../../domain/levels'
+import { isInPublicLibrary } from '../../../../domain/moderation'
 import { shelfSortFor, sortShelfItems } from '../../../../domain/shelfOrder'
 import {
   countDeliveries,
@@ -87,7 +88,7 @@ export default async function AdminLibraryPage({
     author: book.author ?? '',
     face: Array.from(book.title.trim())[0] ?? '·',
     level: levelFromId(book.level),
-    published: book.visibility === 'public',
+    published: isInPublicLibrary(book),
     sent: deliveries.get(book.id) ?? 0,
     uploader: uploaderOf(book),
     uploaded: shortDate(book.createdAt),
@@ -152,7 +153,7 @@ export default async function AdminLibraryPage({
         collectionId: shelfOf(selected.collection),
         collectionOrder: selected.collectionOrder ?? null,
         slug: selected.slug,
-        published: selected.visibility === 'public',
+        published: isInPublicLibrary(selected),
         sent: deliveries.get(selected.id) ?? 0,
         uploader: uploaderOf(selected),
         uploaderEmail: uploaderEmailOf(selected),

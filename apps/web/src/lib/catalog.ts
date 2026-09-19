@@ -31,9 +31,9 @@ export async function getCatalog({
   }
 
   const filters: Where[] = [
-    { visibility: { equals: 'public' } },
     { status: { equals: 'published' } },
     { level: { less_than_equal: levelId(level) } },
+    { or: [{ owner: { exists: false } }, { 'review.state': { equals: 'approved' } }] },
   ]
   if (collectionIds) filters.push({ collection: { in: collectionIds } })
 

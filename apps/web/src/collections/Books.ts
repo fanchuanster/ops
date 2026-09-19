@@ -15,9 +15,9 @@ import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 export const readBooks: Access = ({ req }) => {
   const publiclyVisible: Where = {
     and: [
-      { visibility: { equals: 'public' } },
       { status: { equals: 'published' } },
       { rightsStatus: { in: [...DISTRIBUTABLE_STATUSES] } },
+      { or: [{ owner: { exists: false } }, { 'review.state': { equals: 'approved' } }] },
     ],
   }
 
@@ -30,15 +30,16 @@ export const readBooks: Access = ({ req }) => {
 const enforcePublicationReview: CollectionBeforeChangeHook = ({ data, originalDoc, req }) => {
   const owner = data?.owner ?? originalDoc?.owner
   if (!owner) return data
-  if ((data?.visibility ?? originalDoc?.visibility) !== 'public') return data
+  const priorState = originalDoc?.review?.state ?? 'unsubmitted'
+  const nextState = data?.review?.state ?? priorState
+  if (nextState !== 'approved' || priorState === 'approved') return data
 
   const actor = req?.user
   const byAdmin = Boolean(actor?.roles?.includes('admin'))
   const ownerId = typeof owner === 'object' && owner ? owner.id : owner
-  const reviewState = data?.review?.state ?? originalDoc?.review?.state ?? 'unsubmitted'
 
   const decision = canPublishToLibrary({
-    reviewState,
+    reviewState: priorState,
     rightsStatus: data?.rightsStatus ?? originalDoc?.rightsStatus ?? 'unknown',
     byAdmin,
     ownedByRequester: Boolean(actor && String(ownerId) === String(actor.id)),
@@ -51,7 +52,7 @@ const enforcePublicationReview: CollectionBeforeChangeHook = ({ data, originalDo
     )
   }
 
-  if (byAdmin && reviewState !== 'approved') {
+  if (byAdmin) {
     return {
       ...data,
       review: {
@@ -143,7 +144,7 @@ export const Books: CollectionConfig = {
   slug: 'books',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['title', 'author', 'rightsStatus', 'visibility', 'status'],
+    defaultColumns: ['title', 'author', 'rightsStatus', 'status'],
     group: 'Library',
   },
   access: {
@@ -243,18 +244,6 @@ export const Books: CollectionConfig = {
       admin: {
         description: 'Only public_domain, licensed and permission_granted may be distributed publicly.',
       },
-    },
-    {
-      name: 'visibility',
-      access: adminOnlyField,
-      type: 'select',
-      required: true,
-      defaultValue: 'private',
-      options: [
-        { label: 'Public library', value: 'public' },
-        { label: 'Private workspace', value: 'private' },
-      ],
-      admin: { description: 'Private user conversions must never appear in the public catalog.' },
     },
     {
       name: 'level',

@@ -24,7 +24,7 @@ describe('the admin API, on a book', () => {
   })
 
   it('refuses the fields that belong to somebody else', () => {
-    for (const field of ['owner', 'review', 'conversion', 'artifacts', 'priceCredits', 'pageCount']) {
+    for (const field of ['owner', 'review', 'conversion', 'artifacts', 'priceCredits', 'pageCount', 'visibility']) {
       expect(fields(parseBookUpdate({ [field]: 1 }))).toEqual([field])
       expect(BOOK_WRITABLE).not.toContain(field)
     }
@@ -74,18 +74,16 @@ describe('the admin API, on a book', () => {
     expect(fields(parseBookUpdate({ collectionOrder: '3' }))).toEqual(['collectionOrder'])
   })
 
-  it('holds rights, visibility and language to their own vocabularies', () => {
+  it('holds rights and language to their own vocabularies', () => {
     expect(ok(parseBookUpdate({ rightsStatus: 'public_domain' })).rightsStatus).toBe('public_domain')
     expect(fields(parseBookUpdate({ rightsStatus: 'public-domain' }))).toEqual(['rightsStatus'])
-    expect(ok(parseBookUpdate({ visibility: 'private' })).visibility).toBe('private')
-    expect(fields(parseBookUpdate({ visibility: 'hidden' }))).toEqual(['visibility'])
     expect(ok(parseBookUpdate({ language: 'zh-Hant' })).language).toBe('zh-Hant')
     expect(fields(parseBookUpdate({ language: 'zh' }))).toEqual(['language'])
   })
 
   it('reports every bad field at once, not just the first', () => {
-    expect(fields(parseBookUpdate({ level: 'deep', visibility: 'hidden', nope: 1 })).sort()).toEqual(
-      ['level', 'nope', 'visibility'],
+    expect(fields(parseBookUpdate({ level: 'deep', language: 'zh', nope: 1 })).sort()).toEqual(
+      ['language', 'level', 'nope'],
     )
   })
 

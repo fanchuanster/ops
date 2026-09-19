@@ -3,6 +3,7 @@ import type { Payload } from 'payload'
 
 import { parseBookUpdate } from '../../../../../../domain/adminApi'
 import { levelFromId } from '../../../../../../domain/levels'
+import { isInPublicLibrary } from '../../../../../../domain/moderation'
 import { adminFromRequest, unauthorized } from '../../../../../../lib/apiAuth'
 import { logError } from '../../../../../../lib/logError'
 import { revalidateCuration } from '../../shared'
@@ -113,7 +114,9 @@ function serialize(book: {
   language?: string | null
   description?: string | null
   level: number
-  visibility?: string | null
+  status?: string | null
+  owner?: unknown
+  review?: { state?: string | null } | null
   rightsStatus?: string | null
   collection?: unknown
   collectionOrder?: number | null
@@ -128,7 +131,11 @@ function serialize(book: {
     language: book.language ?? null,
     description: book.description ?? null,
     level: levelFromId(book.level),
-    visibility: book.visibility ?? null,
+    published: isInPublicLibrary({
+      status: book.status ?? 'draft',
+      owner: book.owner,
+      review: book.review,
+    }),
     rightsStatus: book.rightsStatus ?? null,
     collection: (() => {
       const entry = book.collection as number | { id: number } | null | undefined

@@ -42,6 +42,7 @@ import {
   canDeleteUpload,
   canPublishToLibrary,
   canSubmitForReview,
+  isInPublicLibrary,
   requiresAdmin,
 } from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
@@ -80,14 +81,14 @@ describe('rights', () => {
 
   it('requires an account even for public-domain downloads', () => {
     const decision = canAccessArtifact({
-      book: { rightsStatus: 'public_domain', visibility: 'public' },
+      book: { rightsStatus: 'public_domain', public: true },
       userId: null,
     })
     expect(decision).toEqual({ allowed: false, reason: 'authentication_required' })
   })
 
   it('never exposes a private workspace book to another user', () => {
-    const book = { rightsStatus: 'public_domain', visibility: 'private' } as const
+    const book = { rightsStatus: 'public_domain', public: false } as const
     expect(canAccessArtifact({ book, userId: 'u2', ownerId: 'u1' })).toEqual({
       allowed: false,
       reason: 'not_owner',
@@ -98,7 +99,7 @@ describe('rights', () => {
   it('refuses an uncleared book to a logged-in reader', () => {
     expect(
       canAccessArtifact({
-        book: { rightsStatus: 'unknown', visibility: 'public' },
+        book: { rightsStatus: 'unknown', public: true },
         userId: 'u1',
       }),
     ).toEqual({ allowed: false, reason: 'rights_not_cleared' })
@@ -423,6 +424,27 @@ describe('an administrator publishing directly', () => {
     ).toEqual({ allowed: false, reason: 'rights_undeclared' })
   })
 
+  describe('what belongs in the public catalog', () => {
+    it('excludes anything not published', () => {
+      expect(isInPublicLibrary({ status: 'draft' })).toBe(false)
+      expect(isInPublicLibrary({ status: 'in_production', owner: 1 })).toBe(false)
+    })
+
+    it('publishes a staff-entered, ownerless book on its own', () => {
+      expect(isInPublicLibrary({ status: 'published' })).toBe(true)
+    })
+
+    it('keeps an owned upload private until its review is approved', () => {
+      expect(isInPublicLibrary({ status: 'published', owner: 5 })).toBe(false)
+      expect(
+        isInPublicLibrary({ status: 'published', owner: 5, review: { state: 'submitted' } }),
+      ).toBe(false)
+      expect(
+        isInPublicLibrary({ status: 'published', owner: 5, review: { state: 'approved' } }),
+      ).toBe(true)
+    })
+  })
+
   it('will not review an empty book', () => {
     expect(
       canSubmitForReview({
@@ -445,9 +467,9 @@ describe('an administrator publishing directly', () => {
     ).toEqual({ allowed: true })
   })
 
-  it('keeps rights, visibility and level out of the uploader’s hands', () => {
+  it('keeps rights, publication state and level out of the uploader’s hands', () => {
     expect(requiresAdmin('rightsStatus')).toBe(true)
-    expect(requiresAdmin('visibility')).toBe(true)
+    expect(requiresAdmin('review')).toBe(true)
     expect(requiresAdmin('title')).toBe(false)
   })
 
@@ -696,7 +718,7 @@ describe('reader name and initials', () => {
 })
 
 describe('reading online is free of the account requirement', () => {
-  const publicDomain = { rightsStatus: 'public_domain' as const, visibility: 'public' as const }
+  const publicDomain = { rightsStatus: 'public_domain' as const, public: true as const }
 
   it('lets a signed-out visitor read a cleared public book', () => {
     expect(canReadOnline({ book: publicDomain, userId: null })).toEqual({ allowed: true })
@@ -709,14 +731,14 @@ describe('reading online is free of the account requirement', () => {
   it('still refuses uncleared rights to everyone', () => {
     expect(
       canReadOnline({
-        book: { rightsStatus: 'restricted', visibility: 'public' },
+        book: { rightsStatus: 'restricted', public: true },
         userId: 'reader-1',
       }),
     ).toEqual({ allowed: false, reason: 'rights_not_cleared' })
   })
 
   it('still keeps a private upload to its owner', () => {
-    const book = { rightsStatus: 'user_owned' as const, visibility: 'private' as const }
+    const book = { rightsStatus: 'user_owned' as const, public: false as const }
     expect(canReadOnline({ book, userId: null })).toEqual({
       allowed: false,
       reason: 'authentication_required',

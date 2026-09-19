@@ -16,16 +16,18 @@ function clauses(rule: Rule): unknown[] {
 }
 
 describe('anonymous', () => {
-  it('sees only public, published, cleared books', () => {
+  it('sees only published, cleared books that are actually public', () => {
     const rule = decide(undefined)
 
     expect(rule).not.toBe(true)
-    expect(clauses(rule)).toContainEqual({ visibility: { equals: 'public' } })
     expect(clauses(rule)).toContainEqual({ status: { equals: 'published' } })
+    expect(clauses(rule)).toContainEqual({
+      or: [{ owner: { exists: false } }, { 'review.state': { equals: 'approved' } }],
+    })
   })
 
-  it('is not offered an owner clause it could never match', () => {
-    expect(JSON.stringify(decide(null))).not.toContain('owner')
+  it('is not offered an owner-equals clause it could never match', () => {
+    expect(JSON.stringify(decide(null))).not.toContain('"owner":{"equals"')
   })
 })
 

@@ -19,11 +19,9 @@ export const DISTRIBUTABLE_STATUSES: readonly RightsStatus[] = RIGHTS_STATUSES.f
   PUBLICLY_DISTRIBUTABLE.has(status),
 )
 
-export type Visibility = 'public' | 'private'
-
 export interface RightsBearing {
   rightsStatus: RightsStatus
-  visibility: Visibility
+  public: boolean
 }
 
 export interface AccessRequest {
@@ -101,7 +99,7 @@ export function canReadOnline(request: AccessRequest): AccessDecision {
   const { book, part, userId, ownerId } = request
   const status = effectiveRightsStatus(book.rightsStatus, part?.rightsStatus)
 
-  if (book.visibility === 'private') {
+  if (!book.public) {
     if (!userId) return { allowed: false, reason: 'authentication_required' }
     if (!ownerId || ownerId !== userId) return { allowed: false, reason: 'not_owner' }
     return { allowed: true }
@@ -119,7 +117,7 @@ export function canAccessArtifact(request: AccessRequest): AccessDecision {
   const { book, part, userId, ownerId } = request
   const status = effectiveRightsStatus(book.rightsStatus, part?.rightsStatus)
 
-  if (book.visibility === 'private') {
+  if (!book.public) {
     if (!userId) return { allowed: false, reason: 'authentication_required' }
     if (!ownerId || ownerId !== userId) return { allowed: false, reason: 'not_owner' }
     return { allowed: true }

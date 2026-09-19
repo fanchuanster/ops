@@ -154,7 +154,6 @@ export async function POST(request: Request): Promise<Response> {
         ...(suggested.language ? { language: suggested.language as 'zh-Hans' } : {}),
         estimatedPages: suggested.estimatedPages ?? undefined,
         rightsStatus: 'unknown',
-        visibility: 'private',
         level: LEVEL_IDS[DEFAULT_BOOK_LEVEL],
         status: 'draft',
         owner: Number(user.id),

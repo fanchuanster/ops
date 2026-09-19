@@ -243,7 +243,13 @@ export async function submitForReview(
         await payload.update({
           collection: 'books',
           id: bookId,
-          data: { visibility: 'public' },
+          data: {
+            review: {
+              state: 'approved',
+              reviewedBy: user.id,
+              note: book.review?.note ?? null,
+            },
+          },
           overrideAccess: true,
           user,
         })

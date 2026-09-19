@@ -1,5 +1,6 @@
 import React from 'react'
 
+import { isInPublicLibrary } from '../../../../domain/moderation'
 import { readSourceKind } from '../../../../domain/publication'
 import { getCurrentUser } from '../../../../lib/auth'
 import { getBooksOwnedBy } from '../../../../lib/catalog'
@@ -61,7 +62,7 @@ export default async function MyBooksPage() {
                   </h3>
                   <p className="my-books__meta">
                     {[
-                      book.visibility === 'public' ? 'In the public library' : 'Private to you',
+                      isInPublicLibrary(book) ? 'In the public library' : 'Private to you',
                       book.pageCount ? `${book.pageCount} pages` : null,
                       shelf,
                     ]

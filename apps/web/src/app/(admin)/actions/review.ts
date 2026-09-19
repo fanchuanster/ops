@@ -45,7 +45,6 @@ export async function approveSubmission(
       id: bookId,
       data: {
         review: { state: 'approved', reviewedBy: admin.id, note: note === '' ? null : note },
-        visibility: 'public',
       },
       overrideAccess: true,
       user: admin,
