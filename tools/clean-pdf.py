@@ -52,11 +52,11 @@ file at a clean name is what is left afterwards, not an original plus a
 "-small" copy sitting beside it. Pass --keep-original to leave the input
 where it is and put the shrunk copy beside it, named for the size it came
 out at, the way shrink-pdf.py names its own results. A PDF is then also
-checked for whether its own embedded fonts can draw the text its
-ToUnicode CMap claims (tools/pdf.py's check_readability -- see that
-module for why a valid text layer and a blank-box rendering are not the
-same question); this is a report, not a fix, because no re-encoding step
-here can substitute the missing glyphs.
+checked for whether its text layer is a text at all (tools/pdf.py's
+check_readability -- see that module for why the vocabulary a file draws
+on answers that and a font's own metadata does not); this is a report,
+not a fix, because no re-encoding step here can put back characters the
+file never carried.
 
 A .txt file has no page images to shrink and no font to render, so
 neither of those applies. What it can fail at is the opposite of

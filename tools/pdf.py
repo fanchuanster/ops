@@ -146,63 +146,62 @@ TRAILING = re.compile(r"[0-9\-]+$")
 SEPARATORS = " \t._"
 
 GLYPH_SAMPLE_PAGES = 16
-GLYPH_SAMPLE_CHARS = 1500
+GLYPH_SAMPLE_CHARS = 20000
 """How much of a book is read before judging whether it renders.
 
 A book that is broken is broken on every page, since a font is embedded
 once for the whole file — so a sample well short of the whole book
-answers the question as well as reading all of it would. Divided across
-more pages than the render itself strictly needs, so a title page that
-repeats one or two characters hundreds of times can't burn through the
-whole budget before a page with real variety is ever reached.
+answers the question as well as reading all of it would. The budget is
+generous because nothing is rendered to spend it: counting characters
+is cheap, and a vocabulary measured over thousands of them separates a
+real text from a collapsed one by a wider margin than one measured over
+hundreds. Divided across the sampled pages rather than run down in one
+go, so a title page that repeats one or two characters hundreds of
+times can't burn through the whole budget before a page with real
+variety is ever reached.
 """
 
-GLYPH_GRID = 4
-"""Side length of the grid each rendered character is reduced to.
+IDEOGRAPH_MIN_SAMPLE = 200
+"""Ideographs a file must draw before its vocabulary is judged at all.
 
-Comparing raw pixels would fail on legitimate anti-aliasing noise
-between two renders of what is genuinely the same shape; a 4x4 grid of
-averaged intensities is coarse enough to survive that noise and still
-tell a Chinese character's stroke pattern apart from another's, or from
-a blank tile.
+A cover, a colophon or a two-line epigraph is legitimately repetitive,
+and a handful of characters says nothing either way. Below this count
+the check abstains rather than guesses.
 """
 
-SHAPE_QUANTUM = 32
-"""Grey levels collapsed into one bucket when a glyph's shape is hashed.
+IDEOGRAPH_MIN_DISTINCT = 20
+"""Distinct ideographs below which a stretch of Chinese is not Chinese.
 
-Rounds two renders of the same shape to the same signature despite
-sub-pixel positioning differences, without rounding two actually
-different shapes into one.
+Chinese prose of any real length draws on hundreds of characters -- the
+smallest healthy sample measured here, sixty-nine ideographs of a seed
+book, still used forty-two distinct ones. A file that draws thousands
+of ideographs from a vocabulary under twenty is not a book rendering
+badly; it is a text layer that collapsed, every character carrying the
+same code point because the conversion that produced it lost the
+mapping and wrote one glyph everywhere.
 """
 
-SHAPE_COLLISION_MIN = 3
-"""Distinct characters that must share one rendered shape to count as one.
+IDEOGRAPH_VARIETY_SAMPLE = 2000
+IDEOGRAPH_VARIETY_FLOOR = 0.01
+"""Vocabulary-to-volume ratio a long stretch of ideographs must clear.
 
-Two different characters can coincidentally render to a similar 4x4
-signature — a period and the dot of an "i", say. Three or more
-unrelated characters sharing an identical signature is not a
-coincidence; it is the same tile being drawn for characters that are
-supposed to look nothing alike, which is what a broken subset font
-does for its entire alphabet.
-"""
-
-SHAPE_MIN_SAMPLES = 8
-"""Characters a font must contribute before its collision rate is judged.
-
-A font only sampled a handful of times hasn't given the check enough
-occurrences for "everything collided" to mean anything.
+The absolute floor above catches a text layer that collapsed onto one
+character. This catches one that collapsed onto a few dozen: over a
+long sample a real text keeps introducing characters, so its ratio
+stays an order of magnitude clear of this even as it falls with length.
+The Gandhi biography, nine thousand ideographs deep, sits at 0.13, and
+the floor is set a hundredfold below that.
 """
 
 DEFAULT_MISSING_GLYPH_THRESHOLD = 0.3
-"""Share of sampled characters drawn by a broken font before a PDF fails.
+"""Share of sampled characters a collapse has to cover to fail the file.
 
-Every character rendered through a font TOFU_BBOX_SHARE has already
-condemned counts as missing, so this is the second and final threshold:
-how much of the *whole sampled page* has to come from a broken font
-before the file as a whole is called unreadable. Set well above zero
-because a broken decorative font used for a chapter number or two is
-not the same claim as a broken body font — a book is only actually
-unusable when most of what a reader would look at is tofu.
+Every ideograph in a collapsed text layer counts as missing, so this is
+the second and final threshold: how much of the *whole sampled page*
+has to be that collapse before the file is called unreadable. Set well
+above zero because a book with one broken decorative font and a sound
+body is not the claim being made — a book is only actually unusable
+when most of what a reader would look at is tofu.
 """
 
 
@@ -295,29 +294,30 @@ class Survey:
 
 
 class Readability:
-    """Whether a PDF's own embedded fonts draw real glyphs or a shared box.
+    """Whether a PDF's text is a text, or one character wearing a book's clothes.
 
-    Two indirect measures were tried and rejected before this one. Asking
-    a font's Unicode cmap `has_glyph()` gets a confident, wrong no for a
-    CJK font addressed by glyph index rather than code point (SimSun
-    subsetted the ordinary way, for one), which draws perfectly well and
-    has no such cmap to ask. Asking a font for a glyph's *bounding box*
-    sounds more direct and still isn't: PyMuPDF's `glyph_bbox()` returns
-    the same box for dozens of genuinely different, correctly-rendering
-    Latin letters in an ordinary embedded font — confirmed by rendering
-    one such file and reading it, cleanly, off the page — so a box
-    collision there proves nothing either.
+    Three indirect measures were tried and rejected before this one,
+    each confirmed wrong against a rendered page rather than argued
+    away. Asking a font's Unicode cmap `has_glyph()` gets a confident,
+    wrong no for a CJK font addressed by glyph index rather than code
+    point (SimSun subsetted for Identity-H, the ordinary case for an
+    exported Chinese book), which draws perfectly well and has no such
+    cmap to ask. Asking for a glyph's *bounding box* sounds more direct
+    and still isn't: PyMuPDF returns one identical box for dozens of
+    genuinely different, correctly-rendering Latin letters. Rendering
+    every character and comparing shape signatures is the right
+    question asked of the wrong evidence -- it can only fire when
+    several *distinct* code points share one shape, and the book it was
+    built to catch had already collapsed every character onto a single
+    code point, leaving nothing to collide. It called that book clean
+    and a healthy one 74% broken.
 
-    What is actually asked here is the only thing that cannot lie: the
-    page is rendered, same as a reader's screen would render it, and
-    each sampled character's own rectangle of that rendering is reduced
-    to a coarse shape signature. A real font draws a different shape for
-    every differently-shaped character. A broken subset — given the
-    wrong outlines, or none — draws unrelated characters as the same
-    tile, because that tile (a tofu box, or its blank cousin) is
-    genuinely all that got rendered. Three or more distinct characters
-    landing on one signature is that tile, not a coincidence; this is
-    the literal, visual answer to whether a book has tofu boxes in it.
+    What is asked instead is the vocabulary. A Chinese book draws on
+    hundreds to thousands of distinct characters and keeps finding new
+    ones as it runs; a collapsed text layer draws thousands of
+    characters from a vocabulary of one. That is not a proxy for the
+    tofu a reader sees -- it is the same fault, read off the text layer
+    instead of the screen, and it costs no rendering at all.
     """
 
     def __init__(
@@ -455,54 +455,39 @@ def survey(path: Path, sample: int = 40) -> Survey | None:
         return None
 
 
-SUBSET_TAG = re.compile(r"^[A-Z]{6}\+")
-
-
-def _strip_subset_tag(basefont: str) -> str:
-    """Undo the "ABCDEF+" subset prefix a PDF gives an embedded font.
-
-    `page.get_fonts()` reports the raw basefont, tag included, but the
-    span dict PyMuPDF hands back for actual text (`get_text("dict")`)
-    already reports the font by its name with that tag stripped -- the
-    two are the same font under two different spellings, and matching
-    the tagged name against the untagged span would silently match
-    nothing.
-    """
-    return SUBSET_TAG.sub("", basefont)
-
-
 def check_readability(
     path: Path, pages: int = GLYPH_SAMPLE_PAGES, max_chars: int = GLYPH_SAMPLE_CHARS
 ) -> Readability | None:
-    """Render sampled pages and ask whether distinct characters look alike.
+    """Sample a book's ideographs and ask how many of them are different.
 
-    `page.get_text()` is not asked here — it reads the `ToUnicode` CMap,
-    which answers "what character is this", not "what did the font draw
-    for it". Neither is a font's own `has_glyph()` or `glyph_bbox()`: the
-    first is blind to CID-keyed fonts (SimSun subsetted for Identity-H
-    text, the ordinary case for an exported Chinese book) that carry no
-    Unicode cmap at all despite drawing correctly, and the second was
-    tried and caught giving one identical box to dozens of genuinely
-    different, correctly-rendering Latin letters in a real book — both
-    looked like the right question and were actually a different one.
+    Three more direct-sounding measures were tried before this one and
+    all three answered a different question than the one being asked;
+    `Readability` records what each got wrong. What survives is the
+    observation that a text is a text because it says many things. A
+    Chinese book draws on a vocabulary of hundreds to thousands of
+    characters and keeps reaching for new ones the longer it runs. A
+    file whose text layer has collapsed cannot do that: every character
+    on the page carries one code point, because the conversion that
+    produced it lost the glyph-to-character mapping and wrote the same
+    one everywhere.
 
-    What is rendered instead is the page itself, exactly as a reader
-    would see it, via `page.get_pixmap()`. `page.get_texttrace()` gives
-    the on-page rectangle each sampled character was actually drawn
-    into; that rectangle is cropped out of the rendered page and reduced
-    to a coarse GLYPH_GRID x GLYPH_GRID signature (SHAPE_QUANTUM below),
-    coarse enough to survive anti-aliasing but not so coarse that two
-    different ideographs' stroke patterns wash out to the same average.
-    Three or more distinct characters (SHAPE_COLLISION_MIN) landing on
-    one signature is the tofu box itself, not a coincidence -- an
-    ordinary font never draws unrelated characters identically, and a
-    broken subset does exactly that for however much of its alphabet was
-    never given real outlines.
+    That collapse is not a proxy for the tofu a reader sees; it is the
+    same fault seen from the other side. The book this was built
+    against draws forty-five thousand ideographs from a vocabulary of
+    exactly one, through a Lisu font and a Latin monospace font that
+    contain no ideographs at all, and renders as page after page of
+    empty rectangles. Nothing needs to be rendered to know that, which
+    is why nothing is.
 
-    max_chars is a budget divided evenly across the sampled pages, not a
-    single running total -- a title page or cover that repeats one or
-    two characters hundreds of times would otherwise spend the whole
-    budget before a page with any variety was ever read.
+    Latin text is left alone. Twenty-six letters carry English the way
+    three thousand characters carry Chinese, so a small vocabulary
+    there is ordinary rather than evidence, and this check has nothing
+    to say about it.
+
+    max_chars is a budget divided evenly across the sampled pages, not
+    a single running total -- a title page that repeats one or two
+    characters hundreds of times would otherwise spend the whole budget
+    before a page with any variety was ever read.
 
     Returns None if PyMuPDF is not installed or the file cannot be
     opened; the difference is what `pymupdf_module()` is for, same as
@@ -522,9 +507,9 @@ def check_readability(
         step = max(1, doc.page_count // checked_pages) if checked_pages else 1
         per_page_cap = max(1, max_chars // checked_pages) if checked_pages else max_chars
         checked = 0
+        ideographs = 0
+        vocabulary: set[str] = set()
         sample_chars: list[str] = []
-        shapes: list[tuple] = []
-        chars_by_shape: dict[tuple, set[str]] = {}
 
         for index in range(0, doc.page_count, step):
             if checked >= max_chars:
@@ -535,13 +520,6 @@ def check_readability(
                 traces = page.get_texttrace()
             except Exception:
                 continue
-            if not traces:
-                continue
-
-            try:
-                pix = page.get_pixmap(colorspace=pymupdf.csGRAY)
-            except Exception:
-                continue
 
             page_checked = 0
             for item in traces:
@@ -550,94 +528,59 @@ def check_readability(
                 for char in item.get("chars", ()):
                     if checked >= max_chars or page_checked >= per_page_cap:
                         break
-                    unicode_point, _glyph_id, _origin, bbox = char[0], char[1], char[2], char[3]
-                    ch = chr(unicode_point)
+                    ch = chr(char[0])
                     if ch.isspace():
-                        continue
-
-                    shape = _render_shape(pix, bbox)
-                    if shape is None:
                         continue
 
                     checked += 1
                     page_checked += 1
                     if len(sample_chars) < 40:
                         sample_chars.append(ch)
-                    shapes.append(shape)
-                    chars_by_shape.setdefault(shape, set()).add(ch)
+                    if _is_ideograph(ch):
+                        ideographs += 1
+                        vocabulary.add(ch)
 
-        collisions = {
-            shape for shape, chars in chars_by_shape.items() if len(chars) >= SHAPE_COLLISION_MIN
-        }
-        missing = sum(1 for shape in shapes if shape in collisions) if len(shapes) >= SHAPE_MIN_SAMPLES else 0
+        collapsed = _collapsed(ideographs, len(vocabulary))
 
         return Readability(
             pages_checked=min(checked_pages, doc.page_count),
             chars_checked=checked,
-            chars_missing=missing,
+            chars_missing=ideographs if collapsed else 0,
             unembedded_fonts=[],
             sample="".join(sample_chars),
         )
 
 
-def _render_shape(pix, bbox) -> tuple | None:
-    """Reduce one character's rendered rectangle to a coarse grey signature.
+def _is_ideograph(ch: str) -> bool:
+    """Whether a character is a Han ideograph, the script this check reads.
 
-    Returns None for a rectangle too small to say anything -- a space
-    glyph's box, or a rendering artefact -- rather than let a
-    near-empty crop pass as a legitimate shape one way or the other.
+    Kana, hangul, Latin and punctuation are excluded deliberately: each
+    has its own natural vocabulary size, and only Han has one large
+    enough for a collapsed text layer to stand out against.
     """
-    x0 = max(0, min(pix.width, int(bbox[0])))
-    x1 = max(0, min(pix.width, int(bbox[2]) + 1))
-    y0 = max(0, min(pix.height, int(bbox[1])))
-    y1 = max(0, min(pix.height, int(bbox[3]) + 1))
-    if x1 - x0 < 2 or y1 - y0 < 2:
-        return None
-
-    samples = pix.samples
-    stride = pix.stride
-    cell_w = (x1 - x0) / GLYPH_GRID
-    cell_h = (y1 - y0) / GLYPH_GRID
-    cells = []
-    for grid_y in range(GLYPH_GRID):
-        cy0 = y0 + int(grid_y * cell_h)
-        cy1 = max(cy0 + 1, y0 + int((grid_y + 1) * cell_h))
-        for grid_x in range(GLYPH_GRID):
-            cx0 = x0 + int(grid_x * cell_w)
-            cx1 = max(cx0 + 1, x0 + int((grid_x + 1) * cell_w))
-            total = 0
-            count = 0
-            for py in range(cy0, min(cy1, pix.height)):
-                row = py * stride
-                for px in range(cx0, min(cx1, pix.width)):
-                    total += samples[row + px]
-                    count += 1
-            cells.append((total // count // SHAPE_QUANTUM) if count else 255 // SHAPE_QUANTUM)
-    return tuple(cells)
+    point = ord(ch)
+    return (
+        0x4E00 <= point <= 0x9FFF
+        or 0x3400 <= point <= 0x4DBF
+        or 0xF900 <= point <= 0xFAFF
+        or 0x20000 <= point <= 0x2FA1F
+    )
 
 
-def _load_span_font(doc, font_info, pymupdf):
-    """Build a `Font` from the font a text span actually names, or None.
+def _collapsed(instances: int, distinct: int) -> bool:
+    """Whether this many ideographs from this small a vocabulary can be a text.
 
-    None means "cannot check", not "cannot draw" — a font the PDF does
-    not embed (the common case for a plain Latin body font) has no
-    program here to load, so a span using it is skipped rather than
-    counted as broken.
+    Two ways of failing, one absolute and one proportional, because a
+    text layer can collapse completely or only mostly.
     """
-    if font_info is None:
-        return None
-    xref = font_info[0]
-    try:
-        extracted = doc.extract_font(xref)
-    except Exception:
-        return None
-    buffer = extracted[3] if len(extracted) > 3 else None
-    if not buffer:
-        return None
-    try:
-        return pymupdf.Font(fontbuffer=buffer)
-    except Exception:
-        return None
+    if instances < IDEOGRAPH_MIN_SAMPLE:
+        return False
+    if distinct < IDEOGRAPH_MIN_DISTINCT:
+        return True
+    return (
+        instances >= IDEOGRAPH_VARIETY_SAMPLE
+        and distinct / instances < IDEOGRAPH_VARIETY_FLOOR
+    )
 
 
 def describe_readability(path: Path, found: Readability | None) -> None:
@@ -652,23 +595,24 @@ def describe_readability(path: Path, found: Readability | None) -> None:
         return
 
     if found.chars_checked == 0:
-        print("  No text found to check glyph coverage against.")
+        print("  No text layer to read — nothing was drawn as text on the sampled")
+        print("  pages, so this is a scan and the OCR stage is what answers for it.")
         return
 
     ratio = found.missing_ratio
     if found.readable():
-        verdict = "renders" if ratio == 0 else f"renders ({ratio:.0%} of sampled glyphs are shared tofu boxes)"
+        verdict = "renders"
     else:
-        verdict = f"DOES NOT RENDER — {ratio:.0%} of sampled characters draw as a shared blank box"
+        verdict = f"DOES NOT RENDER — {ratio:.0%} of sampled characters are one repeated code point"
     print(
-        f"  Glyph check: {verdict}, over {found.chars_checked} characters"
+        f"  Text check: {verdict}, over {found.chars_checked} characters"
         f" across {found.pages_checked} pages"
     )
     if not found.readable():
-        print("  The text layer (ToUnicode) is likely correct — copy-paste and OCR")
-        print("  both read fine — but the embedded font draws many unrelated characters")
-        print("  as the exact same rectangle, so every viewer shows tofu boxes instead of")
-        print("  text.")
+        print("  The text layer has collapsed: the file draws thousands of ideographs")
+        print("  from a vocabulary of a handful, which no real book does. Copy-paste and")
+        print("  OCR will not rescue it either — the characters are simply not in the")
+        print("  file, and every viewer shows tofu boxes where they should be.")
         print("  Treat the PDF as unusable for reading; a paired .txt/.docx source, or")
         print("  a fresh export from the original, is the one to keep.")
     if found.unembedded_fonts:

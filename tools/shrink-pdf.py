@@ -47,10 +47,10 @@ KEEP THE ORIGINAL. NobleSee preserves the file it is given: the upload
 how a book gets in, not an archival step — the full-resolution scan
 belongs in your own storage either way.
 
---inspect also reports whether the file's embedded fonts can draw its
-own text (tools/pdf.py's check_readability) — a PDF can have a perfectly
-good text layer and still render as blank boxes if the wrong font got
-embedded, which no amount of shrinking fixes.
+--inspect also reports whether the file's text layer is a text at all
+(tools/pdf.py's check_readability) — a PDF can carry tens of thousands
+of characters that are all one repeated code point, rendering as page
+after page of blank boxes, which no amount of shrinking fixes.
 
 This is a maintainer utility and not part of the runtime stack.
 Ghostscript is a native binary, and nothing native runs in the Worker.
