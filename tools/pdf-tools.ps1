@@ -6,7 +6,7 @@
     Dot-source this from a wrapper:
 
         . (Join-Path $PSScriptRoot 'pdf-tools.ps1')
-        $run = Initialize-PdfTool -Tool 'clean-pdf.py' -RequireGhostscript
+        $run = Initialize-PdfTool -Tool 'pdf.py' -RequireGhostscript
 
     Three things have to be arranged before any of the PDF tools run on
     Windows, and getting one wrong looks like a different fault.

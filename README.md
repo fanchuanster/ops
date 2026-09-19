@@ -220,17 +220,19 @@ Without it the tool walks rungs that cannot do anything, a minute each on a
 large book, and can only report which compression filters it found in the raw
 bytes.
 
-On Windows, `tools/clean-pdf.ps1` arranges the three things that have to be
+On Windows, `tools/clean-book.ps1` arranges the three things that have to be
 right before any of this works — a portable Ghostscript on PATH under its
 Windows name `gswin64c.exe`, a UTF-8 console so a book named
 南怀瑾选集-典藏版-第05卷-扫描版.pdf prints instead of raising
-`UnicodeEncodeError`, and whichever of `python`/`python3`/`py` actually runs:
+`UnicodeEncodeError`, and whichever of `python`/`python3`/`py` actually runs.
+It is named for the book, not the format — it takes a `.txt` source exactly
+as well as a `.pdf` one, the same as `tools/pdf.py` does:
 
 ```powershell
-.\tools\clean-pdf.ps1 $env:USERPROFILE\Downloads\619294728-南怀瑾选集-第9卷-P699.pdf
-.\tools\clean-pdf.ps1 C:\scans\*.pdf -DryRun
-.\tools\clean-pdf.ps1 C:\scans\book.pdf -Inspect
-.\tools\clean-pdf.ps1 C:\scans\book.pdf -Quality 40 -Gray
+.\tools\clean-book.ps1 $env:USERPROFILE\Downloads\619294728-南怀瑾选集-第9卷-P699.pdf
+.\tools\clean-book.ps1 C:\scans\*.pdf -DryRun
+.\tools\clean-book.ps1 C:\scans\book.pdf -Inspect
+.\tools\clean-book.ps1 C:\scans\book.pdf -Quality 40 -Gray
 ```
 
 It passes only the switches you actually gave, so the defaults stay the Python
