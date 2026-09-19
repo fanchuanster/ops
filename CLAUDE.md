@@ -145,8 +145,8 @@ imported core.
   "my change can't have caused this" are hypotheses until a command
   proves them.
 - **To drive the live site programmatically, use
-  `FANCHUANSTER_ACCESS_TOKEN` from the repo-root `config.env`** — the
-  maintainer's administrator token. `config.env` is gitignored and the value
+  `FANCHUANSTER_ACCESS_TOKEN` from the repo-root `.env`** — the
+  maintainer's administrator token. `.env` is gitignored and the value
   never belongs in source, a commit, a log line or a bug report. It is a
   live credential on the production catalog: read freely, write
   deliberately. `docs/API.md` has the header format.

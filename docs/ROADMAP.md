@@ -143,7 +143,7 @@ oversight.
   Google email is refused outright, because linking one to an existing account
   would be account takeover. Requires the redirect URIs registered in the Google
   Cloud Console and the credentials uploaded as Worker secrets — see
-  `config.example.txt`.
+  `.env.example`.
 - **AI-assisted OCR correction** — `correct` proposes, a human approves in a
   review file, `apply` edits. Never silent rewriting, per `CLAUDE.md` section 7,
   and enforced by deterministic guardrails rather than by the prompt: a proposal
