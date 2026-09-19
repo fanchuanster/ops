@@ -10,7 +10,7 @@
  *
  * This is a PARTIAL configuration. The endpoint contains the Cloudflare
  * account id and the credentials are secrets, so neither is written
- * here — `infra/tf` exports both from the repo's config.env as AWS_* variables
+ * here — `infra/tf` exports both from the repo's .env as AWS_* variables
  * that the backend reads from the environment. Running bare `terraform`
  * without those exported will fail to initialise, which is the intended
  * failure: it cannot silently fall back to a local state file.

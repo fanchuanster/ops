@@ -22,7 +22,7 @@ its owner's privileges**, and it is stored rather than hashed, so it can
 be re-shown later; replacing it invalidates the old value immediately.
 
 The maintainer's administrator token is `FANCHUANSTER_ACCESS_TOKEN` in
-the repo-root `config.env` (CLAUDE.md 2.4).
+the repo-root `.env` (CLAUDE.md 2.4).
 
 ## What will surprise a script
 

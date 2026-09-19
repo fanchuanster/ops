@@ -26,10 +26,10 @@ IMAGE="node:22-bookworm"
 # The API token is needed for deploys and for any command that talks to
 # the Cloudflare API. Passed through rather than baked in, and absent
 # from the command line so it never lands in shell history or ps output.
-if [ -f "$REPO/config.env" ]; then
+if [ -f "$REPO/.env" ]; then
     set -a
     # shellcheck disable=SC1091
-    . "$REPO/config.env"
+    . "$REPO/.env"
     set +a
 fi
 

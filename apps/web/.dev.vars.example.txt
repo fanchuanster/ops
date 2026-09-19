@@ -62,7 +62,7 @@ ADOBE_CLIENT_SECRET=
 # can be fired by hand instead of waiting for the minute.
 CONVERTER_SECRET=
 
-# xAI, for the AI correction stage — the same key as the repo-root config.env.
+# xAI, for the AI correction stage — the same key as the repo-root .env.
 # It was the container's until the pipeline moved here; without it a
 # correction job fails with a clear message and nothing else is
 # affected. See docs/PIPELINE.md section 4.
