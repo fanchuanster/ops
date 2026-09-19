@@ -34,3 +34,13 @@ otherwise falls back to the best edition rather than refusing; the
 choice is threaded through the authorization so the bytes served match
 the reader that opened. A reader who edits it to something absent gets
 the best edition, never someone else's file.
+
+**`/books` shows the whole shelf tree, so it must ask for the whole
+catalog.** One query feeds every shelf on that page, and the catalog is
+sorted globally by order id, so a page-sized limit does not cut the
+bottom shelf off — it cuts the tail off *every* shelf at once. That is
+what a default `limit` of 48 did: nine volumes of 南怀瑾选集 rendered as
+six, and five other shelves lost their tails with no sign that anything
+was missing. `getCatalog` therefore takes a required `limit`, so the
+home page's 48 reads as the preview it is and `/books` asks for
+`CATALOG_LIMIT`. A caller that wants a page of the catalog must say so.

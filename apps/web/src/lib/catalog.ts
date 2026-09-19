@@ -5,15 +5,17 @@ import { subtreeIds } from '../domain/collectionTree'
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
 import { slugFromParam } from './slugParam'
 
+export const CATALOG_LIMIT = 1000
+
 export async function getCatalog({
   collectionSlug,
   level = DEFAULT_BROWSE_LEVEL,
-  limit = 48,
+  limit,
 }: {
   collectionSlug?: string
   level?: BookLevel
-  limit?: number
-} = {}) {
+  limit: number
+}) {
   const payload = await getPayload({ config })
 
   let collectionIds: number[] | undefined

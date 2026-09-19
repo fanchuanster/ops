@@ -127,6 +127,15 @@ Payload CLI command needing a binding. `apps/web/cf` runs all of it in
 `node:22-bookworm`. An irony worth noting: the move that removed the container
 from production put one back into development.
 
+**D1 caps a query at 100 bound parameters.** A `where` built from a list of
+ids is therefore bounded by the catalog, not by taste, and Payload spends two
+parameters per value on a relationship `in`. The admin library page tallied
+deliveries with one `in` over every book on the screen; it worked until the
+50th book and then answered 500 for every administrator, because 50 ids is 101
+parameters. Queries of that shape batch — `MAX_IN_VALUES` in
+`lib/adminData.ts` — and a new one keyed on anything that grows must do the
+same. An `in` over shelves is safe by size; an `in` over books is not.
+
 **Job handoff needs a queue, not a request.** The Worker must not wait for a
 conversion. It enqueues and returns a job id; the container consumes the queue
 and writes results back to R2 and D1. Cloudflare Queues is the native fit and
