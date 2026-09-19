@@ -176,12 +176,16 @@ the catalog gets books without uploading any.
 
 ```bash
 sudo apt install ghostscript && pip install pymupdf   # install both
-python3 tools/clean-pdf.py --dry-run *.pdf            # what would happen
-python3 tools/clean-pdf.py 619294728-13230487-南怀瑾选集-第9卷-2013-03-P699.pdf
+python3 tools/pdf.py --dry-run *.pdf                  # what would happen
+python3 tools/pdf.py 619294728-13230487-南怀瑾选集-第9卷-2013-03-P699.pdf
+python3 tools/pdf.py --inspect scan.pdf                # what is in it, no changes
 ```
 
 A file pulled from an archive mirror arrives with two unrelated problems, and
-`tools/clean-pdf.py` answers both in one pass at the point of intake. The
+`tools/pdf.py` answers both in one pass at the point of intake — it is both the
+engine and the one CLI; there used to be a second script, `shrink-pdf.py`, for
+the size half alone, but once both were thin wrappers forwarding flags to the
+same module, keeping two in sync for one job stopped earning its keep. The
 filename is a database id and a byte-range suffix wrapped around the title that
 actually matters, so any leading or trailing run of digits and `-` is stripped
 and the file renamed in place — `南怀瑾选集-第9卷-2013-03-P.pdf`. The strip is
@@ -193,62 +197,61 @@ once rather than sending the strip round again. The scan is then measured agains
 100 MB ceiling as below and, if it is over, handed to the ladder — replacing the
 file in place, so what is left is one file at one clean name rather than an
 original with a smaller copy beside it. `--keep-original` leaves the input alone
-and names the copy for its size instead.
+and names the copy for its size instead; `--output`/`--out-dir` redirect it
+elsewhere. It is then checked for whether its text layer is a text at all —
+a PDF can carry tens of thousands of characters that are all one repeated code
+point, rendering as page after page of blank boxes, which no amount of
+shrinking fixes.
 
-Either pass can be skipped (`--skip-rename`, `--skip-shrink`): renaming never
-touches page content and shrinking never touches the name.
+A `.txt` input gets the same rename and is held to a 1 KB floor instead of the
+ladder and the glyph check — a mirror download that stopped partway is the
+failure mode specific to plain text.
 
-### Shrinking an oversized scan
-
-```bash
-python3 tools/shrink-pdf.py --inspect scan.pdf        # what is in it
-python3 tools/shrink-pdf.py scan.pdf                  # -> scan-28MB.pdf
-```
-
-This is the size half on its own, for a file whose name is already what you
-want.
+Renaming, shrinking and the glyph check are independent passes: `--skip-rename`
+only checks the size and text layer, `--skip-shrink` only cleans the filename.
+`--dry-run` reports every pass and changes nothing. `--inspect` stands apart
+from both — it renames nothing and reports the ladder's rungs and the glyph
+check, the way `shrink-pdf.py --inspect` used to. `--force` re-encodes even a
+file already under the limit.
 
 PyMuPDF is nominally optional and worth installing anyway: it is what trims
-the ladder to the scan's own resolution. Without it the tool walks rungs that
-cannot do anything, a minute each on a large book, and can only report which
-compression filters it found in the raw bytes.
+the ladder to the scan's own resolution and is required for the glyph check.
+Without it the tool walks rungs that cannot do anything, a minute each on a
+large book, and can only report which compression filters it found in the raw
+bytes.
 
-On Windows, `tools/clean-pdf.ps1` and `tools/shrink-pdf.ps1` arrange the three
-things that have to be right before any of this works — a portable Ghostscript
-on PATH under its Windows name `gswin64c.exe`, a UTF-8 console so a book named
+On Windows, `tools/clean-pdf.ps1` arranges the three things that have to be
+right before any of this works — a portable Ghostscript on PATH under its
+Windows name `gswin64c.exe`, a UTF-8 console so a book named
 南怀瑾选集-典藏版-第05卷-扫描版.pdf prints instead of raising
 `UnicodeEncodeError`, and whichever of `python`/`python3`/`py` actually runs:
 
 ```powershell
 .\tools\clean-pdf.ps1 $env:USERPROFILE\Downloads\619294728-南怀瑾选集-第9卷-P699.pdf
 .\tools\clean-pdf.ps1 C:\scans\*.pdf -DryRun
-.\tools\shrink-pdf.ps1 C:\scans\book.pdf -Inspect
-.\tools\shrink-pdf.ps1 C:\scans\book.pdf -Quality 40 -Gray
+.\tools\clean-pdf.ps1 C:\scans\book.pdf -Inspect
+.\tools\clean-pdf.ps1 C:\scans\book.pdf -Quality 40 -Gray
 ```
 
-`clean-pdf.ps1` is the one to reach for after a download: it does the rename and
-the shrink. `shrink-pdf.ps1` is the size half alone, and keeps `-Inspect`,
-`-Force`, `-Output` and `-OutDir`, which belong to that tool. Both pass only the
-switches you actually gave, so the defaults stay the Python tool's own and the
-two cannot drift apart; `-Help` prints them from the tool itself.
-
-Neither changes directory, so relative paths still resolve, and both look for
-the portable build in `$env:USERPROFILE\ghostscript-portable\bin` unless
-`-GhostscriptDir` says otherwise. Missing Ghostscript stops `shrink-pdf.ps1`,
-which can do nothing without it, and only warns `clean-pdf.ps1`, which can still
-rename. The plumbing itself is in `tools/pdf-tools.ps1`, dot-sourced by both —
-all three are saved with a UTF-8 byte order mark, because Windows PowerShell 5.1
-reads a `.ps1` as ANSI without one and turns the Chinese in them into mojibake.
+It passes only the switches you actually gave, so the defaults stay the Python
+tool's own and the two cannot drift apart; `-Help` prints them from the tool
+itself. It does not change directory, so relative paths still resolve, and it
+looks for the portable build in `$env:USERPROFILE\ghostscript-portable\bin`
+unless `-GhostscriptDir` says otherwise. Missing Ghostscript is a warning, not
+an error — renaming does not need it and most files do not need shrinking at
+all. The plumbing itself is in `tools/pdf-tools.ps1`, dot-sourced by it; both
+are saved with a UTF-8 byte order mark, because Windows PowerShell 5.1 reads a
+`.ps1` as ANSI without one and turns the Chinese in them into mojibake.
 
 The upload limit is 100 MB, and it is not a number we chose: it is Adobe's
 ceiling for the Export PDF call and Cloudflare's request cap on this plan
 (docs/ARCHITECTURE.md and docs/STORAGE.md). A 400-page book scanned at 300dpi goes past it
 easily, and those are the books this library is for.
 
-`tools/shrink-pdf.py` re-encodes the page images at a lower resolution and
-changes nothing else — no pages dropped, no splitting, text and vectors carried
-through as text and vectors. It descends a resolution ladder and stops at the
-first rung under the limit, so the result is the best quality that fits rather
+The shrink ladder re-encodes the page images at a lower resolution and changes
+nothing else — no pages dropped, no splitting, text and vectors carried
+through as text and vectors. It descends the ladder and stops at the first
+rung under the limit, so the result is the best quality that fits rather
 than the smallest file it could make.
 
 The ladder stops at 200 dpi, because below that Adobe starts losing dense
@@ -271,8 +274,8 @@ is the bigger win for a black-and-white book photographed in colour, though it
 takes the red seals with it.
 
 The result is named for the size it came out at — `scan-28MB.pdf` — which is
-the one fact you wanted when the whole point was getting under a number. `-o`
-overrides it.
+the one fact you wanted when the whole point was getting under a number.
+`--output`/`-o` overrides it.
 
 `--quality` is a 0-100 scale over Ghostscript's `QFactor`, defaulting to 60,
 which is Ghostscript's own default. It is deliberately not `-dJPEGQ`: that
@@ -287,6 +290,7 @@ the book's PDF artifact and what a reader is sent — so shrinking is how a book
 gets in, not an archival step.
 
 ## Layout
+
 
 ```
 apps/web/                    the application — public site, API and admin

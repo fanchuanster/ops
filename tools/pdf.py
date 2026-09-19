@@ -1,26 +1,48 @@
-"""Shared engine behind tools/clean-pdf.py and tools/shrink-pdf.py.
+"""Prepare a downloaded scan for NobleSee: clean name, size, readable text.
 
-Both tools work on the same file at the same point of intake — a scan
-pulled from an archive mirror — and until now each carried its own copy
-of the size ladder, the upload limit, and the PyMuPDF plumbing that
-reads what is actually in a PDF. clean-pdf.py reached across the hyphen
-in shrink-pdf.py's filename with `importlib` to borrow that copy rather
-than duplicate it, which worked but meant one of the two tools could
-never be imported normally. This module is the thing that was actually
-shared: both CLIs import it by its ordinary name, and the ladder, the
-limit and the survey exist in exactly one place.
+This used to be an engine shared by two separate CLIs, tools/clean-pdf.py
+and tools/shrink-pdf.py, each with its own argparse and its own idea of
+which of the engine's checks to run. That split stopped earning its keep
+once both were thin wrappers doing nothing but forwarding flags: two
+scripts to keep in sync for one job, intake, with a rename half and a
+size half that most callers wanted together anyway. This module is now
+both the engine and the one CLI:
 
-Nothing here talks to argparse or prints a CLI's own banner — that stays
-in the two scripts, which differ in what they ask for and how they
-report it. What is here is what they agreed on: the upload limit, the
-resolution ladder, the Ghostscript invocation, what a survey of a scan
-looks like, and now a companion question neither used to answer —
-whether a PDF that survives a text extraction will actually render.
+    python3 tools/pdf.py --dry-run *.pdf
+    python3 tools/pdf.py 619294728-13230487-南怀瑾选集-第9卷-2013-03-P699.pdf
+    python3 tools/pdf.py --inspect scan.pdf
+    python3 tools/pdf.py scan.pdf --skip-rename --gray --quality 40
 
-A book can pass every check here and still be wrong for the library:
-this module answers "can Ghostscript rewrite it" and "does its own
-embedded font actually draw its own text", not "is this worth
-publishing".
+A file pulled from an archive mirror carries two unrelated problems, and
+running it through here answers both at the point of intake. The
+filename is a database id and a byte-range suffix wrapped around the
+title that actually matters, stripped and the file renamed in place. The
+scan is then measured against the 100 MB upload ceiling and, if it is
+over, handed to the resolution ladder — replacing the file in place, so
+what is left is one file at one clean name rather than an original with
+a smaller copy beside it. It is then asked the question neither
+predecessor used to: whether a PDF that survives a text extraction will
+actually render, or has collapsed to the same repeated code point
+(check_readability, below). A .txt input skips the ladder and the glyph
+check — it has no page images and no font — and is instead held to a
+1 KB floor, since a mirror download that stopped partway is the failure
+mode specific to plain text.
+
+--inspect reports what is in a file and changes nothing: no rename, no
+re-encoding. --skip-rename and --skip-shrink drop one pass and keep the
+other, since renaming never touches page content and shrinking never
+touches the name. --output and --out-dir redirect the shrunk result
+instead of replacing the input in place; --force re-encodes even a file
+already under the limit. Precise semantics and every other flag are on
+main()'s parser, which is the one place they are declared.
+
+Requires ghostscript for the shrink ladder. PyMuPDF (`pip install
+pymupdf`) is strongly recommended: without it the ladder cannot be
+trimmed to the scan's own resolution or checked for readability, and a
+survey falls back to counting compression filters in the raw bytes.
+
+This is a maintainer utility and not part of the runtime stack.
+Ghostscript is a native binary, and nothing native runs in the Worker.
 """
 
 import argparse
@@ -50,6 +72,14 @@ DEFAULT_MIN_DPI = 200
 DEFAULT_QUALITY = 60
 DEFAULT_MARGIN_MIB = 1
 DEFAULT_MONO_DPI = 300
+
+MIN_TEXT_BYTES = 1024
+"""A .txt source below this is a truncated download, not a short book.
+
+1 KB is generous — even a short poem clears it by a wide margin — so
+this only ever catches the failure mode specific to plain text: a
+mirror download that stopped partway, or an empty placeholder.
+"""
 
 
 def qfactor(quality: int) -> float:
@@ -1040,46 +1070,174 @@ def unique_path(path: Path) -> Path:
         n += 1
 
 
+def rename_clean(path: Path, dry_run: bool) -> Path:
+    """Strip the mirror-site cruft off a filename and rename in place.
+
+    Applies to a .txt input the same way as a .pdf — mirror sites hang
+    the same digit-and-byte-range prefix off a plain-text download as
+    they do off a scan.
+    """
+    cleaned = clean_stem(path.stem)
+    if not cleaned:
+        print("  name is nothing but digits and '-' -- leaving it as is")
+        return path
+    if cleaned == path.stem:
+        print("  name is already clean")
+        return path
+
+    dst = unique_path(path.with_name(f"{cleaned}{path.suffix}"))
+    if dst != path.with_name(f"{cleaned}{path.suffix}"):
+        print(f"  '{cleaned}{path.suffix}' is taken -- using '{dst.name}' instead")
+
+    print(f"  '{path.name}' -> '{dst.name}'")
+    if not dry_run:
+        path.rename(dst)
+    return path if dry_run else dst
+
+
+def check_min_size(path: Path) -> bool:
+    """Reject a plain-text source too small to be a real book."""
+    size = path.stat().st_size
+    if size >= MIN_TEXT_BYTES:
+        print(f"  {human(size)} -- at or above the {human(MIN_TEXT_BYTES)} floor")
+        return True
+    print(f"  {human(size)} -- under the {human(MIN_TEXT_BYTES)} floor, likely truncated or empty")
+    return False
+
+
+def shrink_if_needed(path: Path, args: argparse.Namespace) -> bool:
+    """Hand an oversized (or, with --force, any) file to the ladder.
+
+    --output and --out-dir redirect the winner instead of replacing the
+    input: the ladder writes its winner where it is told and refuses to
+    write over its own input, so an in-place replacement is a shrink to
+    a scratch name beside the original and then a rename, which is what
+    leaves one file at one clean name rather than an original with a
+    smaller copy sitting next to it. --keep-original skips that rename
+    and names the copy for the size it came out at instead, the way a
+    bare shrink does.
+
+    shrink() itself is what actually decides whether there is anything
+    to do (it already knows --force), so this is only responsible for
+    working out where the result should land.
+    """
+    if args.dry_run:
+        limit, source = upload_limit()
+        size = path.stat().st_size
+        if size <= limit and not args.force:
+            print(f"  {human(size)}, under the {human(limit)} limit -- nothing to shrink")
+        else:
+            print(f"  {human(size)}, over the {human(limit)} limit ({source}) -- would shrink")
+        return True
+
+    limit, _source = upload_limit()
+    target = int(limit - args.margin * MIB)
+
+    if args.output or args.out_dir:
+        out_dir = args.output.parent if args.output else args.out_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return shrink(path, out_dir, args.output, target, args)
+
+    if args.keep_original:
+        return shrink(path, path.parent, None, target, args)
+
+    scratch = path.with_name(f"{path.stem}.shrinking{path.suffix}")
+    ok = shrink(path, path.parent, scratch, target, args)
+    if ok and scratch.exists():
+        scratch.replace(path)
+    elif scratch.exists():
+        scratch.unlink()
+    return ok
+
+
+def process_one(path: Path, args: argparse.Namespace) -> bool:
+    """Run rename plus the format-appropriate checks on one file, in order.
+
+    --inspect is report-only and stands apart from the rest of this:
+    nothing is renamed and nothing is written, so it is answered before
+    any other step runs, for both formats.
+
+    Otherwise each step can fail independently, and none of them is
+    worth running past a failure: a renamed-but-still-oversized file is
+    not one the ladder should be pointed at again under a name that no
+    longer matches what's on disk, so the first failing step stops the
+    file right there. Returns False for a step that failed outright, or
+    one that ran cleanly but reports the file as unusable, and True only
+    for a file that cleared every check that applies to its format.
+    """
+    print(f"{path.name}")
+
+    if args.inspect:
+        if path.suffix.lower() == ".txt":
+            print(f"  {human(path.stat().st_size)} -- text source, no ladder to inspect")
+            return True
+        describe(path, survey(path), check_readability(path))
+        return True
+
+    current = path
+    if not args.skip_rename:
+        current = rename_clean(current, args.dry_run)
+
+    if current.suffix.lower() == ".txt":
+        if not check_min_size(current):
+            return False
+        return True
+
+    if not args.skip_shrink:
+        if not shrink_if_needed(current, args):
+            print(f"  {current.name}: shrink failed -- stopping")
+            return False
+
+    found = check_readability(current)
+    describe_readability(current, found)
+    if found is None or not found.readable():
+        return False
+
+    return True
+
+
 def _cli_error(message: str) -> int:
     print(message, file=sys.stderr)
     return 2
 
 
 def _main() -> int:
-    """`python tools/pdf.py --check-readable file.pdf [...]`.
-
-    The library has no CLI banner of its own by design (clean-pdf.py and
-    shrink-pdf.py own that), but the glyph check is useful standalone —
-    this is the one entry point kept here, for exactly that.
-    """
     parser = argparse.ArgumentParser(
-        description="Shared PDF engine for clean-pdf.py and shrink-pdf.py.",
+        description="Clean a downloaded book's filename, size and text layer for NobleSee.",
     )
-    parser.add_argument("pdf", nargs="+", type=Path)
+    parser.add_argument("pdf", metavar="file", nargs="+", type=Path, help=".pdf and/or .txt sources")
+    parser.add_argument("--dry-run", action="store_true", help="show what would happen, change nothing")
+    parser.add_argument("--skip-rename", action="store_true", help="only run the size / glyph checks")
+    parser.add_argument("--skip-shrink", action="store_true", help="only clean the filename (PDFs)")
     parser.add_argument(
-        "--check-readable",
+        "--keep-original",
         action="store_true",
-        help="check whether the embedded fonts can draw the file's own text",
+        help="leave the input alone and write the shrunk copy beside it, named for its size",
     )
+    parser.add_argument("--inspect", action="store_true", help="report what is in each file and change nothing")
+    parser.add_argument("-o", "--output", type=Path, help="write the shrunk result here (single input only)")
+    parser.add_argument("--out-dir", type=Path, help="write results here instead of beside each input")
+    parser.add_argument("--force", action="store_true", help="re-encode even a file already under the limit")
+    parser.add_argument("--min-dpi", type=int, default=DEFAULT_MIN_DPI, help="passed through to the shrink ladder")
+    parser.add_argument("--quality", type=int, default=DEFAULT_QUALITY, help="passed through to the shrink ladder")
+    parser.add_argument("--mono-dpi", type=int, default=DEFAULT_MONO_DPI, help="passed through to the shrink ladder")
+    parser.add_argument("--gray", action="store_true", help="discard colour before re-encoding")
+    parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN_MIB, metavar="MB", help="headroom under the upload limit, in MB")
     args = parser.parse_args()
 
-    if not args.check_readable:
-        return _cli_error("Nothing to do — pdf.py is a library; try --check-readable.")
+    if args.output and len(args.pdf) > 1:
+        return _cli_error("--output takes one input; use --out-dir for several")
 
-    failed = 0
     for path in args.pdf:
         if not path.is_file():
             print(f"{path}: no such file")
-            failed += 1
-            continue
-        found = check_readability(path)
-        print(f"{path.name}")
-        describe_readability(path, found)
-        if found is not None and not found.readable():
-            failed += 1
+            return 1
+
+        if not process_one(path, args):
+            return 1
         print()
 
-    return 1 if failed else 0
+    return 0
 
 
 if __name__ == "__main__":
