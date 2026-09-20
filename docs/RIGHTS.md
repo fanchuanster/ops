@@ -32,6 +32,20 @@ to everyone else. Unknown rights block submission entirely: the uploader
 is the only person who knows where their material came from, and that is
 the one moment in the flow when the question is easy to answer.
 
+**The stored default is `public_domain`, and that weakens the second
+approval to a backstop rather than a gate.** It was set deliberately on
+2026-09-20: this catalog is overwhelmingly pre-modern Chinese texts
+entered by the maintainer, for which `unknown` was a false negative on
+nearly every row. The cost is that a book which never reaches the rights
+question is now recorded as public domain rather than flagged, so the
+claim carries no evidence that anyone looked. Two consequences follow.
+The uploader's answer on the details form is the only real rights
+determination in the system, so that field must stay required and must
+never be silently skipped. And a reviewer cannot read `public_domain` as
+"someone checked" — before approving an owned book, look at what it
+actually is. A recent commercial title carrying this default is a
+mislabelling, not a licence.
+
 **Two questions, not two buttons.** Approving publishes, in the same
 act. Separating them produced a state nobody could explain to an
 uploader — an "Approved" chip on a book still invisible to every reader.

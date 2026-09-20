@@ -262,7 +262,7 @@ export const Books: CollectionConfig = {
       access: adminOnlyField,
       type: 'select',
       required: true,
-      defaultValue: 'unknown',
+      defaultValue: 'public_domain',
       index: true,
       options: RIGHTS_STATUSES.map((value) => ({ label: value, value })),
       admin: {
