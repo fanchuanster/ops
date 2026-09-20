@@ -120,7 +120,8 @@ rather than restated so the copies cannot drift.
 
 What they mean here:
 
-- **Never bare `console.*`** — the project has a logger.
+- **Never bare `console.*`** — the project has a logger: `logError` and
+  `logWarn` in `lib/logError.ts`.
 - **Reuse means the domain layer for rules and the lib layer for I/O.**
   Look there before adding a function.
 - **Rules are pure functions.** Test the case, name the test after it.
@@ -129,6 +130,28 @@ What they mean here:
 
 Python- or MSM-specific rules belong in the Python house file, not the
 imported core.
+
+**`npm run vibe-check` is the linter** — `tsc --noEmit && eslint .`, a
+flat config over typescript-eslint's recommended set and Next's
+core-web-vitals. It makes the logger rule machine-enforced rather than
+remembered, and what it deliberately does *not* say is the part worth
+recording:
+
+- **`no-console` is off in `scripts/**` and `src/seed/**`**, whose
+  printed output *is* their interface, and in `lib/logError.ts`, which
+  is the logger itself. Everywhere else a bare `console.*` fails.
+- **`no-img-element` and `no-html-link-for-pages` are off.** Both are
+  deliberate here: covers stream through the app's own route rather than
+  an image optimizer (STORAGE.md 14), and a plain `<a>` is how the site
+  navigates without shipping a router to the browser (FRONTEND.md).
+- **Unused arguments are not checked in `src/migrations/**`**, where
+  `{ db, payload, req }` is the signature `payload migrate:create`
+  writes, not something a person chose.
+
+Three findings are left as **warnings rather than silenced**, because
+they are real and fixing them changes runtime behaviour: `Date.now()`
+during render in `ConversionProgress`, a synchronous `setState` in an
+effect in `Reader`, and `window.location.assign` in `UploadForm`.
 
 ## 2.4 Working in this repo
 

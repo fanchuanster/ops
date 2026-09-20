@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { SendToKindleButton } from '../../../../components/SendToKindleButton'
+import { byDisplayOrder } from '../../../../domain/conversion'
 import { coverAltFor, coverImageUrl, uploadedCoverId } from '../../../../domain/cover'
 import { priceInCredits } from '../../../../domain/credits'
 import { isKindleDeliverableFormat } from '../../../../domain/kindle'
@@ -14,8 +15,6 @@ import { getBookBySlug } from '../../../../lib/catalog'
 import { ownsBook } from '../../../../lib/credits'
 
 export const dynamic = 'force-dynamic'
-
-const FORMAT_ORDER = ['epub', 'pdf', 'docx']
 
 const RIGHTS_LABEL: Record<string, string> = {
   public_domain: 'Public domain',
@@ -57,7 +56,7 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
 
   const artifacts = (book.artifacts ?? [])
     .filter((a) => a.downloadable !== false)
-    .sort((a, b) => FORMAT_ORDER.indexOf(a.format) - FORMAT_ORDER.indexOf(b.format))
+    .sort(byDisplayOrder)
 
   const readable = readingFormat(artifacts.map((a) => a.format)) !== null
   const distributable = isPubliclyDistributable(book.rightsStatus)

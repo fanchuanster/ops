@@ -35,6 +35,13 @@ choice is threaded through the authorization so the bytes served match
 the reader that opened. A reader who edits it to something absent gets
 the best edition, never someone else's file.
 
+**Their order is `FORMAT_DISPLAY_ORDER` in `domain/conversion.ts`** —
+pdf, txt, docx, epub — and it is a fixed list rather than whatever order
+the artifacts were written in, so the same book offers the same chips in
+the same place on every screen that shows them. A format missing from
+the list sorts last; it used to sort first, because an unranked format
+scored -1.
+
 **`/books` shows the whole shelf tree, so it must ask for the whole
 catalog.** One query feeds every shelf on that page, and the catalog is
 sorted globally by order id, so a page-sized limit does not cut the

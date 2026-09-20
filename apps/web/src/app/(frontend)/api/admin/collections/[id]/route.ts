@@ -1,7 +1,6 @@
 import { APIError } from 'payload'
 
 import { parseCollectionUpdate } from '../../../../../../domain/adminApi'
-import { parentIdOf } from '../../../../../../domain/collectionTree'
 import { adminFromRequest, unauthorized } from '../../../../../../lib/apiAuth'
 import { logError } from '../../../../../../lib/logError'
 import { revalidateCuration } from '../../shared'

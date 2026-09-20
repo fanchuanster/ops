@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "//deploy": "opennextjs-cloudflare deploy uploads the script but does NOT attach cron triggers — the schedule record exists and nothing fires. `wrangler triggers deploy` applies them, and is what starts the conversion clock.",
-  "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy && wrangler triggers deploy",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy && wrangler triggers deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "//payload": "NEXT_RUNTIME=nodejs lets the Payload CLI resolve the D1 and R2 bindings through wrangler's local Miniflare, the same way next dev does.",
     "payload": "NEXT_RUNTIME=nodejs payload",
@@ -34,6 +34,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:boundary": "sh scripts/check-domain-boundary.sh",
+    "vibe-check": "tsc --noEmit && eslint .",
     "verify": "npm run generate:types && npm run check:boundary && npm run typecheck && npm run test"
   },
   "dependencies": {
@@ -58,7 +59,10 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.0",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.10",
     "wrangler": "^4.122.0"
   },

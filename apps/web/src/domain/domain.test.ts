@@ -59,7 +59,6 @@ import {
 } from './rights'
 
 const NOW = new Date('2026-08-12T12:00:00Z')
-const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000)
 
 describe('rights', () => {
   it('fails closed on unknown status', () => {

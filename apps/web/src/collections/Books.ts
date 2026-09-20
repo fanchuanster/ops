@@ -3,12 +3,13 @@ import { APIError } from 'payload'
 
 import { BOOK_LEVELS, DEFAULT_BOOK_LEVEL, LEVEL_DESCRIPTIONS, LEVEL_IDS } from '../domain/levels'
 import {
-  ADMIN_ONLY_BOOK_FIELDS,
   type PublicationBlockedReason,
   REVIEW_STATES,
   canPublishToLibrary,
 } from '../domain/moderation'
 import { priceInCredits } from '../domain/credits'
+import { renamedSlug } from '../domain/slug'
+import { freeBookSlug } from '../lib/bookSlug'
 import { nextOrderId } from '../domain/shelfOrder'
 import { DISTRIBUTABLE_STATUSES, RIGHTS_STATUSES } from '../domain/rights'
 
@@ -123,6 +124,24 @@ const assignCollectionOrder: CollectionBeforeChangeHook = async ({
   }
 }
 
+const slugFollowsTitle: CollectionBeforeChangeHook = async ({
+  data,
+  operation,
+  originalDoc,
+  req,
+}) => {
+  if (operation !== 'update' || !data || !originalDoc) return data
+
+  const title = typeof data.title === 'string' ? data.title : null
+  if (!title || title === originalDoc.title) return data
+  if (typeof data.slug === 'string' && data.slug !== originalDoc.slug) return data
+
+  const renamed = renamedSlug(originalDoc.slug ?? '', originalDoc.title ?? '', title)
+  if (!renamed) return data
+
+  return { ...data, slug: await freeBookSlug(req.payload, renamed, originalDoc.id) }
+}
+
 const PUBLICATION_ERRORS: Record<PublicationBlockedReason, string> = {
   not_submitted: 'it has not been submitted for review.',
   awaiting_review: 'its submission is still awaiting review.',
@@ -151,7 +170,12 @@ export const Books: CollectionConfig = {
     read: readBooks,
   },
   hooks: {
-    beforeChange: [enforcePublicationReview, priceFromPageCount, assignCollectionOrder],
+    beforeChange: [
+      enforcePublicationReview,
+      priceFromPageCount,
+      assignCollectionOrder,
+      slugFollowsTitle,
+    ],
   },
   fields: [
     {

@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react'
 
+import { logWarn } from '../lib/logError'
+
 const GSI_SRC = 'https://accounts.google.com/gsi/client'
 
 declare global {
@@ -83,7 +85,7 @@ export function GoogleOneTap() {
               window.location.assign(body.next || next)
               return
             }
-            console.warn('[NobleSee] One Tap sign-in was refused:', body.message ?? result.status)
+            logWarn('auth.google.one-tap', body.message ?? result.status)
           },
           use_fedcm_for_prompt: true,
           cancel_on_tap_outside: false,

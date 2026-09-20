@@ -16,6 +16,7 @@ import { MasterFile } from '../../../../../components/MasterFile'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { Stepper } from '../../../../../components/Stepper'
 import { buildTree, flattenTree } from '../../../../../domain/collectionTree'
+import { byDisplayOrder } from '../../../../../domain/conversion'
 import {
   chosenCoverPage,
   coverAltFor,
@@ -78,6 +79,7 @@ export default async function BookDetailsPage({
 
   const deliverable = (book.artifacts ?? [])
     .filter((artifact) => isKindleDeliverableFormat(artifact.format))
+    .sort(byDisplayOrder)
     .map((artifact) => ({ format: artifact.format, bytes: artifact.bytes }))
 
   const sourceKind = readSourceKind(book.conversion ?? {})

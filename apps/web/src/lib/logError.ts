@@ -13,6 +13,10 @@ export function describeError(error: unknown): string {
   }
 }
 
+export function logWarn(where: string, detail: unknown): void {
+  console.warn(`${PREFIX} ${where} — ${describeError(detail)}`)
+}
+
 export function logError(where: string, error: unknown): void {
   console.error(`${PREFIX} ${where} — ${describeError(error)}`)
   if (error instanceof Error && error.stack) console.error(error.stack)

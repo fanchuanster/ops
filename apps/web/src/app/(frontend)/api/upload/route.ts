@@ -16,6 +16,7 @@ import {
 } from '../../../../domain/publication'
 import { ADD_SOURCE_ERRORS, canAddSource } from '../../../../domain/sources'
 import { bookSlug } from '../../../../domain/slug'
+import { freeBookSlug } from '../../../../lib/bookSlug'
 import type { Book } from '../../../../payload-types'
 import { getCurrentUser } from '../../../../lib/auth'
 import { extractMetadata, r2Source } from '../../../../lib/extractMetadata'
@@ -127,8 +128,6 @@ export async function POST(request: Request): Promise<Response> {
   const suggested = await extractMetadata(source)
 
   const title = (suggested.title || filename.replace(/\.[^.]+$/, '')).trim()
-  const slug = bookSlug(suggested.title ?? '', jobId.slice(0, 8))
-
   const existing = await payload.find({
     collection: 'books',
     where: { title: { equals: title } },
@@ -143,6 +142,8 @@ export async function POST(request: Request): Promise<Response> {
       `“${title}” is already in the library. If this is a different edition, rename the file to say which one it is and upload it again.`,
     )
   }
+
+  const slug = await freeBookSlug(payload, bookSlug(title))
 
   try {
     const created = await payload.create({

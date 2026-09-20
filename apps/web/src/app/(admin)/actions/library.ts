@@ -61,8 +61,9 @@ export async function saveBookDetails(
     return { error: `Another book is already called “${title}”. Titles have to be unique.` }
   }
 
+  let saved
   try {
-    await payload.update({
+    saved = await payload.update({
       collection: 'books',
       id: bookId,
       data: {
@@ -87,6 +88,7 @@ export async function saveBookDetails(
 
   revalidateLibrary()
   revalidatePath(`/books/${String(formData.get('slug') ?? '')}`)
+  revalidatePath(`/books/${saved.slug}`)
   return { ok: 'Saved.' }
 }
 

@@ -22,7 +22,7 @@ import {
   completedState,
   inProgressState,
 } from '../../domain/pipeline'
-import { originalArtifact, readSourceKind } from '../../domain/publication'
+import { readSourceKind } from '../../domain/publication'
 import { suggestCorrections } from '../../domain/proofread'
 import { readText } from '../../domain/textSource'
 import { artifactBytes, putObject } from '../storage'

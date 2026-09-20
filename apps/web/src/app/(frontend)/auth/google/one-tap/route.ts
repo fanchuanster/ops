@@ -5,6 +5,7 @@ import { getCurrentUser, safeNext } from '../../../../../lib/auth'
 import { verifyGoogleIdTokenSignature } from '../../../../../lib/googleIdToken'
 import { OAUTH_COOKIE_MAX_AGE, googleOAuthConfig, randomToken } from '../../../../../lib/googleOAuth'
 import { sessionForGoogleProfile } from '../../../../../lib/googleSession'
+import { logWarn } from '../../../../../lib/logError'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
 }
 
 function refuse(reason: string, message: string, status: number) {
-  console.warn(`one-tap refused: ${reason}`)
+  logWarn('auth.google.one-tap', `refused: ${reason}`)
   return NextResponse.json({ ok: false, message }, { status })
 }
 

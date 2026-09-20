@@ -77,13 +77,32 @@ not been taken.
 
 **Never build a key from the slug.** An editor can correct a slug, and a
 corrected title renames the link on its own, so a key built from one
-would move when a book is renamed. An id does not change, ever. Two
-rules bound that rename: **only a generated slug is rebuilt**, so one an
-editor wrote by hand is never touched; and **the uniqueness suffix is
-kept**, so a rename that collides with another book still resolves. A
+would move when a book is renamed. An id does not change, ever.
+
+**A slug is the book's name and nothing else.** It used to carry the
+upload's job id as an eight-character suffix, which made every link read
+like `100556018-讓生命恢復純淨-035942b5` — the scanner's filename and a
+random tail, shared by a reader who wanted to say what the book was. The
+suffix bought uniqueness the title already gives: titles are unique in
+this collection, so `domain/slug.ts` builds the slug from the title
+alone and `lib/bookSlug.ts` counts a `-2` onto it only when the name is
+genuinely taken. What a reader copies now reads as the book.
+
+Two rules bound the rename. **Only a generated slug is rebuilt**: with
+no suffix left to mark one, a slug counts as generated when it is the
+*previous* title's slug, with or without its number, so one an editor
+wrote by hand is still never touched. And **the rename lives in a
+`beforeChange` hook on the books collection**, not in the screen that
+happens to save the title — it was in one screen, the uploader's, and
+every book an administrator retitled kept the filename in its URL. A
 renamed book's old URL stops working, which is the honest cost and the
 reason this is keyed on the title actually changing rather than run on
 every save.
+
+The backfill is `20260919_210000_title_slugs`, which rewrites every slug
+still carrying the old suffix. Its `down` restores nothing: the job id
+it would put back is not recoverable from the row, and a link built on
+one was never worth keeping.
 
 **The path is not the link.** A book still reaches its objects through
 the keys it stores, read back and never recomputed, and that rule did

@@ -1,6 +1,6 @@
 import { zipSync, strToU8 } from 'fflate'
 
-import { type BlockKind, type Document, blockText } from '../../domain/document'
+import { type BlockKind, type Document } from '../../domain/document'
 import { escapeXml, stripInvalidXmlChars } from './xml'
 
 const LATIN_FONT = 'Times New Roman'

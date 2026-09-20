@@ -204,7 +204,7 @@ export function parseResponse(raw: string): Array<Record<string, unknown>> {
   let data: unknown
   try {
     data = JSON.parse(text)
-  } catch (error) {
+  } catch {
     throw new Error(`response was not JSON: ${text.slice(0, 200)}`)
   }
 

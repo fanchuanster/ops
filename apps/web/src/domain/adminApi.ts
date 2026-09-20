@@ -154,9 +154,3 @@ const nullableId: Reader = (value) => {
   }
   return { ok: true, value }
 }
-
-const nullableInteger: Reader = (value) => {
-  if (value === null) return { ok: true, value: null }
-  if (!Number.isInteger(value)) return { ok: false, message: 'Expected a whole number, or null.' }
-  return { ok: true, value }
-}

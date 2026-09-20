@@ -7,7 +7,7 @@ import {
   canNest,
   parentIdOf,
 } from '../domain/collectionTree'
-import { DEFAULT_CHILD_ORDER, SHELF_SORTS, nextOrderId } from '../domain/shelfOrder'
+import { DEFAULT_CHILD_ORDER, nextOrderId } from '../domain/shelfOrder'
 
 const NESTING_ERRORS: Record<NestingRefusal, string> = {
   self: 'A collection cannot be filed under itself.',

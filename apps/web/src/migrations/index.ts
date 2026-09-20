@@ -29,6 +29,7 @@ import * as migration_20260914_160000_export_retries from './20260914_160000_exp
 import * as migration_20260916_220000_drop_original_title from './20260916_220000_drop_original_title';
 import * as migration_20260918_120000_media_prefix from './20260918_120000_media_prefix';
 import * as migration_20260919_180000_drop_visibility from './20260919_180000_drop_visibility';
+import * as migration_20260919_210000_title_slugs from './20260919_210000_title_slugs';
 
 export const migrations = [
   {
@@ -185,5 +186,10 @@ export const migrations = [
     up: migration_20260919_180000_drop_visibility.up,
     down: migration_20260919_180000_drop_visibility.down,
     name: '20260919_180000_drop_visibility'
+  },
+  {
+    up: migration_20260919_210000_title_slugs.up,
+    down: migration_20260919_210000_title_slugs.down,
+    name: '20260919_210000_title_slugs'
   },
 ];

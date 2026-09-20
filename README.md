@@ -137,7 +137,15 @@ act on the wrong database while reporting success.
 ```bash
 cd apps/web
 ./cf npm run verify   # generate types, domain-boundary check, typecheck, unit tests
+npm run vibe-check    # typecheck and lint — no container, nothing touches a binding
 ```
+
+`vibe-check` is the fast one and runs on the host: `tsc --noEmit && eslint .`
+needs neither wrangler nor a D1 binding. `verify` still needs `./cf`, because
+its first step generates Payload's types against local D1 — and a stale
+`src/payload-types.ts` is not a harmless staleness: it is the file `tsc` checks
+every `payload.create` against, so a field removed from a collection keeps
+failing the typecheck until the types are regenerated.
 
 ```bash
 ./tools/smoke-test.sh                                # HTTP-level checks, localhost:8787

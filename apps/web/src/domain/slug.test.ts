@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { autoSlugSuffix, bookSlug, renamedSlug, slugify } from './slug'
+import { bookSlug, disambiguated, isGeneratedFrom, renamedSlug, slugify } from './slug'
 
 describe('slugify', () => {
   it('keeps the reader own characters, because a book name is the point', () => {
@@ -17,30 +17,47 @@ describe('slugify', () => {
   })
 })
 
-describe('the suffix that marks a generated slug', () => {
-  it('is the eight hex characters an upload appends', () => {
-    expect(autoSlugSuffix('參禪日記-a9da0a77')).toBe('a9da0a77')
+describe('the slug a book is born with', () => {
+  it('is the title and nothing else', () => {
+    expect(bookSlug('讓生命恢復純淨')).toBe('讓生命恢復純淨')
   })
 
-  it('is absent from a slug somebody wrote by hand', () => {
-    expect(autoSlugSuffix('tao-te-ching-ch1')).toBeNull()
+  it('falls back rather than being empty', () => {
+    expect(bookSlug('!!!')).toBe('book')
+  })
+
+  it('is counted up only when a second book wants the same name', () => {
+    expect(disambiguated('心經', 1)).toBe('心經')
+    expect(disambiguated('心經', 2)).toBe('心經-2')
+  })
+})
+
+describe('telling a generated slug from one an editor wrote', () => {
+  it('recognises the title it was built from', () => {
+    expect(isGeneratedFrom('心經', '心經')).toBe(true)
+    expect(isGeneratedFrom('心經-2', '心經')).toBe(true)
+  })
+
+  it('does not claim a slug that says something else', () => {
+    expect(isGeneratedFrom('tao-te-ching-ch1', 'Tao Te Ching')).toBe(false)
+    expect(isGeneratedFrom('心經-annotated', '心經')).toBe(false)
   })
 })
 
 describe('renaming a book renames its link', () => {
-  it('rebuilds the slug from the corrected title, keeping the suffix', () => {
-    expect(renamedSlug('746400367-參禪日記2024-a9da0a77', '參禪日記')).toBe('參禪日記-a9da0a77')
+  it('rebuilds the slug from the corrected title', () => {
+    expect(renamedSlug('參禪日記2024', '參禪日記2024', '參禪日記')).toBe('參禪日記')
   })
 
   it('leaves a hand-written slug alone, because an editor chose it', () => {
-    expect(renamedSlug('tao-te-ching-ch1', 'Tao Te Ching')).toBeNull()
+    expect(renamedSlug('tao-te-ching-ch1', 'Tao Te Ching', 'Tao Te Ching 道德經')).toBeNull()
   })
 
   it('says nothing changed when the title slugifies to what is already there', () => {
-    expect(renamedSlug('analects-a9da0a77', 'Analects')).toBeNull()
+    expect(renamedSlug('analects', 'Analects', 'Analects.')).toBeNull()
   })
 
-  it('falls back rather than producing a slug that is only a suffix', () => {
-    expect(bookSlug('!!!', 'a9da0a77')).toBe('book-a9da0a77')
+  it('renames a slug that carries a uniqueness number', () => {
+    expect(renamedSlug('心經-2', '心經', '般若心經')).toBe('般若心經')
   })
 })

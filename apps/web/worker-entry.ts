@@ -1,5 +1,7 @@
 import worker from 'open-next-worker'
 
+import { logError } from './src/lib/logError'
+
 export { BucketCachePurge, DOQueueHandler, DOShardedTagCache } from 'open-next-worker'
 
 interface Env {
@@ -26,7 +28,7 @@ export default {
         const response = await worker.fetch(request, env, ctx)
         const body = await response.text()
         if (!response.ok) {
-          console.error(`conversion tick: HTTP ${response.status} ${body.slice(0, 200)}`)
+          logError('conversion tick', `HTTP ${response.status} ${body.slice(0, 200)}`)
         }
       })(),
     )
