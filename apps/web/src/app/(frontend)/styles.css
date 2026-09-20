@@ -864,14 +864,14 @@ h3 {
   font-family: var(--font-sans);
 }
 
-.upload-form label:not(.plan-card) {
+.upload-form label {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.875rem;
 }
 
-.upload-form label:not(.plan-card) > span {
+.upload-form label > span {
   color: var(--ink-soft);
   font-weight: 600;
 }
@@ -1410,6 +1410,12 @@ h3 {
 
 .cta--compact {
   padding: 0.45rem 1.1rem;
+}
+
+.cta--quiet {
+  background: var(--paper-raised);
+  border-color: var(--rule);
+  color: var(--ink);
 }
 
 .cta--onaccent {
@@ -2896,120 +2902,81 @@ h3 {
   cursor: not-allowed;
 }
 
-.plan-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.split-button {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
 }
 
-.plan-cards legend {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--ink-soft);
-  padding: 0 0 0.75rem;
+.split-button .cta {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
-.plan-card {
-  display: block;
-  padding: 1rem;
-  border: 2px solid var(--rule);
-  border-radius: 0.75rem;
-  background: var(--paper-raised);
-  cursor: pointer;
-}
-
-.plan-card:hover {
-  border-color: var(--ink-faint);
-}
-
-.plan-card:has(input:checked) {
-  border-color: var(--accent);
-}
-
-.plan-card:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.plan-card input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.plan-card__tag {
-  display: inline-block;
-  margin-bottom: 0.65rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  background: var(--rule-soft);
-  font-family: var(--font-sans);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--ink-soft);
-}
-
-.plan-card__tag--recommended {
+.split-button__toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.95rem;
+  border: 1px solid transparent;
+  border-left: 1px solid var(--rule-soft);
+  border-radius: 0 999px 999px 0;
   background: var(--accent);
   color: var(--paper-raised);
-}
-
-.plan-card strong {
-  display: block;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  margin-bottom: 0.25rem;
-}
-
-.ai-consent {
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-  margin-top: 1rem;
-  padding: 1rem;
-  border: 1px solid var(--rule-soft);
-  border-radius: 0.75rem;
-  background: var(--paper-raised);
+  font-size: 0.7rem;
   cursor: pointer;
 }
 
-.ai-consent input {
-  margin-top: 0.2rem;
-  flex: 0 0 auto;
+.split-button--quiet .split-button__toggle {
+  border-color: var(--rule);
+  background: var(--paper-raised);
+  color: var(--ink);
 }
 
-.ai-consent > span {
+.split-button__toggle:hover {
+  opacity: 0.9;
+}
+
+.split-button__menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 5;
+  width: max(100%, min(22rem, 80vw));
+  padding: 0.35rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.75rem;
+  background: var(--paper-raised);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 12%);
+  text-align: left;
+}
+
+.split-button__item {
   display: block;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: none;
+  color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  line-height: 1.6;
-  color: var(--ink-faint);
-}
-
-.ai-consent strong {
-  display: block;
   font-size: 0.875rem;
-  color: var(--ink-soft);
-  margin-bottom: 0.2rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
 }
 
-.plan-card__sends,
-.notice--sends {
-  margin-top: 0.6rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--rule-soft);
-  color: var(--ink-faint);
+.split-button__item:hover {
+  background: var(--rule-soft);
 }
 
-.plan-card span:not(.plan-card__tag) {
+.split-button__note {
   display: block;
+  padding: 0 0.7rem 0.45rem;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  line-height: 1.6;
-  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ink-faint);
 }
 
 .rights {

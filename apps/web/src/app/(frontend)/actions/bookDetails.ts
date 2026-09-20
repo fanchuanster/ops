@@ -26,6 +26,7 @@ import { renamedSlug } from '../../../domain/slug'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import {
   needsConverter,
+  readPlanChoice,
   readSourceKind,
   reopensForConversion,
   resolvePlan,
@@ -86,7 +87,7 @@ export async function saveBookDetails(
 
   const sourceKind = readSourceKind(book.conversion ?? {})
   const previousPlan = resolvePlan(sourceKind, book.conversion?.plan)
-  const plan = resolvePlan(sourceKind, formData.get('plan'))
+  const { plan, aiCorrection } = readPlanChoice(sourceKind, formData.get('planChoice'))
 
   const startsConverting =
     alreadyConverting && reopensForConversion(sourceKind, previousPlan, plan)
@@ -145,7 +146,7 @@ export async function saveBookDetails(
           state: nextState,
           ...releasedExportHandle(nextState),
           plan,
-          aiCorrection: formData.get('aiCorrection') === 'on',
+          aiCorrection,
           startedAt: startsConverting
             ? new Date().toISOString()
             : (book.conversion?.startedAt ?? new Date().toISOString()),

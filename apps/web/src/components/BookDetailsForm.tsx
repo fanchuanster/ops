@@ -4,9 +4,9 @@ import { type CSSProperties, useActionState, useState } from 'react'
 
 import { saveBookDetails, type DetailsState } from '../app/(frontend)/actions/bookDetails'
 import {
+  AI_PLAN_CHOICE,
   type PublicationPlan,
   type SourceKind,
-  defaultPlanFor,
   plansFor,
 } from '../domain/publication'
 import { FIRST_ORDER_ID, MAX_ORDER_ID } from '../domain/shelfOrder'
@@ -30,70 +30,96 @@ export interface EditableBook {
   collectionOrder: number | null
   sourceKind: SourceKind
   plan: PublicationPlan
-  aiCorrection: boolean
 }
+
+const AI_NOTE =
+  'Sends your book\u2019s text to xAI, outside NobleSee. A person reviews every suggestion.'
 
 const PLAN_COPY: Record<
   SourceKind,
-  Partial<
-    Record<PublicationPlan, { tag: string; label: string; detail: string; sends?: string }>
-  >
+  Partial<Record<PublicationPlan, { label: string; sends?: string }>>
 > = {
   pdf: {
+    as_is: { label: 'Submit PDF for Review' },
     convert: {
-      tag: 'Best to read',
       label: 'Convert & Generate',
-      detail:
-        'Pages are read and text is rebuilt to reflow — adjustable size, chapter navigation, readable on any device. Produces an EPUB. Takes a while, and you can start it later.',
       sends:
-        'Your file is sent to Adobe’s PDF Services, outside NobleSee, to have its pages read. Only choose this for material you are willing to hand to them.',
-    },
-    as_is: {
-      tag: 'Recommended',
-      label: 'Submit PDF for Review',
-      detail:
-        'Publish exactly what you uploaded, ready straight away. Perfect fidelity — but text won’t reflow, so it can’t adapt to a Kindle’s screen. Convert later if you change your mind.',
-      sends: 'Nothing leaves NobleSee. Your file is stored and published as it is.',
+        'Converting sends your PDF to Adobe PDF Services, outside NobleSee, to have its pages read.',
     },
   },
   text: {
-    convert: {
-      tag: 'Best to read',
-      label: 'Convert & Generate',
-      detail:
-        'Your text is rebuilt into a structured book — chapters, a contents list, a proper EPUB. Takes a while, and you can start it later.',
-      sends: 'Converted here. Nothing leaves NobleSee unless you ask for AI correction below.',
-    },
-    as_is: {
-      tag: 'Recommended',
-      label: 'Submit text for Review',
-      detail:
-        'Publish the text exactly as you uploaded it, ready straight away. It already reflows, so it reads and sends to a Kindle fine — it just arrives without chapters or a contents list. Convert later if you change your mind.',
-      sends: 'Nothing leaves NobleSee. Your text is stored and published as it is.',
-    },
+    as_is: { label: 'Submit text for Review' },
+    convert: { label: 'Convert & Generate' },
   },
   docx: {
-    convert: {
-      tag: 'Best to read',
-      label: 'Convert & Generate',
-      detail:
-        'Your Word document is the editable master already, so this goes straight to building the EPUB a reader gets.',
-      sends: 'Converted here. Nothing leaves NobleSee unless you ask for AI correction below.',
-    },
+    convert: { label: 'Convert & Generate' },
   },
   epub: {
-    as_is: {
-      tag: 'Ready',
-      label: 'Publish as it is',
-      detail:
-        'An EPUB is already a reading edition — reflowable, navigable, exactly what a reader wants. Nothing needs converting.',
-      sends: 'Nothing leaves NobleSee. Your file is stored and published as it is.',
-    },
+    as_is: { label: 'Publish as it is' },
   },
 }
 
 function planCopy(kind: SourceKind, plan: PublicationPlan) {
   return PLAN_COPY[kind][plan] ?? PLAN_COPY.pdf[plan]!
+}
+
+function ConvertButton({
+  label,
+  primary,
+  pending,
+}: {
+  label: string
+  primary: boolean
+  pending: boolean
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div
+      className={primary ? 'split-button' : 'split-button split-button--quiet'}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') setOpen(false)
+      }}
+    >
+      <button
+        type="submit"
+        name="planChoice"
+        value="convert"
+        className={primary ? 'cta' : 'cta cta--quiet'}
+        disabled={pending}
+      >
+        {label}
+      </button>
+      <button
+        type="button"
+        className="split-button__toggle"
+        aria-label="More conversion options"
+        aria-expanded={open}
+        disabled={pending}
+        onClick={() => setOpen(!open)}
+      >
+        ▾
+      </button>
+
+      {open ? (
+        <div className="split-button__menu">
+          <button
+            type="submit"
+            name="planChoice"
+            value={AI_PLAN_CHOICE}
+            className="split-button__item"
+            disabled={pending}
+          >
+            Use AI to suggest corrections
+          </button>
+          <span className="split-button__note">{AI_NOTE}</span>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function ReadFromFile({ show }: { show: boolean }) {
@@ -104,20 +130,17 @@ export function BookDetailsForm({
   book,
   collections,
   draft = false,
-  submitLabel = 'Next',
   canOrderShelf = false,
 }: {
   book: EditableBook
   collections: { id: number; title: string; depth: number }[]
   draft?: boolean
-  submitLabel?: string
   canOrderShelf?: boolean
 }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(saveBookDetails, {})
 
   const plans = plansFor(book.sourceKind)
 
-  const [plan, setPlan] = useState<PublicationPlan>(book.plan)
   const [shelf, setShelf] = useState<number | null>(book.collection)
 
   return (
@@ -230,65 +253,40 @@ export function BookDetailsForm({
         </fieldset>
       ) : null}
 
-      {plans.length > 1 ? (
-        <fieldset className="plan-cards">
-          <legend>What should we do with it?</legend>
-          {plans.map((option) => (
-            <label key={option} className="plan-card">
-              <input
-                type="radio"
-                name="plan"
-                value={option}
-                checked={option === plan}
-                onChange={() => setPlan(option)}
-              />
-              <span
-                className={`plan-card__tag${
-                  option === defaultPlanFor(book.sourceKind) ? ' plan-card__tag--recommended' : ''
-                }`}
-              >
-                {planCopy(book.sourceKind, option).tag}
-              </span>
-              <strong>{planCopy(book.sourceKind, option).label}</strong>
-              <span>{planCopy(book.sourceKind, option).detail}</span>
-              {planCopy(book.sourceKind, option).sends ? (
-                <span className="plan-card__sends">{planCopy(book.sourceKind, option).sends}</span>
-              ) : null}
-            </label>
-          ))}
-        </fieldset>
-      ) : (
-        <>
-          <p className="notice">{planCopy(book.sourceKind, plans[0]!).detail}</p>
-          {planCopy(book.sourceKind, plans[0]!).sends ? (
-            <p className="notice notice--sends">{planCopy(book.sourceKind, plans[0]!).sends}</p>
-          ) : null}
-        </>
-      )}
-
-      {plan === 'convert' ? (
-        <label className="ai-consent">
-          <input
-            type="checkbox"
-            name="aiCorrection"
-            defaultChecked={book.aiCorrection}
-          />
-          <span>
-            <strong>Use AI to suggest corrections</strong>
-            <span>
-              Sends your book’s text to xAI, a service outside NobleSee, which proposes fixes for
-              scanning and typing errors. Every suggestion is reviewed by a person before anything
-              changes — nothing is rewritten on its own. Leave this off and your text stays here.
-            </span>
-          </span>
-        </label>
-      ) : null}
-
       <div className="upload-form__actions">
-        <button type="submit" className="cta" disabled={pending}>
-          {pending ? 'Saving…' : submitLabel}
-        </button>
+        {plans.map((option) =>
+          option === 'convert' ? (
+            <ConvertButton
+              key={option}
+              label={planCopy(book.sourceKind, option).label}
+              primary={option === book.plan}
+              pending={pending}
+            />
+          ) : (
+            <button
+              key={option}
+              type="submit"
+              name="planChoice"
+              value={option}
+              className={option === book.plan ? 'cta' : 'cta cta--quiet'}
+              disabled={pending}
+            >
+              {planCopy(book.sourceKind, option).label}
+            </button>
+          ),
+        )}
       </div>
+
+      {plans
+        .map((option) => planCopy(book.sourceKind, option).sends)
+        .filter((sends): sends is string => Boolean(sends))
+        .map((sends) => (
+          <p key={sends} className="hint">
+            {sends}
+          </p>
+        ))}
+
+      {pending ? <p className="hint">Saving…</p> : null}
 
       {state.error ? <p className="form-error">{state.error}</p> : null}
     </form>

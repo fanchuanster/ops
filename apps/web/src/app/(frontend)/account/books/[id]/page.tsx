@@ -174,7 +174,6 @@ export default async function BookDetailsPage({
             typeof book.collectionOrder === 'number' ? book.collectionOrder : null,
           sourceKind,
           plan,
-          aiCorrection: book.conversion?.aiCorrection === true,
         }}
         collections={flattenTree(buildTree(collections)).map((node) => ({
           id: Number(node.collection.id),
@@ -182,7 +181,6 @@ export default async function BookDetailsPage({
           depth: node.depth,
         }))}
         draft={draft}
-        submitLabel={draft ? 'Next' : 'Save changes'}
         canOrderShelf={isAdmin}
       />
 

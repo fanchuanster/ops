@@ -58,6 +58,20 @@ export function resolvePlan(kind: SourceKind, requested: unknown): PublicationPl
   return planIsAvailable(kind, requested) ? requested : defaultPlanFor(kind)
 }
 
+export const AI_PLAN_CHOICE = 'convert_ai'
+
+export interface PlanChoice {
+  plan: PublicationPlan
+  aiCorrection: boolean
+}
+
+export function readPlanChoice(kind: SourceKind, requested: unknown): PlanChoice {
+  if (requested === AI_PLAN_CHOICE && planIsAvailable(kind, 'convert')) {
+    return { plan: 'convert', aiCorrection: true }
+  }
+  return { plan: resolvePlan(kind, requested), aiCorrection: false }
+}
+
 export function originalArtifact(kind: SourceKind): ArtifactFormat | null {
   switch (kind) {
     case 'pdf':

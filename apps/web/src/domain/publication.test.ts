@@ -11,6 +11,7 @@ import {
   originalArtifact,
   originalKey,
   plansFor,
+  readPlanChoice,
   readSourceKind,
   readingFormat,
   reopensForConversion,
@@ -242,5 +243,23 @@ describe('a reader asking for one particular edition', () => {
   it('picks for the reader who asked for nothing', () => {
     expect(requestedReadingFormat(['pdf', 'txt'], undefined)).toBe('pdf')
     expect(requestedReadingFormat([], null)).toBe(null)
+  })
+})
+
+describe('reading the button an uploader pressed', () => {
+  it('turns the AI option into a conversion with correction on', () => {
+    expect(readPlanChoice('pdf', 'convert_ai')).toEqual({ plan: 'convert', aiCorrection: true })
+  })
+
+  it('leaves correction off for a plain conversion', () => {
+    expect(readPlanChoice('pdf', 'convert')).toEqual({ plan: 'convert', aiCorrection: false })
+  })
+
+  it('refuses the AI option where nothing converts', () => {
+    expect(readPlanChoice('epub', 'convert_ai')).toEqual({ plan: 'as_is', aiCorrection: false })
+  })
+
+  it('falls back to the default plan when nothing was pressed', () => {
+    expect(readPlanChoice('pdf', null)).toEqual({ plan: 'as_is', aiCorrection: false })
   })
 })
