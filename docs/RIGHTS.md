@@ -71,6 +71,17 @@ exports this as `isInPublicLibrary`; every reader-facing screen and the
 `books` collection's own read access call it rather than re-deriving it,
 so "public" cannot drift out of step with "approved".
 
+**A caller must not restate that clause in its own `where`.** `readBooks`
+already ANDs it in for every unauthenticated read, together with the
+rights check a hand-written copy tends to forget. Restating it also
+breaks: `owner` is field-read-restricted, and Payload checks a
+caller-supplied query path against field read access while exempting the
+Where an access function itself returns — so the copy throws
+`QueryError: The following path cannot be queried: owner` for exactly
+the anonymous visitor the catalog exists for. It took the public site
+down on 2026-09-20. Let the access layer own the rule; pass only what
+narrows it further, such as `level` or a collection.
+
 ### Tell the uploader who else will see their file
 
 Reading a scan *is* a third-party call, so forbidding the send outright
