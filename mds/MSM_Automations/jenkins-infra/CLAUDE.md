@@ -18,32 +18,39 @@ the operator's schedule, not as the tail end of an unrelated task.
   today. It does not survive a recreate, so it is only ever done alongside the
   Dockerfile change that makes it permanent, and it must be reported as drift.
 
-## The controller image is built, not pulled
+## The controller image is built from scratch, and the build is not yet trustworthy
 
-`$JENKINS_IMAGE` (from `prod.secrets`) is the **base image**, not the running one.
-`stacks/jenkins-controller/Dockerfile` layers onto it and the result is tagged
-`alm-jenkins:local`, so the pinned base tag is never overwritten and every rebuild
-starts from the same image.
+`stacks/jenkins-controller/Dockerfile` builds the controller from
+`jenkins/jenkins:${JENKINS_BASE_TAG}`, creating `/opt/venv` and installing
+`stacks/jenkins-controller/requirements.txt` — reproducing, under version control, what
+the legacy `jenkins-np` image had baked in. `build:` lives in the base
+`stacks/jenkins-controller/compose.yml`.
 
-- The `build:` wiring lives in `env/production/compose.override.yml`, not the shared
-  `stacks/jenkins-controller/compose.yml`. Production is the only environment that runs
-  a built controller; staging comes up on the base image.
-- The build is deterministic. An unchanged `Dockerfile`/`requirements.txt` rebuilds to
-  the same image ID off the layer cache, so compose leaves the running container alone —
-  a full `deploy-prod.sh` does not bounce Jenkins unless those files actually changed.
+It has not replaced `jenkins-np` in production yet, and it cannot until this is fixed:
 
-## The controller's /opt/venv has a urllib3 ceiling
+- The pip step is `pip3 install -r requirements.txt && pip3 uninstall -y enum34 || true
+  && python3 -c ...`, which parses as `((A && B) || true) && C`. A failing
+  `pip install` is therefore **swallowed and the build still exits 0**.
+- It does fail today. The 2021-era pins (numpy in particular) no longer build against
+  the base image's Python, so the install aborts and the image ends up with ~17 packages
+  instead of the 60 pinned — **no selenium, no boto3, no ansible**. Verified by building
+  the unmodified file.
+- So a change to `requirements.txt` is currently a no-op in the built image. Say so
+  rather than claiming the package is there. Fixing it means repinning the stack and
+  correcting that `|| true`, which will make the build fail loudly until the pins are
+  sound.
 
-The base image ships an old Python stack — `botocore` 1.34 (`urllib3<2.1`) and
-`requests` 2.25 (`urllib3<1.27`) — and every job on the controller uses boto3. Anything
-added to `stacks/jenkins-controller/requirements.txt` must therefore resolve against
+## Pinned packages must resolve against urllib3 1.x
+
+`requirements.txt` pins `botocore==1.27.62`, `requests==2.25.1` and `urllib3==1.26.6`,
+and every job on the controller uses boto3. Anything added must resolve against
 `urllib3<2`, or it breaks the whole controller rather than just the job that wanted it.
 
 - Selenium's ceiling is **4.31**: from 4.33 it pins `urllib3[socks]` to 2.x. The floor is
   4.11, the first release with `ChromeService(log_output=...)`, which
-  `libs/util.create_browser` passes.
-- The Dockerfile ends with `pip check`, so a conflict fails the build instead of
-  surfacing as a broken Jenkins job later. Keep it there.
+  `libs/util.create_browser` passes. Hence `selenium==4.31.0`.
+- `requirements.txt` is a flat alphabetical list of exact `==` pins with no comments.
+  Keep that shape; the reasoning belongs here.
 
 ## Browser jobs run on the controller
 
