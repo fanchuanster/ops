@@ -52,6 +52,19 @@ was missing. `getCatalog` therefore takes a required `limit`, so the
 home page's 48 reads as the preview it is and `/books` asks for
 `CATALOG_LIMIT`. A caller that wants a page of the catalog must say so.
 
+**A search result opens in a new tab, and any other link clears the
+box.** The two halves are one rule: the box holds what the reader is
+looking for, so it survives exactly as long as the looking does. A
+result is opened *out of* the search, leaving the query and the rest of
+the matches where they were, because the next result is usually the one
+they wanted. Anything else — a shelf in the sidebar, a title in the
+nav, the brand — is the reader leaving the search behind, and the field
+is emptied on the click rather than after the new page renders, so the
+old query is never left sitting over a page that is not its answer. The
+listener reads the anchor the browser is about to follow and stands
+aside for the clicks that do not navigate this window: a modified click,
+a middle click, a `target`, a `download`, a bare fragment.
+
 **Search answers with books, over title, author and shelf name.** A
 reader looking for 南怀瑾选集 is as likely to type the shelf's name as a
 volume's, and a shelf that matched but returned nothing would read as an

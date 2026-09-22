@@ -74,6 +74,18 @@ export function flattenTree<T extends CollectionNode>(tree: readonly TreeNode<T>
   return out
 }
 
+export function pruneEmpty<T extends CollectionNode>(
+  tree: readonly TreeNode<T>[],
+  stocked: ReadonlySet<number>,
+): TreeNode<T>[] {
+  const keep = (node: TreeNode<T>): TreeNode<T> | null => {
+    const children = pruneEmpty(node.children, stocked)
+    if (children.length === 0 && !stocked.has(node.collection.id)) return null
+    return { ...node, children }
+  }
+  return tree.map(keep).filter((node): node is TreeNode<T> => node !== null)
+}
+
 export function subtreeIds(collections: readonly CollectionNode[], id: number): number[] {
   const childrenOf = new Map<number, number[]>()
   for (const collection of collections) {

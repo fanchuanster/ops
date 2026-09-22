@@ -6,6 +6,7 @@ import {
   ancestryOf,
   buildTree,
   flattenTree,
+  pruneEmpty,
   type TreeNode,
 } from '../../../domain/collectionTree'
 import {
@@ -16,7 +17,12 @@ import {
   parseBrowseLevel,
 } from '../../../domain/levels'
 import { shelfSortFor, sortShelfItems } from '../../../domain/shelfOrder'
-import { CATALOG_LIMIT, getCatalog, getCollections } from '../../../lib/catalog'
+import {
+  CATALOG_LIMIT,
+  getCatalog,
+  getCollections,
+  getStockedCollectionIds,
+} from '../../../lib/catalog'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,9 +52,10 @@ export default async function BooksPage({
     return qs ? `/books?${qs}` : '/books'
   }
 
-  const [{ books }, collections] = await Promise.all([
+  const [{ books }, collections, stocked] = await Promise.all([
     getCatalog({ collectionSlug: collection, level, query: asked, limit: CATALOG_LIMIT }),
     getCollections(),
+    getStockedCollectionIds(level),
   ])
 
   const selected = collection ? collections.find((c) => c.slug === collection) : null
@@ -81,6 +88,7 @@ export default async function BooksPage({
   })
 
   const tree = buildTree(collections)
+  const navTree = pruneEmpty(tree, stocked)
 
   const selectedNode = selected
     ? (flattenTree(tree).find((node) => node.collection.id === selected.id) ?? null)
@@ -123,35 +131,37 @@ export default async function BooksPage({
 
       {selected?.description ? <p className="page-lede">{selected.description}</p> : null}
 
-      <div className="library__body">
-        <nav className="library__tree" aria-label="Collections">
-          <p className="library__tree-head">Collections</p>
-          {tree.map((node) => (
-            <React.Fragment key={node.collection.id}>
-              <a
-                className="library__tree-shelf"
-                href={href({ collection: node.collection.slug })}
-                aria-current={selected?.id === node.collection.id ? 'page' : undefined}
-              >
-                {node.collection.title}
-              </a>
-              {onShelf(node.collection, String(node.collection.id)).map((book) => (
-                <a key={book.id} className="library__tree-book cjk" href={`/books/${book.slug}`}>
-                  {book.title}
-                </a>
-              ))}
-              {node.children.map((child) => (
+      <div className={navTree.length > 0 ? 'library__body' : 'library__body library__body--bare'}>
+        {navTree.length > 0 ? (
+          <nav className="library__tree" aria-label="Collections">
+            <p className="library__tree-head">Collections</p>
+            {navTree.map((node) => (
+              <React.Fragment key={node.collection.id}>
                 <a
-                  key={child.collection.id}
-                  className="library__tree-book"
-                  href={href({ collection: child.collection.slug })}
+                  className="library__tree-shelf"
+                  href={href({ collection: node.collection.slug })}
+                  aria-current={selected?.id === node.collection.id ? 'page' : undefined}
                 >
-                  {child.collection.title}
+                  {node.collection.title}
                 </a>
-              ))}
-            </React.Fragment>
-          ))}
-        </nav>
+                {onShelf(node.collection, String(node.collection.id)).map((book) => (
+                  <a key={book.id} className="library__tree-book cjk" href={`/books/${book.slug}`}>
+                    {book.title}
+                  </a>
+                ))}
+                {node.children.map((child) => (
+                  <a
+                    key={child.collection.id}
+                    className="library__tree-book"
+                    href={href({ collection: child.collection.slug })}
+                  >
+                    {child.collection.title}
+                  </a>
+                ))}
+              </React.Fragment>
+            ))}
+          </nav>
+        ) : null}
 
         <div className="library__main">
           <div className="depth">
@@ -191,9 +201,9 @@ export default async function BooksPage({
             )
           ) : (
             <>
-              {lead.length > 0 ? <BookGrid books={lead} /> : null}
+              {lead.length > 0 ? <BookGrid books={lead} newTab={Boolean(asked)} /> : null}
 
-              <CollectionShelves shelves={shelves} />
+              <CollectionShelves shelves={shelves} newTab={Boolean(asked)} />
             </>
           )}
 

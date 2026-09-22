@@ -19,7 +19,15 @@ export interface BookTileData {
   level?: number | null
 }
 
-export function BookTile({ book, showLevel = false }: { book: BookTileData; showLevel?: boolean }) {
+export function BookTile({
+  book,
+  showLevel = false,
+  newTab = false,
+}: {
+  book: BookTileData
+  showLevel?: boolean
+  newTab?: boolean
+}) {
   const cover = coverImageUrl({
     uploadedId: uploadedCoverId(book.cover),
     bookId: book.id,
@@ -29,7 +37,11 @@ export function BookTile({ book, showLevel = false }: { book: BookTileData; show
 
   return (
     <li className="tile">
-      <a href={`/books/${book.slug}`}>
+      <a
+        href={`/books/${book.slug}`}
+        target={newTab ? '_blank' : undefined}
+        rel={newTab ? 'noopener' : undefined}
+      >
         <span className="tile__face cjk" aria-hidden="true">
           {cover ? (
             <img src={cover} alt="" loading="lazy" />

@@ -130,6 +130,17 @@ a URL, which is what a reader shares; and only the fold is client-side,
 because a level is a *view* someone would send to someone else where a
 fold is a per-reader convenience.
 
+**A shelf with no books on it is not shown at all.** Empty means empty
+*at the reading depth being browsed*, so a shelf holding only extensive
+works disappears from the collection tree when the reader asks for
+introductory ones — an empty shelf is a promise of books that is not
+kept, and a shelf that answers with nothing is worse than one that was
+never offered. A parent survives on its descendants' books, because it
+is still the road to them, and the tree vanishes entirely rather than
+standing as a heading over nothing. This is a *reading* rule: /admin
+keeps showing every shelf, since an empty one is exactly what a curator
+has to open to fill.
+
 Each shelf renders the books filed **directly** on it, so nothing is
 printed twice — a different rule from narrowing to one shelf, where a
 parent genuinely answers with its whole subtree because its children are

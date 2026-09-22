@@ -10,17 +10,23 @@ export interface ShelfNode {
   children: ShelfNode[]
 }
 
-export function CollectionShelves({ shelves }: { shelves: ShelfNode[] }) {
+export function CollectionShelves({
+  shelves,
+  newTab = false,
+}: {
+  shelves: ShelfNode[]
+  newTab?: boolean
+}) {
   return (
     <div className="shelves">
       {shelves.map((shelf) => (
-        <Shelf key={shelf.id} shelf={shelf} />
+        <Shelf key={shelf.id} shelf={shelf} newTab={newTab} />
       ))}
     </div>
   )
 }
 
-function Shelf({ shelf }: { shelf: ShelfNode }) {
+function Shelf({ shelf, newTab }: { shelf: ShelfNode; newTab: boolean }) {
   if (countBooks(shelf) === 0) return null
 
   const branches = shelf.children.filter((child) => countBooks(child) > 0)
@@ -29,7 +35,7 @@ function Shelf({ shelf }: { shelf: ShelfNode }) {
     <section className="shelf" id={`shelf-${shelf.id}`}>
       <h2 className="shelf__name cjk">{shelf.title}</h2>
 
-      {shelf.books.length > 0 ? <BookGrid books={shelf.books} /> : null}
+      {shelf.books.length > 0 ? <BookGrid books={shelf.books} newTab={newTab} /> : null}
 
       {branches.length > 0 ? (
         <ul className="branches">
@@ -37,7 +43,11 @@ function Shelf({ shelf }: { shelf: ShelfNode }) {
             const total = countBooks(child)
             return (
               <li key={child.id}>
-                <a href={child.href}>
+                <a
+                  href={child.href}
+                  target={newTab ? '_blank' : undefined}
+                  rel={newTab ? 'noopener' : undefined}
+                >
                   <span className="branches__name cjk">{child.title}</span>
                   <span className="branches__count">
                     {total} {total === 1 ? 'volume' : 'volumes'}
@@ -52,11 +62,17 @@ function Shelf({ shelf }: { shelf: ShelfNode }) {
   )
 }
 
-export function BookGrid({ books }: { books: BookTileData[] }) {
+export function BookGrid({
+  books,
+  newTab = false,
+}: {
+  books: BookTileData[]
+  newTab?: boolean
+}) {
   return (
     <ul className="book-grid">
       {books.map((book) => (
-        <BookTile key={book.id} book={book} showLevel />
+        <BookTile key={book.id} book={book} showLevel newTab={newTab} />
       ))}
     </ul>
   )

@@ -10,6 +10,7 @@ import {
   flattenTree,
   heightOf,
   parentIdOf,
+  pruneEmpty,
   subtreeIds,
 } from './collectionTree'
 
@@ -27,6 +28,30 @@ describe('reading the parent field', () => {
     expect(parentIdOf({ id: 2, title: 'x', parent: { id: 1 } })).toBe(1)
     expect(parentIdOf({ id: 2, title: 'x', parent: null })).toBeNull()
     expect(parentIdOf({ id: 2, title: 'x' })).toBeNull()
+  })
+})
+
+describe('pruning shelves with nothing on them', () => {
+  it('drops a shelf whose subtree holds no book', () => {
+    const tree = pruneEmpty(buildTree(library), new Set([2]))
+    expect(tree.map((n) => n.collection.id)).toEqual([1])
+    expect(tree[0].children.map((n) => n.collection.id)).toEqual([2])
+  })
+
+  it('keeps a parent that only its descendant stocks', () => {
+    const tree = pruneEmpty(buildTree(library), new Set([4]))
+    expect(flattenTree(tree).map((n) => n.collection.id)).toEqual([1, 2, 4])
+  })
+
+  it('leaves nothing standing when no shelf has a book', () => {
+    expect(pruneEmpty(buildTree(library), new Set())).toEqual([])
+  })
+
+  it('does not alter the tree it was given', () => {
+    const tree = buildTree(library)
+    pruneEmpty(tree, new Set([5]))
+    expect(tree.map((n) => n.collection.id)).toEqual([1, 5])
+    expect(tree[0].children.map((n) => n.collection.id)).toEqual([2, 3])
   })
 })
 

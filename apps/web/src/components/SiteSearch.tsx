@@ -1,15 +1,41 @@
 'use client'
 
 import { usePathname, useSearchParams } from 'next/navigation'
+import { useEffect, useRef } from 'react'
+
+function leavesThisWindow(event: MouseEvent): boolean {
+  if (event.defaultPrevented || event.button !== 0) return false
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false
+
+  const target = event.target
+  const link = target instanceof Element ? target.closest('a[href]') : null
+  if (!(link instanceof HTMLAnchorElement)) return false
+  if (link.target && link.target !== '_self') return false
+  if (link.hasAttribute('download')) return false
+
+  const href = link.getAttribute('href') ?? ''
+  if (href.startsWith('#')) return false
+  return link.href !== window.location.href
+}
 
 export function SiteSearch() {
   const pathname = usePathname()
   const params = useSearchParams()
+  const field = useRef<HTMLInputElement>(null)
 
   const inLibrary = pathname === '/books'
   const collection = inLibrary ? params.get('collection') : null
   const level = inLibrary ? params.get('level') : null
   const asked = (inLibrary ? params.get('q') : null) ?? ''
+
+  useEffect(() => {
+    const clearOnLeaving = (event: MouseEvent) => {
+      if (!leavesThisWindow(event)) return
+      if (field.current) field.current.value = ''
+    }
+    document.addEventListener('click', clearOnLeaving)
+    return () => document.removeEventListener('click', clearOnLeaving)
+  }, [])
 
   return (
     <form className="site-search" action="/books" method="get" role="search">
@@ -23,6 +49,7 @@ export function SiteSearch() {
 
       <input
         key={asked}
+        ref={field}
         type="search"
         name="q"
         defaultValue={asked}

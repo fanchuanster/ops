@@ -68,6 +68,30 @@ export async function getCatalog({
   return { books: books.docs, collection: collectionSlug ?? null, level }
 }
 
+export async function getStockedCollectionIds(
+  level: BookLevel = DEFAULT_BROWSE_LEVEL,
+): Promise<Set<number>> {
+  const payload = await getPayload({ config })
+  const books = await payload.find({
+    collection: 'books',
+    where: {
+      and: [{ status: { equals: 'published' } }, { level: { less_than_equal: levelId(level) } }],
+    },
+    limit: CATALOG_LIMIT,
+    depth: 0,
+    pagination: false,
+    overrideAccess: false,
+  })
+
+  const stocked = new Set<number>()
+  for (const book of books.docs) {
+    const shelf = book.collection
+    const id = typeof shelf === 'object' && shelf ? shelf.id : shelf
+    if (typeof id === 'number') stocked.add(id)
+  }
+  return stocked
+}
+
 export async function getCollections() {
   const payload = await getPayload({ config })
   const result = await payload.find({
