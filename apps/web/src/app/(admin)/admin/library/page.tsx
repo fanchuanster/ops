@@ -20,6 +20,7 @@ import {
 } from '../../../../domain/cover'
 import { levelFromId } from '../../../../domain/levels'
 import { isInPublicLibrary } from '../../../../domain/moderation'
+import { matchesNeedle, shelvesNamed } from '../../../../domain/search'
 import { shelfSortFor, sortShelfItems } from '../../../../domain/shelfOrder'
 import {
   countDeliveries,
@@ -52,11 +53,17 @@ export default async function AdminLibraryPage({
   const selectedId = Number(params.book)
   const selected = Number.isInteger(selectedId) ? await getAdminBook(selectedId) : null
 
-  const needle = query.toLowerCase()
-  const matches = (book: (typeof books)[number]) =>
-    needle === '' ||
-    [book.title, book.author]
-      .some((field) => (field ?? '').toLowerCase().includes(needle))
+  const shelfOf = (entry: unknown): number | null => {
+    const id = typeof entry === 'object' && entry ? (entry as { id: number }).id : entry
+    return typeof id === 'number' ? id : null
+  }
+
+  const named = new Set(shelvesNamed(collections, query))
+  const matches = (book: (typeof books)[number]) => {
+    if (matchesNeedle(book.title, query) || matchesNeedle(book.author, query)) return true
+    const shelf = shelfOf(book.collection)
+    return shelf !== null && named.has(shelf)
+  }
 
   const direct = new Map<number, typeof books>()
   const shelved = new Set<number>()
@@ -135,11 +142,6 @@ export default async function AdminLibraryPage({
     id: collection.id,
     title: collection.title,
   }))
-
-  const shelfOf = (entry: unknown): number | null => {
-    const id = typeof entry === 'object' && entry ? (entry as { id: number }).id : entry
-    return typeof id === 'number' ? id : null
-  }
 
   const uploadedCover = selected ? uploadedCoverId(selected.cover) : null
 

@@ -3,6 +3,7 @@ import { getPayload, type TypedUser, type Where } from 'payload'
 
 import { subtreeIds } from '../domain/collectionTree'
 import { type BookLevel, DEFAULT_BROWSE_LEVEL, levelId } from '../domain/levels'
+import { searchNeedle, shelvesNamed } from '../domain/search'
 import { slugFromParam } from './slugParam'
 
 export const CATALOG_LIMIT = 1000
@@ -20,18 +21,26 @@ export async function getCatalog({
 }) {
   const payload = await getPayload({ config })
 
+  const wanted = searchNeedle(query)
+
+  const shelves =
+    collectionSlug || wanted
+      ? (
+          await payload.find({
+            collection: 'book-collections',
+            limit: 500,
+            depth: 0,
+            pagination: false,
+            overrideAccess: false,
+          })
+        ).docs
+      : []
+
   let collectionIds: number[] | undefined
   if (collectionSlug) {
-    const all = await payload.find({
-      collection: 'book-collections',
-      limit: 500,
-      depth: 0,
-      pagination: false,
-      overrideAccess: false,
-    })
-    const found = all.docs.find((doc) => doc.slug === collectionSlug)
+    const found = shelves.find((doc) => doc.slug === collectionSlug)
     if (!found) return { books: [], collection: null, level }
-    collectionIds = subtreeIds(all.docs, found.id)
+    collectionIds = subtreeIds(shelves, found.id)
   }
 
   const filters: Where[] = [
@@ -40,11 +49,11 @@ export async function getCatalog({
   ]
   if (collectionIds) filters.push({ collection: { in: collectionIds } })
 
-  const wanted = query?.trim()
   if (wanted) {
-    filters.push({
-      or: [{ title: { like: wanted } }, { author: { like: wanted } }],
-    })
+    const named = shelvesNamed(shelves, wanted)
+    const or: Where[] = [{ title: { like: wanted } }, { author: { like: wanted } }]
+    if (named.length > 0) or.push({ collection: { in: named } })
+    filters.push({ or })
   }
 
   const books = await payload.find({

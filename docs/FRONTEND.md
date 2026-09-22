@@ -51,3 +51,14 @@ six, and five other shelves lost their tails with no sign that anything
 was missing. `getCatalog` therefore takes a required `limit`, so the
 home page's 48 reads as the preview it is and `/books` asks for
 `CATALOG_LIMIT`. A caller that wants a page of the catalog must say so.
+
+**Search answers with books, over title, author and shelf name.** A
+reader looking for 南怀瑾选集 is as likely to type the shelf's name as a
+volume's, and a shelf that matched but returned nothing would read as an
+empty library. Naming a shelf therefore returns **its whole subtree** —
+the same rule as narrowing to that shelf, because the children are not
+on screen to answer for themselves — and the shelf itself is never a
+result: there is no second kind of row, only the books. Matching runs on
+the query as typed, so `search.ts` stays a pure rule the catalog query
+and the editorial tree both call, one filtering in SQL and the other in
+the page.

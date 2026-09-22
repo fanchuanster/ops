@@ -26,7 +26,7 @@ export function SiteSearch() {
         type="search"
         name="q"
         defaultValue={asked}
-        placeholder="Search titles or authors"
+        placeholder="Search titles, authors or collections"
         aria-label="Search the library"
       />
     </form>
