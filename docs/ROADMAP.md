@@ -25,14 +25,18 @@ oversight.
   month. Replaced the rolling delivery cap on 2026-08-14.
 - **Whole books** — Parts and staged release were removed on 2026-08-14. A book
   is one record, one master, one set of formats.
-- **Converter** — the full pipeline: OCR, structure, DOCX master, EPUB 3, three
-  PDF sizes, R2, the async job API, and the pull handoff from the Worker.
+- **The conversion pipeline** — OCR, structure, DOCX master, EPUB 3 and R2,
+  all of it inside the Worker. It was a standalone container with an async job
+  API and a pull handoff until 2026-08-26, when the container was deleted and
+  the work moved in (`docs/CLOUDFLARE_ARCHITECTURE.md`); PDF rendering went
+  with it and nothing renders a PDF today.
 - **Phase 1 on Adobe PDF Services** — a scanned PDF is OCR'd and mastered in
   one Export PDF call from the Worker, replacing Google Document AI on
   2026-08-19 and taking `domain/ocr.ts` with it. Traditional Chinese via
   `ocrLang: zh-Hant`; running heads land in Word's header parts and headings
   come back as `Heading 1`/`Heading 2`, so neither has to be inferred any more.
-  Text sources still reach the converter and are mastered there.
+  A DOCX or plain-text upload is mastered by the Worker itself — parsing a zip
+  and writing one is milliseconds, not the OCR model that made this heavy.
 - **Upload portal** — file-only upload with metadata read from the file
   (UTF-16/UTF-8/GBK/Big5), an editable summary, a private draft workspace with
   master download and replace, delete, retry, and optional submit-for-review.
@@ -66,15 +70,20 @@ oversight.
   book carries*: given when it is filed, unique among that shelf's books,
   editable in the panel and over the admin API. Typing a number another book
   holds shifts the run along rather than swapping, which is what keeps them
-  unique; `domain/shelfOrder.ts` owns the rule and `lib/shelfPlacement.ts` does
+  unique; `domain/shelfOrder.ts` owns the rule, down to the `resequence` that
+  computes the shifted run, and the collection configs and server actions do
   the writing. Backfilled in title order, so nothing a reader sees moved on the
   day it shipped.
-- **Default covers** — page one of the book, rendered by the converter and used
-  wherever nobody has uploaded a cover (2026-08-23). Its own claimable job kind
-  rather than a pipeline stage, because the books that most need one are the
-  two the pipeline never touches: an EPUB upload and a PDF published as it
-  stands. Taken from the PDF where there is one, since for a scan page one *is*
-  the cover the publisher printed. `domain/cover.ts` and `app/cover/`.
+- **Default covers** — the book's own first pages, used wherever nobody has
+  uploaded a cover (2026-08-23). Rendered in the uploader's browser by pdf.js,
+  not on the server: the page image is already downloaded there, and a Worker
+  has no business rasterizing a PDF. Three candidate pages are offered and the
+  chosen one is kept, because page one is the cover the publisher printed for a
+  scan but a title page or a blank for anything else. It is not a pipeline
+  stage, since the books that most need a cover are the two the pipeline never
+  touches: an EPUB upload and a PDF published as it stands. `domain/cover.ts`
+  holds the rules and box (800 × 1200), `lib/client/coverImages.ts` does the
+  rendering.
 - **Authorized delivery** — the three domain rules wired to artifact streaming
   through the Worker (`src/lib/authorizeDownload.ts`). Not signed URLs: the R2
   binding has no presigning, and streaming turned out to be the better shape.
@@ -181,9 +190,10 @@ oversight.
 
 - **Cover image processing** — Payload uses `sharp`, a native binary that cannot
   run on a Worker, so an *uploaded* cover is stored at whatever size it arrives.
-  Either move the resizing into the converter or use Cloudflare Images.
-  Generated covers are unaffected: the converter renders them into a fixed box
-  already (`app/cover/first_page.py`).
+  Cloudflare Images is the remaining option, the container that was the other
+  one having been deleted; resizing in the browser before the upload is the
+  cheaper answer and is what generated covers already do. Those are unaffected:
+  they are rendered into a fixed box by `lib/client/coverImages.ts`.
 
 ### Monetization
 
@@ -210,20 +220,15 @@ No dark patterns.
   tokenizers will not segment Chinese usefully: `unicode61` treats a run of Han
   characters as one token, so only whole-field matches work. The practical
   options are the `trigram` tokenizer, which works without segmentation at some
-  index cost, or segmenting at index time in the converter and storing a
+  index cost, or segmenting as the book is written and storing a
   space-delimited field. Custom tokenizers such as `pg_jieba`/`zhparser` are not
   available — those were the Postgres answer, and this needs a different one.
 
 ### Infrastructure
 
-- **Cloudflare Queues** — the web → converter handoff. Needed before the
-  conversion service can be driven from the site rather than the CLI.
-- **Where the converter container runs** — this host, Cloudflare Containers, or
-  elsewhere. Deliberately open; the queue boundary means it can be answered
-  without touching application code.
-- **Kubernetes manifests** (NR-24) — no longer urgent. The web tier is a Worker
-  and Compose is retired; revisit only if the converter grows into several
-  services that need orchestrating.
+- **Kubernetes manifests** (NR-24) — no longer urgent. The whole application is
+  one Worker and Compose is retired; revisit only if something grows back out
+  of it that needs orchestrating.
 
 ## Closed by the Workers port
 
@@ -231,8 +236,8 @@ No dark patterns.
   on outbound TCP/UDP 7844 being filtered upstream of this host, so the
   Cloudflare Tunnel could not connect and the site returned error 1033. Running
   the application as a Worker removes the tunnel from the architecture
-  entirely, so the blocker no longer applies to the web tier. The converter
-  sidesteps it too, by pulling from a queue rather than accepting inbound
-  connections.
-- **Redis** (NR-23) — was to back the conversion job queue. Cloudflare Queues
-  takes that role, so there is no Redis to run.
+  entirely, so the blocker no longer applies at all: there is no longer a
+  second tier to expose.
+- **Redis** (NR-23) — was to back the conversion job queue. The book's own state
+  is the queue (`docs/PIPELINE.md`), so there is no Redis to run and no queue
+  service in its place.

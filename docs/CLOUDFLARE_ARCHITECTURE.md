@@ -66,9 +66,11 @@ deleted; it is now built by the Worker, and the measurement above is why.
 below is now observed rather than predicted, except where marked.*
 
 **`sharp` comes out.** Payload uses it to resize uploaded images. It is a
-native binary and cannot run on a Worker. Cover-image processing therefore
-either moves to the converter container or uses Cloudflare Images. Until one of
-those lands, covers are stored at the size they are uploaded.
+native binary and cannot run on a Worker. An *uploaded* cover is therefore
+stored at the size it arrives; the container that was one way out is gone, so
+what remains is Cloudflare Images or resizing in the browser before the upload.
+A *generated* cover is already boxed in the browser by pdf.js, which is the
+same answer arrived at from the other end.
 
 **Presigned URLs come out.** The R2 *binding* has no equivalent — presigning is
 an S3-API feature — so downloads and the reader stream the object through the
@@ -136,20 +138,24 @@ parameters. Queries of that shape batch — `MAX_IN_VALUES` in
 `lib/adminData.ts` — and a new one keyed on anything that grows must do the
 same. An `in` over shelves is safe by size; an `in` over books is not.
 
-**Job handoff needs a queue, not a request.** The Worker must not wait for a
-conversion. It enqueues and returns a job id; the container consumes the queue
-and writes results back to R2 and D1. Cloudflare Queues is the native fit and
-keeps the Worker's side of the handoff to a single bounded write.
+**Job handoff needs a queue, not a request** — *superseded on 2026-08-26,
+recorded because the reasoning was half right.* The plan was that the Worker
+enqueues and returns a job id, a container consumes the queue over Cloudflare
+Queues and pushes results to R2 over the S3 API, keeping its own credentials
+because it is not a Worker and has no binding, and needing no inbound port —
+which sidestepped the filtered outbound 7844 that stalled the tunnel and
+blocked NR-28.
 
-**The container needs no inbound port.** It pulls from the queue and pushes
-results to R2 over the S3 API — the converter keeps S3 credentials precisely
-because it is not a Worker and has no binding. That matters here specifically:
-this host's outbound 7844 is filtered and inbound exposure was never available,
-which is what stalled the tunnel. A pull-based worker sidesteps the problem that
-blocked NR-28 rather than inheriting it. *(Still a plan; the queue is not built.)*
+What held is that the Worker must not wait for a conversion. What did not is
+everything the queue was for: the container it fed was deleted, so no consumer
+needs feeding, no S3 credential exists to keep, and the tunnel problem went
+with the second tier rather than being sidestepped. A queue would now be a
+second durable record beside the book row that can disagree with it, and the
+book row is already the durable record of a conversion — so the book's own
+state is the queue and a cron tick advances it (`docs/PIPELINE.md`).
 
 ## Deliberately not decided yet
 
-Where the container runs — this host, Cloudflare Containers, or somewhere else
-— is left open. It is a deployment choice, and the queue boundary above means
-it can be answered later without touching application code.
+Nothing about where a second tier runs, because there is no second tier: the
+deployment choice this section was written to leave open was answered by
+deleting the thing that had to be deployed.
