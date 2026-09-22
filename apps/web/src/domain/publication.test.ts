@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MAX_UPLOAD_BYTES,
+  canBuildEpub,
+  canBuildMaster,
   defaultPlanFor,
   formatsToGenerate,
   needsConverter,
@@ -261,5 +263,35 @@ describe('reading the button an uploader pressed', () => {
 
   it('falls back to the default plan when nothing was pressed', () => {
     expect(readPlanChoice('pdf', null)).toEqual({ plan: 'as_is', aiCorrection: false })
+  })
+})
+
+describe('which builds a book offers', () => {
+  it('builds a master from a PDF', () => {
+    expect(canBuildMaster('pdf')).toBe(true)
+  })
+
+  it('builds a master from plain text', () => {
+    expect(canBuildMaster('text')).toBe(true)
+  })
+
+  it('builds no master from a DOCX, which is already one', () => {
+    expect(canBuildMaster('docx')).toBe(false)
+  })
+
+  it('builds no master from an EPUB', () => {
+    expect(canBuildMaster('epub')).toBe(false)
+  })
+
+  it('builds an EPUB from a PDF, from text and from a DOCX', () => {
+    expect([canBuildEpub('pdf'), canBuildEpub('text'), canBuildEpub('docx')]).toEqual([
+      true,
+      true,
+      true,
+    ])
+  })
+
+  it('builds no EPUB from an EPUB, which is already a reading edition', () => {
+    expect(canBuildEpub('epub')).toBe(false)
   })
 })

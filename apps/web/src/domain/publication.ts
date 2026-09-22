@@ -97,6 +97,14 @@ export function formatsToGenerate(kind: SourceKind): ArtifactFormat[] {
   return kind === 'epub' ? [] : ['epub']
 }
 
+export function canBuildMaster(kind: SourceKind): boolean {
+  return kind === 'pdf' || kind === 'text'
+}
+
+export function canBuildEpub(kind: SourceKind): boolean {
+  return formatsToGenerate(kind).includes('epub')
+}
+
 export function needsExport(kind: SourceKind, plan: PublicationPlan): boolean {
   return kind === 'pdf' && plan === 'convert'
 }

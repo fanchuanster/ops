@@ -1,6 +1,7 @@
 import React from 'react'
 
 import { coverImageUrl, uploadedCoverId } from '../domain/cover'
+import { LEVEL_LABELS, levelFromId } from '../domain/levels'
 
 export interface BookTileData {
   id: string | number
@@ -15,9 +16,10 @@ export interface BookTileData {
     candidates?: number | null
   } | null
   artifacts?: { format: string }[] | null
+  level?: number | null
 }
 
-export function BookTile({ book }: { book: BookTileData }) {
+export function BookTile({ book, showLevel = false }: { book: BookTileData; showLevel?: boolean }) {
   const cover = coverImageUrl({
     uploadedId: uploadedCoverId(book.cover),
     bookId: book.id,
@@ -36,6 +38,9 @@ export function BookTile({ book }: { book: BookTileData }) {
           )}
         </span>
         <span className="tile__title">{book.title}</span>
+        {showLevel && typeof book.level === 'number' ? (
+          <span className="tile__level">{LEVEL_LABELS[levelFromId(book.level)]}</span>
+        ) : null}
       </a>
     </li>
   )

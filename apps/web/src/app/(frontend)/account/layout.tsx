@@ -22,30 +22,32 @@ export default async function AccountLayout({ children }: { children: React.Reac
   const credits = user.credits ?? 0
 
   return (
-    <main className="page account">
-      <header className="account-identity">
-        <Avatar identity={identity} size={56} />
-        <div>
-          <strong>{readerName(identity)}</strong>
-          <span>{user.email}</span>
-        </div>
-        <p className="account-balance">
-          <strong>{credits}</strong>
-          <span>{credits === 1 ? 'credit' : 'credits'}</span>
-        </p>
-      </header>
+    <div className="account-ground">
+      <main className="page account">
+        <header className="account-identity">
+          <Avatar identity={identity} size={56} />
+          <div>
+            <strong>{readerName(identity)}</strong>
+            <span>{user.email}</span>
+          </div>
+          <p className="account-balance">
+            <strong>{credits}</strong>
+            <span>{credits === 1 ? 'credit' : 'credits'}</span>
+          </p>
+        </header>
 
-      <div className="account__body">
-        <div className="account__side">
-          <AccountNav isAdmin={isAdmin(user)} />
-          <form action={logout} className="account-signout">
-            <button type="submit" className="button-quiet">
-              Sign out
-            </button>
-          </form>
+        <div className="account__body">
+          <div className="account__side">
+            <AccountNav isAdmin={isAdmin(user)} />
+            <form action={logout} className="account-signout">
+              <button type="submit" className="button-quiet">
+                Sign out
+              </button>
+            </form>
+          </div>
+          <section className="account__panel">{children}</section>
         </div>
-        <section className="account__panel">{children}</section>
-      </div>
-    </main>
+      </main>
+    </div>
   )
 }

@@ -7,25 +7,49 @@ import { getCatalog, getCollections } from '../../lib/catalog'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_SHELVES = 2
+const MAX_SHELVES = 1
 
 const PER_SHELF = 4
 
 const STEPS = [
   {
-    n: '01',
     title: 'Curated quality',
-    body: 'Every book is chosen for lasting value and reviewed by an editor.',
+    body: 'Hand-picked by our editor, plus reviewed reader submissions.',
+    icon: (
+      <path
+        d="M5 13l4 4L19 7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ),
   },
   {
-    n: '02',
     title: 'Read anywhere',
-    body: 'Clean EPUB and PDF on your phone, tablet, or Kindle.',
+    body: 'Reflowable EPUB and PDF — built for Kindle or any screen.',
+    icon: (
+      <>
+        <rect x="6" y="3" width="12" height="18" rx="2" stroke="currentColor" strokeWidth="1.75" />
+        <path d="M10 18h4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </>
+    ),
   },
   {
-    n: '03',
     title: 'Send to Kindle',
-    body: 'One tap to your Kindle library — no cables, no fuss.',
+    body: 'One tap sends any title straight to your device.',
+    icon: (
+      <>
+        <path
+          d="M4 12h11m0 0-4-4m4 4-4 4"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path d="M17 6h3v12h-3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </>
+    ),
   },
 ]
 
@@ -56,14 +80,9 @@ export default async function HomePage() {
       <main className="page">
         <section className="hero">
           <div className="hero__lede">
-            <p className="eyebrow">A curated reading library</p>
-            <h1>
-              Books worth reading,
-              <br className="hero__break" /> made comfortable
-              <br className="hero__break" /> to read.
-            </h1>
+            <h1>Books worth reading, made comfortable to read.</h1>
             <p>
-              Quality books in clean, reflowable editions — on your Kindle, phone, or any screen.
+              Curated by us and by readers, in clean EPUB and PDF for Kindle, phone, or any screen.
             </p>
             <a className="cta" href="/books">
               Browse the library
@@ -77,34 +96,35 @@ export default async function HomePage() {
             <a href="/admin/library">library</a>.
           </p>
         ) : (
-          <div className="shelves">
-            {shelves.map(({ collection, books: shelfBooks }) => (
-              <section key={collection.id}>
-                <div className="shelf__head">
-                  <a href={`/books?collection=${encodeURIComponent(collection.slug)}`}>
-                    {collection.title}
-                  </a>
-                  <span className="shelf__rule" />
-                </div>
-                <ul className="shelf__books">
-                  {shelfBooks.map((book) => (
-                    <BookTile key={book.id} book={book} />
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
+          shelves.map(({ collection, books: shelfBooks }) => (
+            <section key={collection.id} className="home-shelf">
+              <div className="home-shelf__head">
+                <h2>{collection.title}</h2>
+                <a href={`/books?collection=${encodeURIComponent(collection.slug)}`}>
+                  View all →
+                </a>
+              </div>
+              <ul className="home-shelf__books">
+                {shelfBooks.map((book) => (
+                  <BookTile key={book.id} book={book} />
+                ))}
+              </ul>
+            </section>
+          ))
         )}
       </main>
 
-      <section className="band band--tint">
+      <section className="band">
         <div className="band__inner">
-          <p className="eyebrow">How it works</p>
-          <h2>Your book, on every device.</h2>
+          <h2>How it works</h2>
           <ul className="steps">
             {STEPS.map((step) => (
-              <li key={step.n}>
-                <span className="steps__num">{step.n}</span>
+              <li key={step.title}>
+                <span className="steps__icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    {step.icon}
+                  </svg>
+                </span>
                 <h3>{step.title}</h3>
                 <p>{step.body}</p>
               </li>

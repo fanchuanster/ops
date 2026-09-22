@@ -6,6 +6,7 @@ import { BrandMark } from '../../components/BrandMark'
 import { GoogleAnalytics } from '../../components/GoogleAnalytics'
 import { GoogleOneTap } from '../../components/GoogleOneTap'
 import { SiteNav } from '../../components/SiteNav'
+import { SiteSearch } from '../../components/SiteSearch'
 import { analyticsMeasurementId } from '../../lib/analytics'
 import { getCurrentUser } from '../../lib/auth'
 import { isGoogleSignInConfigured } from '../../lib/googleOAuth'
@@ -33,8 +34,9 @@ export default async function FrontendLayout({ children }: { children: React.Rea
           <div className="site-header__inner">
             <a className="wordmark" href="/">
               <BrandMark />
-              Noble<span>See</span>
+              <span>NobleSee</span>
             </a>
+            <SiteSearch />
             <SiteNav>
               {user ? (
                 <AccountLink
@@ -64,16 +66,15 @@ export default async function FrontendLayout({ children }: { children: React.Rea
             <div className="site-footer__bar">
               <a className="wordmark" href="/">
                 <BrandMark />
-                Noble<span>See</span>
+                <span>NobleSee</span>
               </a>
               <p className="site-footer__note">
                 Reviewed by an editor before joining the public library.
               </p>
               <p className="site-footer__contact">
-                Contact us —{' '}
+                © {new Date().getFullYear()} NobleSee ·{' '}
                 <a href="mailto:noblesee0077@gmail.com">noblesee0077@gmail.com</a>
               </p>
-              <p style={{ margin: 0 }}>© {new Date().getFullYear()} NobleSee</p>
             </div>
           </div>
         </footer>

@@ -17,6 +17,7 @@ import {
   isConversionState,
   recoversFromFailure,
   releasedExportHandle,
+  retryStateFor,
   stateAfterMasterEdit,
   statusOnQueue,
 } from '../../../domain/pipeline'
@@ -345,4 +346,92 @@ export async function replaceMaster(
 
   revalidatePath(`/account/books/${bookId}`)
   return {}
+}
+
+interface BuildRequest {
+  state: ConversionState
+  aiCorrection?: boolean
+}
+
+async function startBuild(
+  formData: FormData,
+  requestFor: (hasMasterArtifact: boolean) => BuildRequest,
+): Promise<DetailsState> {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Sign in first.' }
+
+  const bookId = Number(formData.get('bookId'))
+  if (!Number.isInteger(bookId)) return { error: 'Nothing to build.' }
+
+  const payload = await getPayload({ config })
+  const book = await payload
+    .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+
+  const ownerId = typeof book?.owner === 'object' ? book?.owner?.id : book?.owner
+  if (!book || !ownerId || String(ownerId) !== String(user.id)) {
+    return { error: 'That book is not yours to convert.' }
+  }
+  if (!book.conversion?.sourceKey) return { error: 'There is no source file to convert.' }
+
+  const formats = (book.artifacts ?? []).map((artifact) => artifact.format)
+  const { state, aiCorrection } = requestFor(formats.includes('docx'))
+
+  const quota = await checkQuotaFor(payload, {
+    userId: user.id,
+    pagesRequested: book.estimatedPages ?? 0,
+    isAdmin: Boolean(user.roles?.includes('admin')),
+    excludeBookId: bookId,
+  })
+  if (!quota.allowed) {
+    return { error: quotaMessage(quota) ?? 'You have reached this month’s limit.' }
+  }
+
+  try {
+    await payload.update({
+      collection: 'books',
+      id: bookId,
+      data: {
+        status: statusOnQueue(formats),
+        conversion: {
+          ...book.conversion,
+          state,
+          plan: 'convert',
+          ...(aiCorrection === undefined ? {} : { aiCorrection }),
+          message: null,
+          startedAt: new Date().toISOString(),
+          ...releasedExportHandle(state),
+        },
+      },
+      overrideAccess: true,
+    })
+  } catch (error) {
+    logError('bookDetails: start build', error)
+    return { error: 'Could not start that. Please try again.' }
+  }
+
+  await settleQueuedBook(payload, bookId)
+
+  revalidatePath('/account/books')
+  revalidatePath(`/account/books/${bookId}`)
+  return {}
+}
+
+export async function buildMaster(
+  _prev: DetailsState,
+  formData: FormData,
+): Promise<DetailsState> {
+  return startBuild(formData, () => ({
+    state: 'queued',
+    aiCorrection: formData.get('aiCorrection') === 'on',
+  }))
+}
+
+export async function buildEditions(
+  _prev: DetailsState,
+  formData: FormData,
+): Promise<DetailsState> {
+  return startBuild(formData, (hasMasterArtifact) => ({
+    state: retryStateFor({ hasMasterArtifact }),
+  }))
 }

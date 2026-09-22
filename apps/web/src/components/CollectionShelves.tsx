@@ -1,113 +1,64 @@
-'use client'
+import React from 'react'
 
-import React, { useState } from 'react'
-
-import { BookLine } from './BookLine'
-import type { BookTileData } from './BookTile'
+import { BookTile, type BookTileData } from './BookTile'
 
 export interface ShelfNode {
   id: string
   title: string
+  href: string
   books: BookTileData[]
   children: ShelfNode[]
 }
 
 export function CollectionShelves({ shelves }: { shelves: ShelfNode[] }) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
-
-  const toggle = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-
   return (
     <div className="shelves">
       {shelves.map((shelf) => (
-        <Shelf
-          key={shelf.id}
-          shelf={shelf}
-          depth={0}
-          collapsed={collapsed}
-          onToggle={toggle}
-        />
+        <Shelf key={shelf.id} shelf={shelf} />
       ))}
     </div>
   )
 }
 
-function Shelf({
-  shelf,
-  depth,
-  collapsed,
-  onToggle,
-}: {
-  shelf: ShelfNode
-  depth: number
-  collapsed: ReadonlySet<string>
-  onToggle: (id: string) => void
-}) {
-  const open = !collapsed.has(shelf.id)
-  const panelId = `shelf-${shelf.id}`
+function Shelf({ shelf }: { shelf: ShelfNode }) {
+  if (countBooks(shelf) === 0) return null
 
-  const total = countBooks(shelf)
-
-  if (total === 0) return null
-
-  const head =
-    depth === 0 ? (
-      <h2 className="shelf__name">{shelf.title}</h2>
-    ) : (
-      <span className="shelf__name">{shelf.title}</span>
-    )
+  const branches = shelf.children.filter((child) => countBooks(child) > 0)
 
   return (
-    <section
-      className={depth === 0 ? 'shelf shelf--root' : 'shelf shelf--nested'}
-      style={{ '--depth': depth } as React.CSSProperties}
-    >
-      <div className="shelf__head">
-        <button
-          type="button"
-          className="shelf__toggle"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => onToggle(shelf.id)}
-        >
-          <Chevron open={open} />
-          {head}
-          {depth > 0 ? (
-            <span className="shelf__count">
-              {total}
-              <span className="visually-hidden"> {total === 1 ? 'book' : 'books'}</span>
-            </span>
-          ) : null}
-        </button>
-        <span className="shelf__rule" />
-      </div>
+    <section className="shelf" id={`shelf-${shelf.id}`}>
+      <h2 className="shelf__name cjk">{shelf.title}</h2>
 
-      <div id={panelId} className="shelf__body" hidden={!open}>
-        {shelf.books.length > 0 ? (
-          <ul className="shelf__lines">
-            {shelf.books.map((book) => (
-              <BookLine key={book.id} book={book} />
-            ))}
-          </ul>
-        ) : null}
+      {shelf.books.length > 0 ? <BookGrid books={shelf.books} /> : null}
 
-        {shelf.children.map((child) => (
-          <Shelf
-            key={child.id}
-            shelf={child}
-            depth={depth + 1}
-            collapsed={collapsed}
-            onToggle={onToggle}
-          />
-        ))}
-      </div>
+      {branches.length > 0 ? (
+        <ul className="branches">
+          {branches.map((child) => {
+            const total = countBooks(child)
+            return (
+              <li key={child.id}>
+                <a href={child.href}>
+                  <span className="branches__name cjk">{child.title}</span>
+                  <span className="branches__count">
+                    {total} {total === 1 ? 'volume' : 'volumes'}
+                  </span>
+                </a>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
     </section>
+  )
+}
+
+export function BookGrid({ books }: { books: BookTileData[] }) {
+  return (
+    <ul className="book-grid">
+      {books.map((book) => (
+        <BookTile key={book.id} book={book} showLevel />
+      ))}
+    </ul>
   )
 }
 
@@ -119,25 +70,4 @@ function countBooks(shelf: ShelfNode): number {
   }
   walk(shelf)
   return seen.size
-}
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      className={open ? 'chevron chevron--open' : 'chevron'}
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M4 2l4 4-4 4"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
 }

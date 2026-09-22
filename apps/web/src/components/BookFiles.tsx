@@ -3,24 +3,50 @@
 import { useActionState } from 'react'
 
 import { replaceMaster, type DetailsState } from '../app/(frontend)/actions/bookDetails'
+import { canBuildEpub, type SourceKind } from '../domain/publication'
 
-export function MasterFile({ bookId, hasMaster }: { bookId: number; hasMaster: boolean }) {
+export function BookFiles({
+  bookId,
+  slug,
+  sourceKind,
+  hasMaster,
+  hasEpub,
+}: {
+  bookId: number
+  slug: string
+  sourceKind: SourceKind
+  hasMaster: boolean
+  hasEpub: boolean
+}) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(replaceMaster, {})
 
   return (
     <section className="master">
-      <h3>The master file</h3>
+      <h3>Files</h3>
 
-      {hasMaster ? (
-        <p>
-          <a href={`/account/books/${bookId}/master`} className="master__download">
-            Download the DOCX master
-          </a>
-          <span className="hint"> Every other format is generated from it.</span>
-        </p>
-      ) : (
-        <p className="hint">No master yet — it appears after conversion.</p>
-      )}
+      <ul className="files">
+        <li className="files__row">
+          <span className="fmt fmt--docx">docx</span>
+          <span className="files__what">Master copy</span>
+          {hasMaster ? (
+            <a href={`/account/books/${bookId}/master`}>Download</a>
+          ) : (
+            <span className="files__state">Not converted yet</span>
+          )}
+        </li>
+
+        {canBuildEpub(sourceKind) ? (
+          <li className="files__row">
+            <span className="fmt fmt--epub">epub</span>
+            <span className="files__what">Reader edition</span>
+            {hasEpub ? (
+              <a href={`/read/${slug}`}>Read it</a>
+            ) : (
+              <span className="files__state">Not generated yet</span>
+            )}
+          </li>
+        ) : null}
+      </ul>
 
       {hasMaster ? (
         <form action={action} className="master__replace">

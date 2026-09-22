@@ -10,10 +10,12 @@ export const CATALOG_LIMIT = 1000
 export async function getCatalog({
   collectionSlug,
   level = DEFAULT_BROWSE_LEVEL,
+  query,
   limit,
 }: {
   collectionSlug?: string
   level?: BookLevel
+  query?: string
   limit: number
 }) {
   const payload = await getPayload({ config })
@@ -37,6 +39,13 @@ export async function getCatalog({
     { level: { less_than_equal: levelId(level) } },
   ]
   if (collectionIds) filters.push({ collection: { in: collectionIds } })
+
+  const wanted = query?.trim()
+  if (wanted) {
+    filters.push({
+      or: [{ title: { like: wanted } }, { author: { like: wanted } }],
+    })
+  }
 
   const books = await payload.find({
     collection: 'books',

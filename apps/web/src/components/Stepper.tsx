@@ -17,7 +17,19 @@ export function Stepper({ step }: { step: number }) {
             aria-current={current ? 'step' : undefined}
           >
             <span className="stepper__mark" aria-hidden="true">
-              {done ? '✓' : index + 1}
+              {done ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M5 13l4 4L19 7"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : (
+                index + 1
+              )}
             </span>
             <span className="stepper__label">{label}</span>
             {index < UPLOAD_STEPS.length - 1 ? (

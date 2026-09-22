@@ -3,12 +3,7 @@
 import { type CSSProperties, useActionState, useState } from 'react'
 
 import { saveBookDetails, type DetailsState } from '../app/(frontend)/actions/bookDetails'
-import {
-  AI_PLAN_CHOICE,
-  type PublicationPlan,
-  type SourceKind,
-  plansFor,
-} from '../domain/publication'
+import { AI_PLAN_CHOICE, type PublicationPlan, type SourceKind } from '../domain/publication'
 import { FIRST_ORDER_ID, MAX_ORDER_ID } from '../domain/shelfOrder'
 
 const LANGUAGES = [
@@ -30,96 +25,7 @@ export interface EditableBook {
   collectionOrder: number | null
   sourceKind: SourceKind
   plan: PublicationPlan
-}
-
-const AI_NOTE =
-  'Sends your book\u2019s text to xAI, outside NobleSee. A person reviews every suggestion.'
-
-const PLAN_COPY: Record<
-  SourceKind,
-  Partial<Record<PublicationPlan, { label: string; sends?: string }>>
-> = {
-  pdf: {
-    as_is: { label: 'Submit PDF for Review' },
-    convert: {
-      label: 'Convert & Generate',
-      sends:
-        'Converting sends your PDF to Adobe PDF Services, outside NobleSee, to have its pages read.',
-    },
-  },
-  text: {
-    as_is: { label: 'Submit text for Review' },
-    convert: { label: 'Convert & Generate' },
-  },
-  docx: {
-    convert: { label: 'Convert & Generate' },
-  },
-  epub: {
-    as_is: { label: 'Publish as it is' },
-  },
-}
-
-function planCopy(kind: SourceKind, plan: PublicationPlan) {
-  return PLAN_COPY[kind][plan] ?? PLAN_COPY.pdf[plan]!
-}
-
-function ConvertButton({
-  label,
-  primary,
-  pending,
-}: {
-  label: string
-  primary: boolean
-  pending: boolean
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div
-      className={primary ? 'split-button' : 'split-button split-button--quiet'}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') setOpen(false)
-      }}
-    >
-      <button
-        type="submit"
-        name="planChoice"
-        value="convert"
-        className={primary ? 'cta' : 'cta cta--quiet'}
-        disabled={pending}
-      >
-        {label}
-      </button>
-      <button
-        type="button"
-        className="split-button__toggle"
-        aria-label="More conversion options"
-        aria-expanded={open}
-        disabled={pending}
-        onClick={() => setOpen(!open)}
-      >
-        ▾
-      </button>
-
-      {open ? (
-        <div className="split-button__menu">
-          <button
-            type="submit"
-            name="planChoice"
-            value={AI_PLAN_CHOICE}
-            className="split-button__item"
-            disabled={pending}
-          >
-            Use AI to suggest corrections
-          </button>
-          <span className="split-button__note">{AI_NOTE}</span>
-        </div>
-      ) : null}
-    </div>
-  )
+  aiCorrection: boolean
 }
 
 function ReadFromFile({ show }: { show: boolean }) {
@@ -139,58 +45,63 @@ export function BookDetailsForm({
 }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(saveBookDetails, {})
 
-  const plans = plansFor(book.sourceKind)
-
   const [shelf, setShelf] = useState<number | null>(book.collection)
 
   return (
     <form action={action} className="upload-form">
       <input type="hidden" name="bookId" value={book.id} />
+      <input
+        type="hidden"
+        name="planChoice"
+        value={book.aiCorrection ? AI_PLAN_CHOICE : book.plan}
+      />
 
-      <label>
-        <span className="field-label">
-          Title
-          <ReadFromFile show={draft && Boolean(book.title)} />
-        </span>
-        <input type="text" name="title" defaultValue={book.title} required maxLength={200} />
-      </label>
+      <div className="upload-form__grid">
+        <label>
+          <span className="field-label">
+            Title
+            <ReadFromFile show={draft && Boolean(book.title)} />
+          </span>
+          <input type="text" name="title" defaultValue={book.title} required maxLength={200} />
+        </label>
 
-      <label>
-        <span className="field-label">
-          Author
-          <ReadFromFile show={draft && Boolean(book.author)} />
-        </span>
-        <input type="text" name="author" defaultValue={book.author} maxLength={200} />
-      </label>
+        <label>
+          <span className="field-label">
+            Author
+            <ReadFromFile show={draft && Boolean(book.author)} />
+          </span>
+          <input type="text" name="author" defaultValue={book.author} maxLength={200} />
+        </label>
 
-      <label>
-        <span className="field-label">
-          Language
-          <ReadFromFile show={draft && Boolean(book.language)} />
-        </span>
-        <select name="language" defaultValue={book.language}>
-          {LANGUAGES.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+        <label>
+          <span className="field-label">
+            Language
+            <ReadFromFile show={draft && Boolean(book.language)} />
+          </span>
+          <select name="language" defaultValue={book.language}>
+            {LANGUAGES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <label>
-        <span className="field-label">
-          Page count
-          <span className="field-mark field-mark--locked">read-only</span>
-        </span>
-        <input
-          type="text"
-          readOnly
-          value={book.pageCount === null ? 'Not known yet' : `${book.pageCount} pages`}
-        />
-        {book.pagesAreEstimated ? (
-          <small>Read from the file. The exact count replaces it once conversion finishes.</small>
-        ) : null}
-      </label>
+        <label>
+          <span className="field-label">
+            Page count
+            <span className="field-mark field-mark--locked">read-only</span>
+          </span>
+          <input
+            type="text"
+            readOnly
+            value={book.pageCount === null ? 'Not known yet' : `${book.pageCount} pages`}
+          />
+          {book.pagesAreEstimated ? (
+            <small>Read from the file. The exact count replaces it once conversion finishes.</small>
+          ) : null}
+        </label>
+      </div>
 
       {collections.length > 0 ? (
         <fieldset className="upload-form__collections">
@@ -254,37 +165,10 @@ export function BookDetailsForm({
       ) : null}
 
       <div className="upload-form__actions">
-        {plans.map((option) =>
-          option === 'convert' ? (
-            <ConvertButton
-              key={option}
-              label={planCopy(book.sourceKind, option).label}
-              primary={option === book.plan}
-              pending={pending}
-            />
-          ) : (
-            <button
-              key={option}
-              type="submit"
-              name="planChoice"
-              value={option}
-              className={option === book.plan ? 'cta' : 'cta cta--quiet'}
-              disabled={pending}
-            >
-              {planCopy(book.sourceKind, option).label}
-            </button>
-          ),
-        )}
+        <button type="submit" className="cta" disabled={pending}>
+          Save details
+        </button>
       </div>
-
-      {plans
-        .map((option) => planCopy(book.sourceKind, option).sends)
-        .filter((sends): sends is string => Boolean(sends))
-        .map((sends) => (
-          <p key={sends} className="hint">
-            {sends}
-          </p>
-        ))}
 
       {pending ? <p className="hint">Saving…</p> : null}
 

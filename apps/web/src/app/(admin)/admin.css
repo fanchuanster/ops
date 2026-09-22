@@ -21,6 +21,13 @@
   color: var(--ink);
 }
 
+.admin-body h1,
+.admin-body h2,
+.admin-body h3 {
+  font-family: var(--font-sans);
+  letter-spacing: normal;
+}
+
 .admin {
   display: flex;
 

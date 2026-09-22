@@ -25,7 +25,8 @@ export function AccountNav({ isAdmin = false }: { isAdmin?: boolean }) {
         {sections.map((section) => {
           const current =
             pathname === section.href ||
-            (section.href === '/account/books' && pathname === '/account/upload')
+            (section.href === '/account/books' &&
+              (pathname === '/account/upload' || pathname.startsWith('/account/books/')))
           return (
             <li key={section.href}>
               <a href={section.href} aria-current={current ? 'page' : undefined}>

@@ -9,10 +9,11 @@ import { CoverPagePicker } from '../../../../../components/CoverPagePicker'
 import { MakeCoverButton } from '../../../../../components/MakeCoverButton'
 import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
 import { BookActions } from '../../../../../components/BookActions'
+import { BookBuild } from '../../../../../components/BookBuild'
 import { BookSources } from '../../../../../components/BookSources'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
 import { CorrectionReview } from '../../../../../components/CorrectionReview'
-import { MasterFile } from '../../../../../components/MasterFile'
+import { BookFiles } from '../../../../../components/BookFiles'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { Stepper } from '../../../../../components/Stepper'
 import { buildTree, flattenTree } from '../../../../../domain/collectionTree'
@@ -88,6 +89,9 @@ export default async function BookDetailsPage({
 
   const sources = readSources(book.conversion ?? {}, book.artifacts)
 
+  const shelfTitle =
+    typeof book.collection === 'object' && book.collection ? book.collection.title : null
+
   const uploadedCover = uploadedCoverId(book.cover)
   const generatedCover = book.generatedCover ?? {}
   const coverUrl = coverImageUrl({
@@ -99,10 +103,20 @@ export default async function BookDetailsPage({
 
   return (
     <>
-      <div className="wizard-head">
-        <h2>Upload a Book</h2>
-        <p>Prepare your manuscript for NobleSee</p>
-      </div>
+      {finished ? (
+        <div className="wizard-head">
+          <p className="wizard-head__status">
+            {isInPublicLibrary(book) ? 'Published' : 'Approved'}
+          </p>
+          <h2 className="cjk">{book.title}</h2>
+          <p>{[book.author, shelfTitle].filter(Boolean).join(' · ')}</p>
+        </div>
+      ) : (
+        <div className="wizard-head">
+          <h2>Process &amp; review details</h2>
+          {draft ? <p>Check the details we auto-filled from your file.</p> : null}
+        </div>
+      )}
 
       {finished ? null : (
         <Stepper step={uploadStep({ state, reviewState: book.review?.state })} />
@@ -116,13 +130,6 @@ export default async function BookDetailsPage({
           {book.conversion?.sourceFilename ?? 'your file'}
         </span>
       </p>
-
-      {draft ? (
-        <div className="wizard-step-head">
-          <h3>We read these from your file</h3>
-          <p>Correct anything wrong.</p>
-        </div>
-      ) : null}
 
       {readable || deliverable.length > 0 ? (
         <p className="book-actions">
@@ -176,6 +183,7 @@ export default async function BookDetailsPage({
             typeof book.collectionOrder === 'number' ? book.collectionOrder : null,
           sourceKind,
           plan,
+          aiCorrection: book.conversion?.aiCorrection === true,
         }}
         collections={flattenTree(buildTree(collections)).map((node) => ({
           id: Number(node.collection.id),
@@ -184,6 +192,15 @@ export default async function BookDetailsPage({
         }))}
         draft={draft}
         canOrderShelf={isAdmin}
+      />
+
+      <BookBuild
+        bookId={Number(book.id)}
+        sourceKind={sourceKind}
+        sources={sources}
+        hasMaster={hasMaster}
+        aiCorrection={book.conversion?.aiCorrection === true}
+        converting={isConversionState(state) && isInFlight(state)}
       />
 
       {share && isInPublicLibrary(book) ? <p className="hint">{share}</p> : null}
@@ -253,7 +270,13 @@ export default async function BookDetailsPage({
             converting={isConversionState(state) && isInFlight(state)}
           />
 
-          <MasterFile bookId={Number(book.id)} hasMaster={hasMaster} />
+          <BookFiles
+            bookId={Number(book.id)}
+            slug={book.slug ?? ''}
+            sourceKind={sourceKind}
+            hasMaster={hasMaster}
+            hasEpub={(book.artifacts ?? []).some((artifact) => artifact.format === 'epub')}
+          />
 
           {book.conversion?.aiCorrection === true ? (
             <CorrectionReview

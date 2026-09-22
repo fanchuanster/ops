@@ -1,7 +1,6 @@
 import React from 'react'
 
-import { BookLine } from '../../../components/BookLine'
-import { CollectionShelves, type ShelfNode } from '../../../components/CollectionShelves'
+import { CollectionShelves, BookGrid, type ShelfNode } from '../../../components/CollectionShelves'
 import { ShareCta } from '../../../components/ShareCta'
 import {
   ancestryOf,
@@ -28,24 +27,27 @@ type CatalogBook = Awaited<ReturnType<typeof getCatalog>>['books'][number]
 export default async function BooksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ collection?: string; level?: string }>
+  searchParams: Promise<{ collection?: string; level?: string; q?: string }>
 }) {
   const params = await searchParams
   const collection = params.collection
   const level = parseBrowseLevel(params.level)
+  const asked = params.q?.trim() ?? ''
 
-  const href = (next: { collection?: string; level?: string }) => {
+  const href = (next: { collection?: string; level?: string; q?: string }) => {
     const query = new URLSearchParams()
     const nextCollection = 'collection' in next ? next.collection : collection
     const nextLevel = next.level ?? level
+    const nextAsked = 'q' in next ? next.q : asked
     if (nextCollection) query.set('collection', nextCollection)
     if (nextLevel !== DEFAULT_BROWSE_LEVEL) query.set('level', nextLevel)
+    if (nextAsked) query.set('q', nextAsked)
     const qs = query.toString()
     return qs ? `/books?${qs}` : '/books'
   }
 
   const [{ books }, collections] = await Promise.all([
-    getCatalog({ collectionSlug: collection, level, limit: CATALOG_LIMIT }),
+    getCatalog({ collectionSlug: collection, level, query: asked, limit: CATALOG_LIMIT }),
     getCollections(),
   ])
 
@@ -73,6 +75,7 @@ export default async function BooksPage({
   const toShelf = (node: TreeNode<(typeof collections)[number]>): ShelfNode => ({
     id: String(node.collection.id),
     title: node.collection.title,
+    href: href({ collection: node.collection.slug }),
     books: onShelf(node.collection, String(node.collection.id)),
     children: node.children.map(toShelf),
   })
@@ -95,6 +98,7 @@ export default async function BooksPage({
           : selected
             ? `Also in ${selected.title}`
             : 'Also in the library',
+      href: href({}),
       books: loose,
       children: [],
     })
@@ -103,7 +107,7 @@ export default async function BooksPage({
   return (
     <main className="page library">
       <div className="page-head">
-        <h1>{selected ? selected.title : 'Library'}</h1>
+        <h1 className="cjk">{selected ? selected.title : 'Library'}</h1>
         {selected ? (
           <span className="page-head__note">
             <a href={href({ collection: undefined })}>Library</a>
@@ -119,43 +123,82 @@ export default async function BooksPage({
 
       {selected?.description ? <p className="page-lede">{selected.description}</p> : null}
 
-      <nav className="filters" aria-label="Reading level">
-        {BOOK_LEVELS.map((value) => (
-          <a
-            key={value}
-            href={href({ level: value })}
-            title={LEVEL_DESCRIPTIONS[value]}
-            aria-current={level === value ? 'true' : undefined}
-          >
-            {LEVEL_LABELS[value]}
-          </a>
-        ))}
-      </nav>
-
-      {books.length === 0 ? (
-        <p className="empty">
-          {collection
-            ? 'No books in this collection yet.'
-            : level === 'extensive'
-              ? 'No books published yet.'
-              : `No books at the ${LEVEL_LABELS[level].toLowerCase()} level yet — try Extensive to see the whole library.`}
-        </p>
-      ) : (
-        <>
-          {lead.length > 0 ? (
-            <ul className="shelf__lines shelf__lines--lead">
-              {lead.map((book) => (
-                <BookLine key={book.id} book={book} />
+      <div className="library__body">
+        <nav className="library__tree" aria-label="Collections">
+          <p className="library__tree-head">Collections</p>
+          {tree.map((node) => (
+            <React.Fragment key={node.collection.id}>
+              <a
+                className="library__tree-shelf"
+                href={href({ collection: node.collection.slug })}
+                aria-current={selected?.id === node.collection.id ? 'page' : undefined}
+              >
+                {node.collection.title}
+              </a>
+              {onShelf(node.collection, String(node.collection.id)).map((book) => (
+                <a key={book.id} className="library__tree-book cjk" href={`/books/${book.slug}`}>
+                  {book.title}
+                </a>
               ))}
-            </ul>
+              {node.children.map((child) => (
+                <a
+                  key={child.collection.id}
+                  className="library__tree-book"
+                  href={href({ collection: child.collection.slug })}
+                >
+                  {child.collection.title}
+                </a>
+              ))}
+            </React.Fragment>
+          ))}
+        </nav>
+
+        <div className="library__main">
+          <div className="depth">
+            <span className="depth__label">Reading depth:</span>
+            <nav className="depth__levels" aria-label="Reading level">
+              {BOOK_LEVELS.map((value) => (
+                <a
+                  key={value}
+                  href={href({ level: value })}
+                  title={LEVEL_DESCRIPTIONS[value]}
+                  aria-current={level === value ? 'true' : undefined}
+                >
+                  {LEVEL_LABELS[value]}
+                </a>
+              ))}
+            </nav>
+          </div>
+
+          {asked ? (
+            <p className="library__asked">
+              {books.length === 0
+                ? `Nothing matches “${asked}”.`
+                : `${books.length} ${books.length === 1 ? 'book' : 'books'} matching “${asked}”.`}{' '}
+              <a href={href({ q: '' })}>Show everything</a>
+            </p>
           ) : null}
 
-          <CollectionShelves shelves={shelves} />
-        </>
-      )}
+          {books.length === 0 ? (
+            asked ? null : (
+              <p className="empty">
+                {collection
+                  ? 'No books in this collection yet.'
+                  : level === 'extensive'
+                    ? 'No books published yet.'
+                    : `No books at the ${LEVEL_LABELS[level].toLowerCase()} level yet — try Extensive to see the whole library.`}
+              </p>
+            )
+          ) : (
+            <>
+              {lead.length > 0 ? <BookGrid books={lead} /> : null}
 
-      <div className="shelves__foot">
-        <ShareCta />
+              <CollectionShelves shelves={shelves} />
+            </>
+          )}
+
+          <ShareCta />
+        </div>
       </div>
     </main>
   )
