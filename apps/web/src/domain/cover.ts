@@ -29,6 +29,25 @@ export function coverSourceFrom<T extends { format?: unknown; storageKey?: unkno
   return usable.find((artifact) => artifact.format === format) ?? null
 }
 
+export interface CoverSource {
+  format: ArtifactFormat
+  storageKey: string
+}
+
+export function bookCoverSource(book: {
+  artifacts?: readonly { format?: unknown; storageKey?: unknown }[] | null
+  conversion?: { sourceKind?: unknown; sourceKey?: unknown } | null
+}): CoverSource | null {
+  const filed = coverSourceFrom(book.artifacts ?? [])
+  if (filed) return { format: filed.format as ArtifactFormat, storageKey: filed.storageKey as string }
+
+  const kind = book.conversion?.sourceKind
+  const key = book.conversion?.sourceKey
+  if (typeof key !== 'string' || !key) return null
+  const format = coverSourceFormat([kind])
+  return format ? { format, storageKey: key } : null
+}
+
 export { coverCandidateKey, coverKey } from './bookStorage'
 
 export const COVER_CANDIDATE_PAGES = 3

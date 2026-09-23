@@ -109,6 +109,19 @@ function toJpeg(canvas: HTMLCanvasElement): Promise<Blob | null> {
   })
 }
 
+export type StoredCoverAttempt = CoverAttempt | { ok: false; reason: 'source' }
+
+export async function makeCoversFromStored(bookId: number | string): Promise<StoredCoverAttempt> {
+  const response = await fetch(`/covers/${bookId}/source`).catch(() => null)
+  if (!response?.ok) return { ok: false, reason: 'source' }
+
+  const source = (response.headers.get('X-Cover-Source') ?? 'pdf') as CoverSource
+  const file = await response.blob().catch(() => null)
+  if (!file) return { ok: false, reason: 'source' }
+
+  return makeCoversFor(bookId, file, source)
+}
+
 export async function makeCoversFor(
   bookId: number | string,
   file: Blob,

@@ -1,6 +1,6 @@
 export interface ChatClient {
   model: string
-  complete(system: string, user: string): Promise<string>
+  complete(system: string, user: string, images?: readonly string[]): Promise<string>
 }
 
 export class LlmError extends Error {}
@@ -8,6 +8,7 @@ export class LlmError extends Error {}
 interface ProviderSpec {
   baseUrl: string
   model: string
+  identifyModel: string
   keyVar: string
   keyRequired: boolean
 }
@@ -16,12 +17,14 @@ const PROVIDERS: Record<string, ProviderSpec> = {
   xai: {
     baseUrl: 'https://api.x.ai/v1',
     model: 'grok-4.20-0309-non-reasoning',
+    identifyModel: 'grok-4.20-0309-reasoning',
     keyVar: 'XAI_API_KEY',
     keyRequired: true,
   },
   vllm: {
     baseUrl: '',
     model: 'google/gemma-4-31B-it-qat-w4a16-ct',
+    identifyModel: 'google/gemma-4-31B-it-qat-w4a16-ct',
     keyVar: 'VLLM_API_KEY',
     keyRequired: false,
   },
@@ -86,6 +89,17 @@ export function llmConfigFromEnv(env: Env): LlmConfig {
   }
 }
 
+export function identifyConfigFromEnv(env: Env): LlmConfig {
+  const config = llmConfigFromEnv(env)
+  const spec = PROVIDERS[config.provider]
+  return {
+    ...config,
+    model: read(env, 'IDENTIFY_MODEL') ?? spec.identifyModel,
+    timeoutMs: Number(read(env, 'IDENTIFY_TIMEOUT_MS') ?? 120_000),
+    maxRetries: 1,
+  }
+}
+
 export function llmConfigured(env: Env): boolean {
   try {
     llmConfigFromEnv(env)
@@ -101,13 +115,20 @@ export function createChatClient(config: LlmConfig): ChatClient {
   return {
     model: config.model,
 
-    async complete(system: string, user: string): Promise<string> {
+    async complete(system: string, user: string, images?: readonly string[]): Promise<string> {
+      const content =
+        images && images.length > 0
+          ? [
+              { type: 'text', text: user },
+              ...images.map((url) => ({ type: 'image_url', image_url: { url, detail: 'high' } })),
+            ]
+          : user
       const payload: Record<string, unknown> = {
         model: config.model,
         temperature: 0,
         messages: [
           { role: 'system', content: system },
-          { role: 'user', content: user },
+          { role: 'user', content },
         ],
       }
       if (config.jsonMode) payload.response_format = { type: 'json_object' }

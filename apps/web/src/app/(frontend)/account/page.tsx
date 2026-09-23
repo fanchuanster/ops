@@ -4,8 +4,7 @@ import React from 'react'
 
 import { KindleSettings } from '../../../components/KindleSettings'
 import {
-  SHARE_LICENSED,
-  SHARE_PUBLIC_DOMAIN,
+  UPLOADER_SHARE,
 } from '../../../domain/uploaderShare'
 import {
   ACTIVE_MONTH_GRANT,
@@ -51,7 +50,7 @@ export default async function AccountPage() {
         <li>{`Sending a book you already have costs ${RESEND_PRICE} credit.`}</li>
         <li>{`You get ${ACTIVE_MONTH_GRANT} credits for any month you sign in, and ${INACTIVE_MONTH_GRANT} for a month you are away.`}</li>
         <li>
-          {`Upload a book and you earn a share of what readers spend sending it — ${SHARE_PUBLIC_DOMAIN}% for a public-domain text you digitised, ${SHARE_LICENSED}% for one you wrote or hold a licence to.`}
+          {`Upload a book and you earn ${UPLOADER_SHARE}% of what readers spend sending it.`}
         </li>
       </ul>
 

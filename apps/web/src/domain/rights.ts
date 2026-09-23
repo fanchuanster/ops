@@ -64,15 +64,11 @@ function restrictiveness(status: RightsStatus): number {
   }
 }
 
-export const UPLOADER_RIGHTS = [
-  { value: 'public_domain', label: 'It is in the public domain' },
-  { value: 'licensed', label: 'I wrote it, or I hold a licence to publish it' },
-  { value: 'permission_granted', label: 'I have the rights holder’s permission' },
-  { value: 'user_owned', label: 'I own a copy of it' },
-] as const satisfies readonly { value: RightsStatus; label: string }[]
+export const OFFERED_RIGHTS: RightsStatus = 'public_domain'
 
-export function isUploaderSelectableRights(value: unknown): value is RightsStatus {
-  return UPLOADER_RIGHTS.some((option) => option.value === value)
+export function rightsOnOffer(current: RightsStatus): RightsStatus {
+  if (current === 'restricted' || PUBLICLY_DISTRIBUTABLE.has(current)) return current
+  return OFFERED_RIGHTS
 }
 
 export function isPubliclyDistributable(status: RightsStatus): boolean {
@@ -81,11 +77,11 @@ export function isPubliclyDistributable(status: RightsStatus): boolean {
 
 export const RIGHTS_LABELS: Record<RightsStatus, string> = {
   public_domain: 'Public domain',
-  licensed: 'I wrote it, or hold a licence',
+  licensed: 'Licensed',
   permission_granted: 'Rights holder’s permission',
-  user_owned: 'I own a copy',
+  user_owned: 'Private copy',
   restricted: 'Restricted',
-  unknown: 'Not sure',
+  unknown: 'Not confirmed',
 }
 
 export type RightsRisk = 'ok' | 'warn' | 'block'

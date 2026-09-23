@@ -154,17 +154,10 @@ export function releasedExportHandle(state: ConversionState): {
   return { exportJob: null, exportAsset: null, exportStartedAt: null, exportRetries: 0 }
 }
 
-export const UPLOAD_STEPS = ['Upload', 'Process', 'Review', 'Publish'] as const
+export const UPLOAD_STEPS = ['Upload', 'Process', 'Submit'] as const
 
-export function uploadStep({
-  state,
-  reviewState,
-}: {
-  state: ConversionState
-  reviewState?: string | null
-}): number {
-  if (reviewState === 'approved') return 3
-  if (state === 'draft') return 0
-  if (state === 'ready' || state === 'none') return 2
+export function uploadStep({ reviewState }: { reviewState?: string | null }): number {
+  if (reviewState === 'approved') return UPLOAD_STEPS.length
+  if (reviewState === 'submitted') return 2
   return 1
 }

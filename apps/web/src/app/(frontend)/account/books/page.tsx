@@ -1,5 +1,6 @@
 import React from 'react'
 
+import { DeleteBookButton } from '../../../../components/DeleteBookButton'
 import { isInPublicLibrary } from '../../../../domain/moderation'
 import { readSourceKind } from '../../../../domain/publication'
 import { getCurrentUser } from '../../../../lib/auth'
@@ -82,6 +83,7 @@ export default async function MyBooksPage() {
                   <span className="my-books__links">
                     <a href={`/account/books/${book.id}`}>Manage</a>
                     {ready ? <a href={`/read/${book.slug}`}>Read</a> : null}
+                    <DeleteBookButton bookId={Number(book.id)} title={book.title} />
                   </span>
                 </span>
               </li>

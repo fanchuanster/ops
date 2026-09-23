@@ -22,7 +22,6 @@ export default async function UploadPage() {
     <>
       <div className="wizard-head">
         <h2>Upload a Book</h2>
-        <p>Prepare your manuscript for NobleSee</p>
       </div>
 
       <Stepper step={0} />

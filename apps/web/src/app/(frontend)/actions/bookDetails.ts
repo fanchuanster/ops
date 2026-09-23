@@ -9,6 +9,7 @@ import {
   type SubmissionBlockedReason,
   canPublishToLibrary,
   canSubmitForReview,
+  parseVisibility,
 } from '../../../domain/moderation'
 import { levelId, parseProposedLevel } from '../../../domain/levels'
 import {
@@ -21,10 +22,11 @@ import {
   stateAfterMasterEdit,
   statusOnQueue,
 } from '../../../domain/pipeline'
-import { isUploaderSelectableRights, type RightsStatus } from '../../../domain/rights'
+import { rightsOnOffer, type RightsStatus } from '../../../domain/rights'
 import { orderIdFrom } from '../../../domain/shelfOrder'
 import { quotaMessage } from '../../../domain/uploadQuota'
 import {
+  defaultPlanFor,
   needsConverter,
   readPlanChoice,
   readSourceKind,
@@ -40,6 +42,10 @@ import { settleQueuedBook } from '../../../lib/masterPipeline'
 
 export type DetailsState = { error?: string }
 
+type SignedIn = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>
+
+type Written = { error: string } | { error?: undefined; slugs: string[] }
+
 export async function saveBookDetails(
   _prev: DetailsState,
   formData: FormData,
@@ -47,6 +53,45 @@ export async function saveBookDetails(
   const user = await getCurrentUser()
   if (!user) return { error: 'Sign in first.' }
 
+  const written = await writeDetails(user, formData, false)
+  if (written.error !== undefined) return { error: written.error }
+
+  const bookId = Number(formData.get('bookId'))
+  revalidateDetails(bookId, written.slugs)
+  redirect(`/account/books/${bookId}`)
+}
+
+export async function submitDraft(
+  _prev: DetailsState,
+  formData: FormData,
+): Promise<DetailsState> {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Sign in first.' }
+
+  const offered = parseVisibility(formData.get('visibility')) === 'public'
+  const written = await writeDetails(user, formData, true)
+  if (written.error !== undefined) return { error: written.error }
+
+  const bookId = Number(formData.get('bookId'))
+  revalidateDetails(bookId, written.slugs)
+
+  if (offered) await offerToLibrary(user, bookId)
+  redirect(`/account/books/${bookId}`)
+}
+
+function revalidateDetails(bookId: number, slugs: string[]) {
+  revalidatePath('/account/books')
+  revalidatePath(`/account/books/${bookId}`)
+  if (slugs.length === 0) return
+  revalidatePath('/books')
+  for (const slug of slugs) revalidatePath(`/books/${slug}`)
+}
+
+async function writeDetails(
+  user: SignedIn,
+  formData: FormData,
+  fromDraft: boolean,
+): Promise<Written> {
   const bookId = Number(formData.get('bookId'))
   if (!Number.isInteger(bookId)) return { error: 'Nothing to save.' }
 
@@ -59,15 +104,12 @@ export async function saveBookDetails(
   if (!book || !ownerId || String(ownerId) !== String(user.id)) {
     return { error: 'That book is not yours to edit.' }
   }
+  if (fromDraft && book.conversion?.state !== 'draft') {
+    return { error: 'This book has already been created. Submit it from its page.' }
+  }
 
   const title = String(formData.get('title') || '').trim()
   if (!title) return { error: 'Give the book a title.' }
-
-  const rightsStatus = String(formData.get('rightsStatus') || '')
-
-  if (rightsStatus && !isUploaderSelectableRights(rightsStatus)) {
-    return { error: 'Say where this book came from.' }
-  }
 
   const rawCollection = Number(formData.get('collection'))
   const collectionId = Number.isInteger(rawCollection) && rawCollection > 0 ? rawCollection : null
@@ -81,11 +123,19 @@ export async function saveBookDetails(
 
   const language = String(formData.get('language') || '')
 
+  const reviewState = book.review?.state ?? 'unsubmitted'
+  const proposed =
+    reviewState === 'unsubmitted' || reviewState === 'rejected'
+      ? parseProposedLevel(formData.get('proposedLevel'))
+      : null
+
   const alreadyConverting = book.conversion?.state !== 'draft'
 
   const sourceKind = readSourceKind(book.conversion ?? {})
   const previousPlan = resolvePlan(sourceKind, book.conversion?.plan)
-  const { plan, aiCorrection } = readPlanChoice(sourceKind, formData.get('planChoice'))
+  const { plan, aiCorrection } = fromDraft
+    ? { plan: defaultPlanFor(sourceKind), aiCorrection: false }
+    : readPlanChoice(sourceKind, formData.get('planChoice'))
 
   const startsConverting =
     alreadyConverting && reopensForConversion(sourceKind, previousPlan, plan)
@@ -124,8 +174,8 @@ export async function saveBookDetails(
         title,
         author: String(formData.get('author') || '').trim() || null,
         ...(language ? { language: language as 'zh-Hant' } : {}),
-        ...(rightsStatus ? { rightsStatus: rightsStatus as 'user_owned' } : {}),
         collection: collectionId,
+        ...(proposed ? { review: { ...book.review, proposedLevel: levelId(proposed) } } : {}),
         ...(ordersShelves
           ? {
               collectionOrder:
@@ -159,14 +209,9 @@ export async function saveBookDetails(
 
   await settleQueuedBook(payload, bookId)
 
-  revalidatePath('/account/books')
-  revalidatePath(`/account/books/${bookId}`)
-  if (saved.slug !== book.slug) {
-    revalidatePath('/books')
-    revalidatePath(`/books/${book.slug}`)
-    revalidatePath(`/books/${saved.slug}`)
+  return {
+    slugs: saved.slug === book.slug ? [] : [book.slug, saved.slug].filter(Boolean) as string[],
   }
-  redirect(`/account/books/${bookId}`)
 }
 
 export async function submitForReview(
@@ -177,6 +222,17 @@ export async function submitForReview(
   if (!user) return { error: 'Sign in first.' }
 
   const bookId = Number(formData.get('bookId'))
+  const offered = await offerToLibrary(user, bookId)
+  if (offered.error) return offered
+
+  if (offered.published) redirect(`/account/books/${bookId}`)
+  return {}
+}
+
+async function offerToLibrary(
+  user: SignedIn,
+  bookId: number,
+): Promise<DetailsState & { published?: boolean }> {
   if (!Number.isInteger(bookId)) return { error: 'Nothing to submit.' }
 
   const payload = await getPayload({ config })
@@ -189,40 +245,27 @@ export async function submitForReview(
     return { error: 'That book is not yours to submit.' }
   }
 
-  const rightsStatus = String(formData.get('rightsStatus') || '')
-  if (rightsStatus && !isUploaderSelectableRights(rightsStatus)) {
-    return { error: 'Say where this book came from.' }
-  }
-
-  if (rightsStatus && rightsStatus !== book.rightsStatus) {
-    await payload.update({
-      collection: 'books',
-      id: bookId,
-      data: { rightsStatus: rightsStatus as 'user_owned' },
-      overrideAccess: true,
-    })
-  }
+  const current = (book.rightsStatus ?? 'unknown') as RightsStatus
+  const rightsStatus = rightsOnOffer(current)
 
   const decision = canSubmitForReview({
     reviewState: book.review?.state ?? 'unsubmitted',
-    rightsStatus: (rightsStatus || book.rightsStatus) as typeof book.rightsStatus,
+    rightsStatus,
     hasContent: hasMaster(
       isConversionState(book.conversion?.state) ? book.conversion.state : 'none',
     ),
   })
   if (!decision.allowed) return { error: SUBMISSION_ERRORS[decision.reason] }
 
-  const proposed = parseProposedLevel(formData.get('proposedLevel'))
-
   await payload.update({
     collection: 'books',
     id: bookId,
     data: {
+      rightsStatus,
       review: {
         ...book.review,
         state: 'submitted',
         submittedAt: new Date().toISOString(),
-        proposedLevel: proposed ? levelId(proposed) : null,
       },
     },
     overrideAccess: true,
@@ -232,7 +275,7 @@ export async function submitForReview(
   if (isAdmin(user)) {
     const publication = canPublishToLibrary({
       reviewState: 'submitted',
-      rightsStatus: (rightsStatus || book.rightsStatus || 'unknown') as RightsStatus,
+      rightsStatus,
       byAdmin: true,
       ownedByRequester: true,
     })
@@ -262,20 +305,14 @@ export async function submitForReview(
   }
 
   revalidatePath(`/account/books/${bookId}`)
-
-  if (published) {
-    revalidatePath('/account/books')
-    redirect('/account/books')
-  }
-
-  return {}
+  revalidatePath('/account/books')
+  return { published }
 }
 
 const SUBMISSION_ERRORS: Record<SubmissionBlockedReason, string> = {
   already_submitted: 'This book is already waiting to be reviewed.',
   already_approved: 'This book has already been approved.',
-  rights_undeclared:
-    'Say where this book came from before submitting it. You are the only person who knows.',
+  rights_undeclared: 'This book’s rights have not been set.',
   no_content: 'There is nothing to review yet.',
 }
 

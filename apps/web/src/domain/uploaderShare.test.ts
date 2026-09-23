@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   POINTS_PER_CREDIT,
-  SHARE_LICENSED,
-  SHARE_PUBLIC_DOMAIN,
+  UPLOADER_SHARE,
   settleShare,
   shareDescription,
   shareForDelivery,
@@ -14,13 +13,10 @@ const earn = (creditsSpent: number, rightsStatus: Parameters<typeof sharePercent
   shareForDelivery({ creditsSpent, rightsStatus, hasUploader: true })
 
 describe('the rates', () => {
-  it('is a third for a public-domain book', () => {
-    expect(sharePercent('public_domain')).toBe(SHARE_PUBLIC_DOMAIN)
-  })
-
-  it('is two thirds for a book the uploader wrote or licensed', () => {
-    expect(sharePercent('licensed')).toBe(SHARE_LICENSED)
-    expect(sharePercent('permission_granted')).toBe(SHARE_LICENSED)
+  it('is two thirds for every book that may be shared, public domain included', () => {
+    for (const status of ['public_domain', 'licensed', 'permission_granted'] as const) {
+      expect(sharePercent(status)).toBe(UPLOADER_SHARE)
+    }
   })
 
   it('is nothing for anything not publicly distributable', () => {
@@ -32,9 +28,9 @@ describe('the rates', () => {
 
 describe('earning on one delivery', () => {
   it('earns points, not credits, so small books are not rounded to nothing', () => {
-    expect(earn(1, 'public_domain')).toBe(33)
+    expect(earn(1, 'public_domain')).toBe(66)
     expect(earn(1, 'licensed')).toBe(66)
-    expect(earn(7, 'public_domain')).toBe(231)
+    expect(earn(7, 'public_domain')).toBe(462)
   })
 
   it('pays nobody when the book has no uploader', () => {
@@ -83,7 +79,7 @@ describe('settling points into credits', () => {
       credits += settled.credits
       carry = settled.carry
     }
-    expect(credits).toBe(33)
+    expect(credits).toBe(66)
     expect(carry).toBe(0)
   })
 
@@ -105,8 +101,8 @@ describe('settling points into credits', () => {
 })
 
 describe('describing the share to the uploader', () => {
-  it('explains that a public-domain share is for the digitisation', () => {
-    expect(shareDescription('public_domain')).toContain('digitisation')
+  it('states the one rate for a public-domain book', () => {
+    expect(shareDescription('public_domain')).toContain(`${UPLOADER_SHARE}%`)
   })
 
   it('says nothing for a book that cannot earn', () => {

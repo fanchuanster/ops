@@ -51,9 +51,8 @@ export function describeBytes(bytes: number): string {
 
 export function tooLargeMessage(bytes: number): string {
   return (
-    `This edition is ${describeBytes(bytes)}. Email can carry ` +
-    `${describeBytes(MAX_ATTACHMENT_BYTES)}, so it cannot be sent to a Kindle. ` +
-    `Read it here instead — the online reader has the whole book.`
+    `Could not send it: this edition is ${describeBytes(bytes)}, and email can ` +
+    `carry at most ${describeBytes(MAX_ATTACHMENT_BYTES)}.`
   )
 }
 

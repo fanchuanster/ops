@@ -4,11 +4,9 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
-import { CoverImageUpload } from '../../../../../components/CoverImageUpload'
-import { CoverPagePicker } from '../../../../../components/CoverPagePicker'
-import { MakeCoverButton } from '../../../../../components/MakeCoverButton'
+import { BookCover } from '../../../../../components/BookCover'
 import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
-import { BookActions } from '../../../../../components/BookActions'
+import { RetryConversion } from '../../../../../components/RetryConversion'
 import { BookBuild } from '../../../../../components/BookBuild'
 import { BookSources } from '../../../../../components/BookSources'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
@@ -23,7 +21,7 @@ import {
   coverAltFor,
   coverCandidatePages,
   coverImageUrl,
-  coverSourceFrom,
+  bookCoverSource,
   hasRenderedPages,
   uploadedCoverId,
 } from '../../../../../domain/cover'
@@ -37,11 +35,9 @@ import { isConversionState, isInFlight, uploadStep } from '../../../../../domain
 import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
 import { readSources } from '../../../../../domain/sources'
 import { shareDescription } from '../../../../../domain/uploaderShare'
-import { MONTHLY_PAGE_LIMIT, MONTHLY_UPLOAD_LIMIT } from '../../../../../domain/uploadQuota'
 import { loadSuggestions } from '../../../actions/correction'
 import { getCurrentUser } from '../../../../../lib/auth'
 import { getCollections } from '../../../../../lib/catalog'
-import { usageThisMonth } from '../../../../../lib/uploadQuota'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Book details' }
@@ -72,7 +68,6 @@ export default async function BookDetailsPage({
   const suggestions =
     correctionState === 'ready' ? await loadSuggestions(Number(book.id)) : []
   const isAdmin = Boolean(user.roles?.includes('admin'))
-  const usage = isAdmin ? null : await usageThisMonth(payload, user.id)
   const state = book.conversion?.state ?? 'none'
 
   const finished =
@@ -99,7 +94,22 @@ export default async function BookDetailsPage({
     bookId: book.id,
     generated: generatedCover,
   })
-  const canMakeCover = coverSourceFrom(book.artifacts ?? []) !== null
+  const canMakeCover = bookCoverSource(book) !== null
+  const reviewState = book.review?.state ?? 'unsubmitted'
+
+  const cover = (
+    <BookCover
+      bookId={Number(book.id)}
+      title={book.title}
+      coverUrl={coverUrl}
+      alt={coverAltFor(book.title)}
+      uploaded={uploadedCover !== null}
+      page={chosenCoverPage(generatedCover)}
+      pages={coverCandidatePages(generatedCover)}
+      canMake={canMakeCover && !hasRenderedPages(generatedCover)}
+      isPrivate={!isInPublicLibrary(book)}
+    />
+  )
 
   return (
     <>
@@ -119,17 +129,8 @@ export default async function BookDetailsPage({
       )}
 
       {finished ? null : (
-        <Stepper step={uploadStep({ state, reviewState: book.review?.state })} />
+        <Stepper step={uploadStep({ reviewState: book.review?.state })} />
       )}
-
-      <p className="file-chip">
-        <span className={`fmt fmt--${sourceKind === 'text' ? 'txt' : sourceKind}`}>
-          {sourceKind === 'text' ? 'txt' : sourceKind}
-        </span>
-        <span className="file-chip__name">
-          {book.conversion?.sourceFilename ?? 'your file'}
-        </span>
-      </p>
 
       {readable || deliverable.length > 0 ? (
         <p className="book-actions">
@@ -156,15 +157,6 @@ export default async function BookDetailsPage({
         </p>
       ) : null}
 
-      {usage && draft ? (
-        <p className="hint hint--quota">
-          {`This month you have converted ${usage.uploads} of ${MONTHLY_UPLOAD_LIMIT} books and ${usage.pages.toLocaleString('en-US')} of ${MONTHLY_PAGE_LIMIT.toLocaleString('en-US')} pages.`}
-          {book.estimatedPages
-            ? ` This one looks like about ${book.estimatedPages} pages.`
-            : ' We could not tell how long this one is, so it counts as one book and no pages.'}
-        </p>
-      ) : null}
-
       <BookDetailsForm
         book={{
           id: Number(book.id),
@@ -181,6 +173,8 @@ export default async function BookDetailsPage({
                 : null,
           collectionOrder:
             typeof book.collectionOrder === 'number' ? book.collectionOrder : null,
+          proposedLevel: book.review?.proposedLevel ?? null,
+          canProposeLevel: reviewState === 'unsubmitted' || reviewState === 'rejected',
           sourceKind,
           plan,
           aiCorrection: book.conversion?.aiCorrection === true,
@@ -190,22 +184,27 @@ export default async function BookDetailsPage({
           title: node.collection.title,
           depth: node.depth,
         }))}
+        sources={sources}
+        cover={draft ? cover : undefined}
+        needsFirstPage={canMakeCover && !hasRenderedPages(generatedCover)}
         draft={draft}
-        canOrderShelf={isAdmin}
+        byAdmin={isAdmin}
       />
 
-      <BookBuild
-        bookId={Number(book.id)}
-        sourceKind={sourceKind}
-        sources={sources}
-        hasMaster={hasMaster}
-        aiCorrection={book.conversion?.aiCorrection === true}
-        converting={isConversionState(state) && isInFlight(state)}
-      />
+      {draft ? null : (
+        <BookBuild
+          bookId={Number(book.id)}
+          sourceKind={sourceKind}
+          sources={sources}
+          hasMaster={hasMaster}
+          aiCorrection={book.conversion?.aiCorrection === true}
+          converting={isConversionState(state) && isInFlight(state)}
+        />
+      )}
 
       {share && isInPublicLibrary(book) ? <p className="hint">{share}</p> : null}
 
-      {finished ? null : (
+      {finished || draft ? null : (
         <ConversionProgress
           state={state}
           message={book.conversion?.message}
@@ -219,47 +218,7 @@ export default async function BookDetailsPage({
         <>
           <section className="cover-panel">
             <h3>Cover</h3>
-            <div className="cover-panel__body">
-              {coverUrl ? (
-                <img
-                  className="cover-panel__img"
-                  src={coverUrl}
-                  alt={coverAltFor(book.title)}
-                />
-              ) : (
-                <span className="cover-panel__img cover-panel__img--empty cjk" aria-hidden="true">
-                  {Array.from(book.title.trim())[0] ?? '·'}
-                </span>
-              )}
-              <div>
-                {uploadedCover ? (
-                  <p className="hint">
-                    This book is wearing an uploaded image rather than a page of itself.
-                  </p>
-                ) : (
-                  <>
-                    <CoverPagePicker
-                      bookId={Number(book.id)}
-                      page={chosenCoverPage(generatedCover)}
-                      pages={coverCandidatePages(generatedCover)}
-                    />
-                    {canMakeCover && !hasRenderedPages(generatedCover) ? (
-                      <p className="cover-panel__make">
-                        <MakeCoverButton
-                          bookId={Number(book.id)}
-                          className="cta cta--compact"
-                        />
-                      </p>
-                    ) : null}
-                  </>
-                )}
-                <CoverImageUpload
-                  bookId={Number(book.id)}
-                  hasUploadedCover={uploadedCover !== null}
-                  bookIsPrivate={!isInPublicLibrary(book)}
-                />
-              </div>
-            </div>
+            {cover}
           </section>
 
           <BookSources
@@ -295,8 +254,7 @@ export default async function BookDetailsPage({
           ) : null}
           <SubmitForReview
             bookId={Number(book.id)}
-            reviewState={book.review?.state ?? 'unsubmitted'}
-            rightsStatus={book.rightsStatus}
+            reviewState={reviewState}
             reviewNote={book.review?.note}
             proposedLevel={book.review?.proposedLevel}
             byAdmin={isAdmin}
@@ -304,11 +262,7 @@ export default async function BookDetailsPage({
         </>
       )}
 
-      <BookActions
-        bookId={Number(book.id)}
-        title={book.title}
-        canRetry={state === 'failed'}
-      />
+      {state === 'failed' ? <RetryConversion bookId={Number(book.id)} /> : null}
     </>
   )
 }

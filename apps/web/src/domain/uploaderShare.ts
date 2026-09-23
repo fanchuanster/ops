@@ -1,20 +1,11 @@
-import type { RightsStatus } from './rights'
+import { isPubliclyDistributable, type RightsStatus } from './rights'
 
-export const SHARE_PUBLIC_DOMAIN = 33
-export const SHARE_LICENSED = 66
+export const UPLOADER_SHARE = 66
 
 export const POINTS_PER_CREDIT = 100
 
 export function sharePercent(rightsStatus: RightsStatus): number {
-  switch (rightsStatus) {
-    case 'public_domain':
-      return SHARE_PUBLIC_DOMAIN
-    case 'licensed':
-    case 'permission_granted':
-      return SHARE_LICENSED
-    default:
-      return 0
-  }
+  return isPubliclyDistributable(rightsStatus) ? UPLOADER_SHARE : 0
 }
 
 export function shareForDelivery({
@@ -49,7 +40,5 @@ export function shareDescription(rightsStatus: RightsStatus): string | null {
   const percent = sharePercent(rightsStatus)
   if (percent === 0) return null
 
-  return percent === SHARE_PUBLIC_DOMAIN
-    ? `You earn ${percent}% of the credits readers spend sending this book — the text is public domain, so the share is for the digitisation.`
-    : `You earn ${percent}% of the credits readers spend sending this book.`
+  return `You earn ${percent}% of the credits readers spend sending this book.`
 }

@@ -42,7 +42,7 @@ oversight.
   master download and replace, delete, retry, and optional submit-for-review.
 - **Conversion quota** — 3 books and 1200 pages a month, admins unlimited,
   charged at conversion so drafts stay free.
-- **Uploader share** — 33% public domain, 66% authored or licensed, accumulated
+- **Uploader share** — 66% on any book cleared for sharing, accumulated
   in hundredths so small books actually pay.
 - **Site** — catalog with collection filtering, book pages, reading-first
   typography with Traditional Chinese first in the font stack.

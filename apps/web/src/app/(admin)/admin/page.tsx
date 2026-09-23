@@ -227,7 +227,7 @@ function SubmissionPanel({
         </section>
 
         <section>
-          <h3>Rights declaration</h3>
+          <h3>Rights</h3>
           <div className={`admin-note admin-note--${risk}`}>
             <strong>{RIGHTS_LABELS[rights]}</strong>
             {risk === 'block' ? (
@@ -239,8 +239,7 @@ function SubmissionPanel({
             ) : null}
             {risk === 'warn' ? (
               <p>
-                Nobody has said where this came from. Only the uploader can answer it, so the
-                honest move is to ask rather than to guess.
+                Its rights have not been set. Look at what the book is before deciding.
               </p>
             ) : null}
           </div>

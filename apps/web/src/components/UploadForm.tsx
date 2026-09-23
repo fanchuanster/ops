@@ -2,16 +2,18 @@
 
 import React, { useRef, useState, type DragEvent, type FormEvent } from 'react'
 
+import { identifyUpload } from '../app/(frontend)/actions/identify'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL, sourceKindOf } from '../domain/publication'
 import { INTAKE_ERRORS, planIntake } from '../domain/sources'
 import { coverSourceFor, makeCoversFor } from '../lib/client/coverImages'
+
+const FIRST_PAGE_NOTE =
+  'We send the file names and first page to xAI, outside NobleSee, to read the title, author and language.'
 
 const ACCEPT =
   '.pdf,.docx,.epub,.txt,.md,application/pdf,' +
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
   'application/epub+zip,text/plain,text/markdown'
-
-const FORMATS = ['pdf', 'docx', 'epub', 'txt'] as const
 
 interface Sending {
   index: number
@@ -75,6 +77,7 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
   const [created, setCreated] = useState<number | string | null>(null)
   const [sending, setSending] = useState<Sending | null>(null)
   const [makingCover, setMakingCover] = useState(false)
+  const [reading, setReading] = useState(false)
   const pending = sending !== null
 
   function accept(files: FileList | null) {
@@ -142,7 +145,11 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
     if (cover) {
       setMakingCover(true)
       await makeCoversFor(bookId, cover, coverSourceFor(cover.name, cover.type)!)
+      setMakingCover(false)
     }
+
+    setReading(true)
+    await identifyUpload(Number(bookId))
 
     window.location.assign(`/account/books/${bookId}`)
   }
@@ -159,122 +166,116 @@ export function UploadForm({ quota }: { quota?: React.ReactNode }) {
   }
 
   return (
-    <form onSubmit={submit} className="upload-form">
-      <div className="upload-form__head">
-        <h3>Select manuscript</h3>
-        <p>
-          PDF, DOCX, EPUB, or plain text — up to {MAX_UPLOAD_LABEL} each. Choose several at
-          once if you have the same book in more than one format.
-        </p>
-        {quota}
+    <form onSubmit={submit} className="upload-intake">
+      <div className="upload-form">
+        <div className="upload-form__head">
+          <h3>Select manuscript</h3>
+          <p>PDF, TXT, DOCX, or EPUB — up to {MAX_UPLOAD_LABEL} each.</p>
+          <p className="hint">{FIRST_PAGE_NOTE}</p>
+          {quota}
+        </div>
+
+        <label
+          className="dropzone"
+          data-dragging={dragging}
+          onDragOver={(event) => {
+            event.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+        >
+          <span className="visually-hidden">Choose the book’s files</span>
+          <input
+            ref={inputRef}
+            className="visually-hidden"
+            type="file"
+            name="file"
+            required
+            multiple
+            accept={ACCEPT}
+            onChange={(event) => accept(event.currentTarget.files)}
+          />
+
+          <span className="dropzone__icon" aria-hidden="true">
+            <svg viewBox="0 0 22 22" fill="none">
+              <path
+                d="M11 15V7M11 7L7.5 10.5M11 7L14.5 10.5"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M4 16V17C4 18.1046 4.89543 19 6 19H16C17.1046 19 18 18.1046 18 17V16"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+
+          {chosen.length > 0 ? (
+            <div className="dropzone__chosen">
+              <ul className="dropzone__files">
+                {chosen.map((file) => (
+                  <li key={file.name}>
+                    <span className={`fmt fmt--${badge(file.name, file.type)}`}>
+                      {badge(file.name, file.type)}
+                    </span>
+                    <strong>{file.name}</strong>
+                  </li>
+                ))}
+              </ul>
+              <span className="dropzone__secondary">Drop others, or click to change them.</span>
+            </div>
+          ) : (
+            <p className="dropzone__primary">Drop your files here</p>
+          )}
+        </label>
+
+        {sending ? (
+          <div
+            className="upload-progress"
+            role="progressbar"
+            aria-valuenow={sending.percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Upload progress"
+          >
+            <span className="upload-progress__bar" style={{ width: `${sending.percent}%` }} />
+          </div>
+        ) : null}
+
+        {error ? (
+          <p className="form-error">
+            {error}
+            {created !== null ? (
+              <>
+                {' '}
+                <a href={`/account/books/${created}`}>Open the book</a> to add it there.
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </div>
 
-      <label
-        className="dropzone"
-        data-dragging={dragging}
-        onDragOver={(event) => {
-          event.preventDefault()
-          setDragging(true)
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-      >
-        <span className="visually-hidden">Choose the book’s files</span>
-        <input
-          ref={inputRef}
-          className="visually-hidden"
-          type="file"
-          name="file"
-          required
-          multiple
-          accept={ACCEPT}
-          onChange={(event) => accept(event.currentTarget.files)}
-        />
-
-        <span className="dropzone__icon" aria-hidden="true">
-          <svg viewBox="0 0 22 22" fill="none">
-            <path
-              d="M11 15V7M11 7L7.5 10.5M11 7L14.5 10.5"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M4 16V17C4 18.1046 4.89543 19 6 19H16C17.1046 19 18 18.1046 18 17V16"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        </span>
-
-        {chosen.length > 0 ? (
-          <div className="dropzone__chosen">
-            <ul className="dropzone__files">
-              {chosen.map((file) => (
-                <li key={file.name}>
-                  <span className={`fmt fmt--${badge(file.name, file.type)}`}>
-                    {badge(file.name, file.type)}
-                  </span>
-                  <strong>{file.name}</strong>
-                </li>
-              ))}
-            </ul>
-            <span className="dropzone__secondary">Drop others, or click to change them.</span>
-          </div>
-        ) : (
-          <>
-            <p className="dropzone__primary">Drop your files here</p>
-            <p className="dropzone__secondary">or click to browse</p>
-          </>
-        )}
-
-        <span className="formats-row" aria-hidden="true">
-          {FORMATS.map((format) => (
-            <span key={format} className={`fmt fmt--${format}`}>
-              {format}
-            </span>
-          ))}
-        </span>
-      </label>
-
-      <div className="upload-form__actions">
-        <button type="submit" className="cta" disabled={pending || error !== null}>
-          {makingCover
-            ? 'Making a cover…'
-            : sending
-              ? sending.total > 1
-                ? `Uploading ${sending.index + 1} of ${sending.total}… ${sending.percent}%`
-                : `Uploading… ${sending.percent}%`
-              : 'Upload'}
+      <div className="upload-intake__actions">
+        <a href="/account/books" className="button-quiet">
+          Cancel
+        </a>
+        <button type="submit" className="cta cta--compact" disabled={pending || error !== null}>
+          {reading
+            ? 'Reading the file names and first page…'
+            : makingCover
+              ? 'Making a cover…'
+              : sending
+                ? sending.total > 1
+                  ? `Uploading ${sending.index + 1} of ${sending.total}… ${sending.percent}%`
+                  : `Uploading… ${sending.percent}%`
+                : 'Continue'}
         </button>
       </div>
-
-      {sending ? (
-        <div
-          className="upload-progress"
-          role="progressbar"
-          aria-valuenow={sending.percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Upload progress"
-        >
-          <span className="upload-progress__bar" style={{ width: `${sending.percent}%` }} />
-        </div>
-      ) : null}
-
-      {error ? (
-        <p className="form-error">
-          {error}
-          {created !== null ? (
-            <>
-              {' '}
-              <a href={`/account/books/${created}`}>Open the book</a> to add it there.
-            </>
-          ) : null}
-        </p>
-      ) : null}
     </form>
   )
 }

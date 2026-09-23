@@ -12,6 +12,16 @@ export function isInPublicLibrary(book: LibraryMembership): boolean {
   return book.review?.state === 'approved'
 }
 
+export const VISIBILITIES = ['public', 'private'] as const
+
+export type Visibility = (typeof VISIBILITIES)[number]
+
+export const DEFAULT_VISIBILITY: Visibility = 'public'
+
+export function parseVisibility(value: unknown): Visibility {
+  return VISIBILITIES.find((known) => known === value) ?? DEFAULT_VISIBILITY
+}
+
 export const REVIEW_STATES = ['unsubmitted', 'submitted', 'approved', 'rejected'] as const
 
 export type ReviewState = (typeof REVIEW_STATES)[number]

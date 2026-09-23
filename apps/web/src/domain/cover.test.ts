@@ -12,7 +12,35 @@ import {
   coverPageUrl,
   coverSourceFormat,
   coverSourceFrom,
+  bookCoverSource,
 } from './cover'
+
+describe('finding a cover source for a book', () => {
+  it('uses a filed edition first', () => {
+    expect(
+      bookCoverSource({
+        artifacts: [{ format: 'pdf', storageKey: 'books/1/book.pdf' }],
+        conversion: { sourceKind: 'pdf', sourceKey: 'conversion/x/input/source.pdf' },
+      }),
+    ).toEqual({ format: 'pdf', storageKey: 'books/1/book.pdf' })
+  })
+
+  it('falls back to a draft’s upload, which has no filed edition yet', () => {
+    expect(
+      bookCoverSource({
+        artifacts: [],
+        conversion: { sourceKind: 'pdf', sourceKey: 'conversion/x/input/source.pdf' },
+      }),
+    ).toEqual({ format: 'pdf', storageKey: 'conversion/x/input/source.pdf' })
+  })
+
+  it('offers nothing for an upload a browser cannot render', () => {
+    expect(
+      bookCoverSource({ conversion: { sourceKind: 'docx', sourceKey: 'conversion/x/a.docx' } }),
+    ).toBeNull()
+    expect(bookCoverSource({ conversion: { sourceKind: 'text', sourceKey: 'conversion/x/a.txt' } })).toBeNull()
+  })
+})
 
 describe('choosing what to render the opening pages from', () => {
   it('prefers the PDF, which for a scan is the book itself', () => {

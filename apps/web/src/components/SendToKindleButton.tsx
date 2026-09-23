@@ -10,13 +10,7 @@ import {
 
 import { sendToKindle, type KindleState } from '../app/(frontend)/actions/kindle'
 import { RESEND_PRICE } from '../domain/credits'
-import {
-  KINDLE_CONVERT_SUBJECT,
-  MAX_ATTACHMENT_BYTES,
-  describeBytes,
-  isEmailableSize,
-  tooLargeMessage,
-} from '../domain/kindle'
+import { KINDLE_CONVERT_SUBJECT } from '../domain/kindle'
 
 const FORMAT_LABEL: Record<string, string> = {
   epub: 'EPUB — reflowable',
@@ -25,10 +19,6 @@ const FORMAT_LABEL: Record<string, string> = {
 }
 
 export type DeliverableFormat = { format: string; bytes?: number | null }
-
-function oversized({ bytes }: DeliverableFormat): boolean {
-  return typeof bytes === 'number' && bytes > 0 && !isEmailableSize(bytes)
-}
 
 function resendWarning(balance: number | undefined): string {
   const cost = `${RESEND_PRICE} credit${RESEND_PRICE === 1 ? '' : 's'}`
@@ -57,19 +47,6 @@ export function SendToKindleButton({
 
   if (formats.length === 0) return null
 
-  const sendable = formats.filter((f) => !oversized(f))
-
-  if (sendable.length === 0) {
-    const smallest = Math.min(...formats.map((f) => f.bytes as number))
-
-    return (
-      <span className="send-hint" title={tooLargeMessage(smallest)}>
-        Too large to email — {describeBytes(smallest)}, over the{' '}
-        {describeBytes(MAX_ATTACHMENT_BYTES)} limit. Read it here instead.
-      </span>
-    )
-  }
-
   const currentBalance = state.balance ?? balance
 
   const label = pending
@@ -92,22 +69,12 @@ export function SendToKindleButton({
       {formats.length > 1 ? (
         <select
           name="format"
-          defaultValue={sendable.some((f) => f.format === 'epub') ? 'epub' : sendable[0].format}
+          defaultValue={formats.some((f) => f.format === 'epub') ? 'epub' : formats[0].format}
           aria-label="Format to send"
         >
           {formats.map((f) => (
-            <option
-              key={f.format}
-              value={f.format}
-              disabled={oversized(f)}
-              title={oversized(f) ? tooLargeMessage(f.bytes as number) : undefined}
-            >
+            <option key={f.format} value={f.format}>
               {FORMAT_LABEL[f.format] ?? f.format}
-              {oversized(f)
-                ? ` — ${describeBytes(f.bytes as number)}, over the ${describeBytes(
-                    MAX_ATTACHMENT_BYTES,
-                  )} email limit`
-                : ''}
             </option>
           ))}
         </select>

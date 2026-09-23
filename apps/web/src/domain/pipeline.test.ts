@@ -291,28 +291,20 @@ describe('what a converter is handed', () => {
 })
 
 describe('which step of the flow a book is standing on', () => {
-  it('starts on Upload while it is still a draft', () => {
-    expect(uploadStep({ state: 'draft' })).toBe(0)
+  it('sits on Process once the file is uploaded and its details are being filled', () => {
+    expect(uploadStep({})).toBe(1)
+    expect(uploadStep({ reviewState: 'unsubmitted' })).toBe(1)
   })
 
-  it('sits on Process for everything the converter is doing', () => {
-    for (const state of ['queued', 'ocr', 'ocr_ready', 'mastering', 'master_ready', 'formatting'] as const) {
-      expect(uploadStep({ state })).toBe(1)
-    }
+  it('reaches Submit while an editor is deciding', () => {
+    expect(uploadStep({ reviewState: 'submitted' })).toBe(2)
   })
 
-  it('keeps a failure on Process rather than inventing a step', () => {
-    expect(uploadStep({ state: 'failed' })).toBe(1)
+  it('sends a rejection back to Process to be revised', () => {
+    expect(uploadStep({ reviewState: 'rejected' })).toBe(1)
   })
 
-  it('reaches Review once there is something to judge', () => {
-    expect(uploadStep({ state: 'ready' })).toBe(2)
-    expect(uploadStep({ state: 'ready', reviewState: 'submitted' })).toBe(2)
-    expect(uploadStep({ state: 'ready', reviewState: 'rejected' })).toBe(2)
-  })
-
-  it('reaches Publish only on an approved review', () => {
-    expect(uploadStep({ state: 'ready', reviewState: 'approved' })).toBe(3)
-    expect(uploadStep({ state: 'none', reviewState: 'unsubmitted' })).toBe(2)
+  it('completes every step once approved', () => {
+    expect(uploadStep({ reviewState: 'approved' })).toBe(3)
   })
 })

@@ -5,7 +5,7 @@ import { BookTile, type BookTileData } from './BookTile'
 export interface ShelfNode {
   id: string
   title: string
-  href: string
+  description?: string | null
   books: BookTileData[]
   children: ShelfNode[]
 }
@@ -29,36 +29,34 @@ export function CollectionShelves({
 function Shelf({ shelf, newTab }: { shelf: ShelfNode; newTab: boolean }) {
   if (countBooks(shelf) === 0) return null
 
-  const branches = shelf.children.filter((child) => countBooks(child) > 0)
-
   return (
     <section className="shelf" id={`shelf-${shelf.id}`}>
       <h2 className="shelf__name cjk">{shelf.title}</h2>
-
-      {shelf.books.length > 0 ? <BookGrid books={shelf.books} newTab={newTab} /> : null}
-
-      {branches.length > 0 ? (
-        <ul className="branches">
-          {branches.map((child) => {
-            const total = countBooks(child)
-            return (
-              <li key={child.id}>
-                <a
-                  href={child.href}
-                  target={newTab ? '_blank' : undefined}
-                  rel={newTab ? 'noopener' : undefined}
-                >
-                  <span className="branches__name cjk">{child.title}</span>
-                  <span className="branches__count">
-                    {total} {total === 1 ? 'volume' : 'volumes'}
-                  </span>
-                </a>
-              </li>
-            )
-          })}
-        </ul>
-      ) : null}
+      <ShelfBody shelf={shelf} newTab={newTab} />
     </section>
+  )
+}
+
+function SubShelf({ shelf, newTab }: { shelf: ShelfNode; newTab: boolean }) {
+  if (countBooks(shelf) === 0) return null
+
+  return (
+    <section className="subshelf" id={`shelf-${shelf.id}`}>
+      <h3 className="subshelf__name cjk">{shelf.title}</h3>
+      <ShelfBody shelf={shelf} newTab={newTab} />
+    </section>
+  )
+}
+
+function ShelfBody({ shelf, newTab }: { shelf: ShelfNode; newTab: boolean }) {
+  return (
+    <>
+      {shelf.description ? <p className="shelf__lede">{shelf.description}</p> : null}
+      {shelf.books.length > 0 ? <BookGrid books={shelf.books} newTab={newTab} /> : null}
+      {shelf.children.map((child) => (
+        <SubShelf key={child.id} shelf={child} newTab={newTab} />
+      ))}
+    </>
   )
 }
 

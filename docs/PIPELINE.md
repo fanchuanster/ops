@@ -15,14 +15,28 @@ at 2.4x cheaper output. Correction is a narrow task over short inputs,
 and reasoning tokens are billed as output at twice the input rate —
 over a whole book that is the real cost of the stage.
 
+**Reading the first page uses the reasoning model**
+(`grok-4.20-0309-reasoning`, `IDENTIFY_MODEL` to override). The
+opposite trade from correction: one call per upload, not one per line,
+and the task is judgement — which characters on a title page are the
+title, which the publisher, whether 著 is part of a name — where the
+non-reasoning model's saving buys nothing. It is given the name of
+every file the uploader sent and the whole collection tree, and fills title, author,
+language and collection (RIGHTS.md 6.2). Measured on five live title pages it
+placed all five sensibly, at 20–109 s each — the collection list is
+what makes it slow, since title, author and language alone took 13–27 s.
+The uploader waits through it on the upload screen, so it has one try
+and a 120 s timeout; a timeout leaves what the file itself gave.
+
 The key is a Worker secret. With it unset, correction fails with a clear
 message and nothing else is affected: a book still converts, it just
 gets no suggestions.
 
 - The endpoint and key are server-side. A browser never sees either, and
   neither is hard-coded.
-- **Whether a reader's upload goes to the provider is the reader's
-  decision**, made on the upload screen. It is re-read at the moment of
+- **Whether a reader's book goes to the provider for correction is the
+  reader's decision**, made on the upload screen. The first page is the
+  one exception (RIGHTS.md 6.1). It is re-read at the moment of
   sending rather than trusted from when the job was queued, so a reader
   who changes their mind is not overtaken. Unanswered means no.
 - Correction is **advisory whatever the answer**: the stage proposes and

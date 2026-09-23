@@ -41,9 +41,12 @@ module may move a balance, and it writes both together.
 # The uploader's share
 
 When a reader spends credits sending someone else's upload, the uploader
-earns a share — larger for material they wrote or hold a licence to than
-for a public-domain text. Nothing else earns: owning a copy never clears
-public distribution, and a staff-entered library book has no uploader.
+earns **66%**, whatever cleared the book for sharing. Until 2026-09-23 a
+public-domain text earned 33% and a licensed one 66%; the maintainer set
+one rate because the uploader stopped being asked which it is (RIGHTS.md
+6.1) — the digitisation is the work being paid for either way. Nothing
+else earns: a book that may not be shared publicly earns 0, and a
+staff-entered library book has no uploader.
 
 **Shares accumulate in hundredths of a credit.** A third of a one-credit
 book is 0.33, so paying whole credits per delivery would pay nothing at

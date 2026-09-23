@@ -1,7 +1,6 @@
 import React from 'react'
 
 import { CollectionShelves, BookGrid, type ShelfNode } from '../../../components/CollectionShelves'
-import { ShareCta } from '../../../components/ShareCta'
 import {
   ancestryOf,
   buildTree,
@@ -59,7 +58,7 @@ export default async function BooksPage({
   ])
 
   const selected = collection ? collections.find((c) => c.slug === collection) : null
-  const trail = selected ? ancestryOf(collections, selected.id) : []
+  const ancestors = selected ? ancestryOf(collections, selected.id).slice(0, -1) : []
 
   const direct = new Map<string, CatalogBook[]>()
   const placed = new Set<string>()
@@ -82,7 +81,7 @@ export default async function BooksPage({
   const toShelf = (node: TreeNode<(typeof collections)[number]>): ShelfNode => ({
     id: String(node.collection.id),
     title: node.collection.title,
-    href: href({ collection: node.collection.slug }),
+    description: node.collection.description,
     books: onShelf(node.collection, String(node.collection.id)),
     children: node.children.map(toShelf),
   })
@@ -106,7 +105,6 @@ export default async function BooksPage({
           : selected
             ? `Also in ${selected.title}`
             : 'Also in the library',
-      href: href({}),
       books: loose,
       children: [],
     })
@@ -114,22 +112,41 @@ export default async function BooksPage({
 
   return (
     <main className="page library">
-      <div className="page-head">
-        <h1 className="cjk">{selected ? selected.title : 'Library'}</h1>
-        {selected ? (
-          <span className="page-head__note">
-            <a href={href({ collection: undefined })}>Library</a>
-            {trail.slice(0, -1).map((ancestor) => (
-              <React.Fragment key={ancestor.id}>
-                {' / '}
-                <a href={href({ collection: ancestor.slug })}>{ancestor.title}</a>
-              </React.Fragment>
-            ))}
-          </span>
-        ) : null}
-      </div>
+      {selected ? (
+        <div className="page-head">
+          <h1 className="cjk">{selected.title}</h1>
+          {ancestors.length > 0 ? (
+            <span className="page-head__note">
+              {ancestors.map((ancestor, index) => (
+                <React.Fragment key={ancestor.id}>
+                  {index > 0 ? ' / ' : null}
+                  <a href={href({ collection: ancestor.slug })}>{ancestor.title}</a>
+                </React.Fragment>
+              ))}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <h1 className="visually-hidden">Library</h1>
+      )}
 
       {selected?.description ? <p className="page-lede">{selected.description}</p> : null}
+
+      <div className="depth">
+        <span className="depth__label">Reading depth:</span>
+        <nav className="depth__levels" aria-label="Reading level">
+          {BOOK_LEVELS.map((value) => (
+            <a
+              key={value}
+              href={href({ level: value })}
+              title={LEVEL_DESCRIPTIONS[value]}
+              aria-current={level === value ? 'true' : undefined}
+            >
+              {LEVEL_LABELS[value]}
+            </a>
+          ))}
+        </nav>
+      </div>
 
       <div className={navTree.length > 0 ? 'library__body' : 'library__body library__body--bare'}>
         {navTree.length > 0 ? (
@@ -138,22 +155,18 @@ export default async function BooksPage({
             {navTree.map((node) => (
               <React.Fragment key={node.collection.id}>
                 <a
-                  className="library__tree-shelf"
+                  className="library__tree-shelf cjk"
                   href={href({ collection: node.collection.slug })}
                   aria-current={selected?.id === node.collection.id ? 'page' : undefined}
                 >
                   {node.collection.title}
                 </a>
-                {onShelf(node.collection, String(node.collection.id)).map((book) => (
-                  <a key={book.id} className="library__tree-book cjk" href={`/books/${book.slug}`}>
-                    {book.title}
-                  </a>
-                ))}
                 {node.children.map((child) => (
                   <a
                     key={child.collection.id}
-                    className="library__tree-book"
+                    className="library__tree-sub cjk"
                     href={href({ collection: child.collection.slug })}
+                    aria-current={selected?.id === child.collection.id ? 'page' : undefined}
                   >
                     {child.collection.title}
                   </a>
@@ -164,22 +177,6 @@ export default async function BooksPage({
         ) : null}
 
         <div className="library__main">
-          <div className="depth">
-            <span className="depth__label">Reading depth:</span>
-            <nav className="depth__levels" aria-label="Reading level">
-              {BOOK_LEVELS.map((value) => (
-                <a
-                  key={value}
-                  href={href({ level: value })}
-                  title={LEVEL_DESCRIPTIONS[value]}
-                  aria-current={level === value ? 'true' : undefined}
-                >
-                  {LEVEL_LABELS[value]}
-                </a>
-              ))}
-            </nav>
-          </div>
-
           {asked ? (
             <p className="library__asked">
               {books.length === 0
@@ -206,8 +203,6 @@ export default async function BooksPage({
               <CollectionShelves shelves={shelves} newTab={Boolean(asked)} />
             </>
           )}
-
-          <ShareCta />
         </div>
       </div>
     </main>

@@ -35,6 +35,7 @@ import {
   parseProposedLevel,
 } from './levels'
 import {
+  DEFAULT_VISIBILITY,
   DELETION_ERRORS,
   REVIEW_LABELS,
   REVIEW_QUEUE_STATES,
@@ -43,18 +44,18 @@ import {
   canPublishToLibrary,
   canSubmitForReview,
   isInPublicLibrary,
+  parseVisibility,
   requiresAdmin,
 } from './moderation'
 import { MIN_PASSWORD_LENGTH, checkPassword } from './password'
 import {
   RIGHTS_LABELS,
   RIGHTS_STATUSES,
-  UPLOADER_RIGHTS,
   canAccessArtifact,
   canReadOnline,
   effectiveRightsStatus,
   isPubliclyDistributable,
-  isUploaderSelectableRights,
+  rightsOnOffer,
   rightsRisk,
 } from './rights'
 
@@ -417,7 +418,7 @@ describe('an administrator publishing directly', () => {
     ).toEqual({ allowed: false, reason: 'awaiting_review' })
   })
 
-  it('requires the uploader to declare rights before review', () => {
+  it('refuses review while rights are unknown', () => {
     expect(
       canSubmitForReview({ reviewState: 'unsubmitted', rightsStatus: 'unknown', hasContent: true }),
     ).toEqual({ allowed: false, reason: 'rights_undeclared' })
@@ -752,31 +753,35 @@ describe('reading online is free of the account requirement', () => {
   })
 })
 
-describe('what an uploader may claim about their own file', () => {
-  it('offers only statuses that are safe for an uploader to pick', () => {
-    expect(UPLOADER_RIGHTS.map((o) => o.value).sort()).toEqual([
-      'licensed',
-      'permission_granted',
-      'public_domain',
-      'user_owned',
-    ])
-  })
-
-  it('never offers unknown or restricted', () => {
-    for (const value of ['unknown', 'restricted']) {
-      expect(isUploaderSelectableRights(value)).toBe(false)
+describe('choosing who can see a new book', () => {
+  it('defaults to public', () => {
+    expect(DEFAULT_VISIBILITY).toBe('public')
+    for (const junk of ['', undefined, null, 'everyone', 42]) {
+      expect(parseVisibility(junk)).toBe('public')
     }
   })
 
-  it('rejects anything that is not one of the offered values', () => {
-    for (const junk of ['', 'admin', null, undefined, 42, {}]) {
-      expect(isUploaderSelectableRights(junk)).toBe(false)
-    }
+  it('keeps an explicit private choice', () => {
+    expect(parseVisibility('private')).toBe('private')
+  })
+})
+
+describe('the rights a book takes when its uploader offers it to the library', () => {
+  it('records public domain for a book nobody has classified', () => {
+    expect(rightsOnOffer('unknown')).toBe('public_domain')
   })
 
-  it('offers user_owned, which can never clear public distribution', () => {
-    expect(isUploaderSelectableRights('user_owned')).toBe(true)
-    expect(isPubliclyDistributable('user_owned')).toBe(false)
+  it('lifts an earlier private-copy answer, since offering it says it may be shared', () => {
+    expect(rightsOnOffer('user_owned')).toBe('public_domain')
+  })
+
+  it('keeps a distributable status an editor already set', () => {
+    expect(rightsOnOffer('licensed')).toBe('licensed')
+    expect(rightsOnOffer('permission_granted')).toBe('permission_granted')
+  })
+
+  it('never overrides an editor’s restriction', () => {
+    expect(rightsOnOffer('restricted')).toBe('restricted')
   })
 })
 
