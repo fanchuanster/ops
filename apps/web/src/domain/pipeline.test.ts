@@ -14,6 +14,7 @@ import {
   recoversFromFailure,
   releasedExportHandle,
   retryStateFor,
+  stateAfterMaster,
   stateAfterMasterEdit,
   statusOnQueue,
   uploadStep,
@@ -174,6 +175,21 @@ describe('putting a book back in the queue', () => {
     expect(releasedExportHandle('master_ready')).toEqual({})
     expect(releasedExportHandle('ready')).toEqual({})
     expect(releasedExportHandle('failed')).toEqual({})
+  })
+})
+
+describe('where a finished master leaves the book', () => {
+  it('stops at the master when Convert asked only for the DOCX', () => {
+    expect(stateAfterMaster('master')).toBe('ready')
+    expect(claimableAs(stateAfterMaster('master'))).toBeNull()
+  })
+
+  it('hands on to the formats when the editions were asked for', () => {
+    expect(claimableAs(stateAfterMaster('editions'))).toBe('formats')
+  })
+
+  it('builds the editions for a book queued before the goal existed', () => {
+    expect(stateAfterMaster(null)).toBe('master_ready')
   })
 })
 

@@ -79,6 +79,7 @@ export async function chooseMasterSource(
           ...switchedToSource(source),
           state: 'queued',
           ...releasedExportHandle('queued'),
+          goal: 'editions',
           plan,
           message: null,
           correction: {

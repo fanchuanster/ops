@@ -5,7 +5,6 @@ import React from 'react'
 
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
 import { BookCover } from '../../../../../components/BookCover'
-import { SendToKindleButton } from '../../../../../components/SendToKindleButton'
 import { RetryConversion } from '../../../../../components/RetryConversion'
 import { BookBuild } from '../../../../../components/BookBuild'
 import { BookSources } from '../../../../../components/BookSources'
@@ -15,7 +14,6 @@ import { BookFiles } from '../../../../../components/BookFiles'
 import { SubmitForReview } from '../../../../../components/SubmitForReview'
 import { Stepper } from '../../../../../components/Stepper'
 import { buildTree, flattenTree } from '../../../../../domain/collectionTree'
-import { byDisplayOrder } from '../../../../../domain/conversion'
 import {
   chosenCoverPage,
   coverAltFor,
@@ -29,10 +27,9 @@ import {
   canRequestCorrection,
   readCorrectionState,
 } from '../../../../../domain/correction'
-import { isKindleDeliverableFormat } from '../../../../../domain/kindle'
 import { isInPublicLibrary } from '../../../../../domain/moderation'
 import { isConversionState, isInFlight, uploadStep } from '../../../../../domain/pipeline'
-import { readSourceKind, readingFormat, resolvePlan } from '../../../../../domain/publication'
+import { readSourceKind, resolvePlan } from '../../../../../domain/publication'
 import { readSources } from '../../../../../domain/sources'
 import { shareDescription } from '../../../../../domain/uploaderShare'
 import { loadSuggestions } from '../../../actions/correction'
@@ -61,7 +58,6 @@ export default async function BookDetailsPage({
 
   const collections = await getCollections()
   const draft = book.conversion?.state === 'draft'
-  const readable = readingFormat((book.artifacts ?? []).map((a) => a.format)) !== null
   const hasMaster = (book.artifacts ?? []).some((a) => a.format === 'docx')
 
   const correctionState = readCorrectionState(book.conversion?.correction?.state)
@@ -72,11 +68,6 @@ export default async function BookDetailsPage({
 
   const finished =
     book.review?.state === 'approved' && (state === 'ready' || state === 'none')
-
-  const deliverable = (book.artifacts ?? [])
-    .filter((artifact) => isKindleDeliverableFormat(artifact.format))
-    .sort(byDisplayOrder)
-    .map((artifact) => ({ format: artifact.format, bytes: artifact.bytes }))
 
   const sourceKind = readSourceKind(book.conversion ?? {})
   const plan = resolvePlan(sourceKind, book.conversion?.plan)
@@ -131,31 +122,6 @@ export default async function BookDetailsPage({
       {finished ? null : (
         <Stepper step={uploadStep({ reviewState: book.review?.state })} />
       )}
-
-      {readable || deliverable.length > 0 ? (
-        <p className="book-actions">
-          {readable ? (
-            <a className="book-actions__read" href={`/read/${book.slug}`}>
-              Read it
-            </a>
-          ) : null}
-
-          {deliverable.length === 0 ? null : user.kindleEmail ? (
-            <SendToKindleButton
-              bookId={Number(book.id)}
-              formats={deliverable}
-              price={0}
-              balance={user.credits ?? 0}
-            />
-          ) : (
-            <a className="send-hint" href="/account">
-              Add a Kindle address to send
-            </a>
-          )}
-
-          <span className="hint">Private to you, and free to send.</span>
-        </p>
-      ) : null}
 
       <BookDetailsForm
         book={{

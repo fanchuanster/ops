@@ -471,6 +471,20 @@ export const Books: CollectionConfig = {
           },
         },
         {
+          name: 'goal',
+          type: 'select',
+          defaultValue: 'editions',
+          options: [
+            { label: 'Build the DOCX master only', value: 'master' },
+            { label: 'Build the master and the reader editions', value: 'editions' },
+          ],
+          admin: {
+            readOnly: true,
+            description:
+              'Where a run stops. Convert builds the master and stops; Generate EPUB goes on to the editions. See docs/PIPELINE.md.',
+          },
+        },
+        {
           name: 'aiCorrection',
           type: 'checkbox',
           defaultValue: false,

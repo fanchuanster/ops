@@ -53,11 +53,7 @@ const COLLECTIONS: { title: string; slug: string; description?: string; parent?:
     description:
       'Books that change how a life is lived — wisdom, character, health and the daily practice of living well.',
   },
-  {
-    title: 'Authors',
-    slug: 'authors',
-    description: 'Browse by author.',
-  },
+  { title: 'Authors', slug: 'authors' },
   { title: 'Nan Huaijin', slug: 'nan-huaijin', parent: 'authors' },
   { title: 'Zhang Tianliang', slug: 'zhang-tianliang', parent: 'authors' },
 ]

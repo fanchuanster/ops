@@ -1,24 +1,20 @@
 ---
 name: octane
 description: Interact with ALM Octane - list tickets, update phases, manage tasks
-argument-hint: "[list] | <client_id> <client_secret> | <lwsso_key> | update <id> <phase> | done <task-ids> | show <id>"
+argument-hint: "[list] | <client_id> <client_secret> | update <id> <phase> | done <task-ids> | show <id>"
 ---
 
 # Octane Skill
 
 Use the `OctaneClient` from `Aviator/libs/octane.py` to interact with ALM Octane.
-Credentials and cookies are stored in `Aviator/libs/.octane.env`.
+Configuration and the API key are stored in `Aviator/libs/.octane.env` (gitignored).
 
-Default auth is a long-term API key (`OCTANE_CLIENT_ID` / `OCTANE_CLIENT_SECRET` in
-`.octane.env`), which signs in directly via `/authentication/sign_in` — no browser/MFA
-needed, and it doesn't expire like a session cookie. `client.ensure_session()` handles
-this automatically: reuse saved cookies → sign in with the long-term key → only fall
-back to interactive browser MFA if the key itself is missing or has been revoked.
-`OCTANE_USER` never changes and does not need to be refreshed.
+Auth is a long-term API key (`OCTANE_CLIENT_ID` / `OCTANE_CLIENT_SECRET` in
+`.octane.env`), which signs in directly via `/authentication/sign_in` — no browser/MFA,
+no session cookie to refresh. `client.ensure_session()` signs in with it on every run.
 
 If the user provides a new client_id/client_secret pair (e.g. after rotating the key),
-or a browser `LWSSO_COOKIE_KEY` (only needed if the long-term key stops working), persist
-it per the Credential Refresh section below, then proceed with the request.
+persist it per the Credential Refresh section below, then proceed with the request.
 
 Request: $ARGUMENTS
 
@@ -26,8 +22,6 @@ If the request above is empty, the action is **list** — run "List my work item
 and display the table, exactly as if the user had typed `/octane list`.
 
 ## Credential Refresh
-
-### New long-term key (client_id + client_secret)
 
 If $ARGUMENTS contains something like "Client ID: ..." / "Client secret: ..." (in either
 order, any casing/spacing), or looks like two bare tokens, extract and persist both to
@@ -73,43 +67,6 @@ if id_m and secret_m:
     print("Verified and saved new long-term key." if client.test_connection() else "ERROR: saved key but test_connection failed")
 ```
 
-### Browser cookie (only if the long-term key itself is revoked)
-
-If $ARGUMENTS looks like a cookie value (long alphanumeric string, possibly with `LWSSO_COOKIE_KEY=` prefix), update `.octane.env` immediately:
-
-```python
-import re, pathlib
-
-def set_env_keys(updates: dict, env_path=pathlib.Path('Aviator/libs/.octane.env')):
-    """Set/replace KEY=VALUE pairs in .octane.env, deduping any existing duplicate
-    keys in the file (last occurrence wins) so writes never accumulate stale copies."""
-    order, values = [], {}
-    for line in env_path.read_text().splitlines():
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        if key not in values:
-            order.append(key)
-        values[key] = value  # last occurrence wins
-    for key, value in updates.items():
-        if key not in values:
-            order.append(key)
-        values[key] = value
-    env_path.write_text("\n".join(f"{k}={values[k]}" for k in order) + "\n")
-
-args = """$ARGUMENTS""".strip()
-
-# The cookie is passed as the *only* argument, so take the whole trimmed string
-# rather than whitelisting characters — a character class silently truncates any
-# legit cookie char it omits (e.g. a trailing "." was chopped off, causing 401s).
-new_lwsso = re.sub(r'^LWSSO_COOKIE_KEY=', '', args).strip()
-
-if len(new_lwsso) >= 20:
-    set_env_keys({'OCTANE_COOKIE_LWSSO_COOKIE_KEY': new_lwsso})
-    print("Updated .octane.env with new LWSSO_COOKIE_KEY")
-```
-
 ## Setup (always run first)
 
 `OctaneClient` handles the pyOpenSSL/cryptography import-crash workaround, `.octane.env`
@@ -123,8 +80,7 @@ from octane import OctaneClient
 client = OctaneClient()
 client.ensure_session()
 if not client.test_connection():
-    print("ERROR: session invalid and no working credentials — provide a fresh client_id/client_secret, "
-          "or as a last resort an LWSSO_COOKIE_KEY from browser DevTools → Application → Cookies on internal.almoctane.com")
+    print("ERROR: sign-in failed — provide a fresh client_id/client_secret")
     raise SystemExit(1)
 ```
 

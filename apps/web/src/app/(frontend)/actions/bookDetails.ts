@@ -13,6 +13,7 @@ import {
 } from '../../../domain/moderation'
 import { levelId, parseProposedLevel } from '../../../domain/levels'
 import {
+  type BuildGoal,
   type ConversionState,
   hasMaster,
   isConversionState,
@@ -193,6 +194,7 @@ async function writeDetails(
           ...book.conversion,
           state: nextState,
           ...releasedExportHandle(nextState),
+          ...(staysPut ? {} : { goal: 'editions' as const }),
           plan,
           aiCorrection,
           startedAt: startsConverting
@@ -387,6 +389,7 @@ export async function replaceMaster(
 
 interface BuildRequest {
   state: ConversionState
+  goal: BuildGoal
   aiCorrection?: boolean
 }
 
@@ -412,7 +415,7 @@ async function startBuild(
   if (!book.conversion?.sourceKey) return { error: 'There is no source file to convert.' }
 
   const formats = (book.artifacts ?? []).map((artifact) => artifact.format)
-  const { state, aiCorrection } = requestFor(formats.includes('docx'))
+  const { state, goal, aiCorrection } = requestFor(formats.includes('docx'))
 
   const quota = await checkQuotaFor(payload, {
     userId: user.id,
@@ -433,6 +436,7 @@ async function startBuild(
         conversion: {
           ...book.conversion,
           state,
+          goal,
           plan: 'convert',
           ...(aiCorrection === undefined ? {} : { aiCorrection }),
           message: null,
@@ -460,6 +464,7 @@ export async function buildMaster(
 ): Promise<DetailsState> {
   return startBuild(formData, () => ({
     state: 'queued',
+    goal: 'master',
     aiCorrection: formData.get('aiCorrection') === 'on',
   }))
 }
@@ -470,5 +475,6 @@ export async function buildEditions(
 ): Promise<DetailsState> {
   return startBuild(formData, (hasMasterArtifact) => ({
     state: retryStateFor({ hasMasterArtifact }),
+    goal: 'editions',
   }))
 }

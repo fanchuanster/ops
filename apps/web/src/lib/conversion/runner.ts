@@ -21,6 +21,7 @@ import {
   type JobKind,
   completedState,
   inProgressState,
+  stateAfterMaster,
 } from '../../domain/pipeline'
 import { readSourceKind } from '../../domain/publication'
 import { suggestCorrections } from '../../domain/proofread'
@@ -137,7 +138,7 @@ async function runMaster(payload: Payload, book: Book): Promise<TickResult> {
       artifacts: [...existing.filter((a) => a.format !== 'docx'), { format: 'docx', storageKey: key }],
       conversion: {
         ...book.conversion,
-        state: completedState('master'),
+        state: stateAfterMaster(book.conversion?.goal),
         message: null,
         correction: {
           ...((book.conversion?.correction ?? {}) as object),
@@ -270,7 +271,7 @@ async function runApply(payload: Payload, book: Book): Promise<TickResult> {
     data: {
       conversion: {
         ...conversion,
-        ...(wrote ? { state: 'master_ready' as const } : {}),
+        ...(wrote ? { state: stateAfterMaster(conversion.goal) } : {}),
         correction: {
           ...correction,
           state: correctionCompletedState('apply'),

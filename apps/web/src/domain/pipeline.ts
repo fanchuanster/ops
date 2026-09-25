@@ -24,6 +24,14 @@ export type ConversionState = (typeof CONVERSION_STATES)[number]
 
 export type JobKind = 'master' | 'formats'
 
+export const BUILD_GOALS = ['master', 'editions'] as const
+
+export type BuildGoal = (typeof BUILD_GOALS)[number]
+
+export function stateAfterMaster(goal: unknown): ConversionState {
+  return goal === 'master' ? 'ready' : 'master_ready'
+}
+
 export function isConversionState(value: unknown): value is ConversionState {
   return typeof value === 'string' && CONVERSION_STATES.includes(value as ConversionState)
 }

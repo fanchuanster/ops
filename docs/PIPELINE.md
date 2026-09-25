@@ -199,13 +199,26 @@ sounds — the site is up, the route answers, and no book converts.
 Applying triggers is a separate command, and the deploy script ends with
 it.
 
+## Convert stops at the master
+
+**Convert builds the DOCX master and nothing else**; Generate EPUB is
+the one control that builds an edition. Both enter the queue in the same
+state, so the book carries its `goal`, and a master finished for a
+`master` goal lands in `ready` rather than `master_ready`, which the
+cron would otherwise take as an order to build the formats. Each card
+does one thing, so a reader can check or replace the master before an
+edition is built from it. Every other way into the queue —
+the details form, switching the source, Generate EPUB — asks for the
+editions, and a retry keeps whatever goal the failed run had.
+
 ## Correction is two jobs, not one
 
 A single job that read a master and wrote a better one is precisely the
 silent rewrite section 7 forbids, so the human decision goes between
 them: one job proposes, a person judges, another applies what they
-adopted. Applying is then an ordinary master edit and the edition is
-rebuilt by the path any corrected master takes.
+adopted. Applying is then an ordinary master edit: the edition is
+rebuilt by the path any corrected master takes, unless the run was a
+Convert, which stops at the master as above.
 
 Correction queues on a field of its own and never touches the conversion
 state. A book waiting on somebody's judgement is not converting, and

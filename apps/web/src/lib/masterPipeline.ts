@@ -15,6 +15,7 @@ import {
   type ConversionState,
   needsMasterRun,
   releasedExportHandle,
+  stateAfterMaster,
   stateWithoutExport,
   statusOnQueue,
 } from '../domain/pipeline'
@@ -201,7 +202,7 @@ async function attachMaster(
       ],
       conversion: {
         ...conversion,
-        state: 'master_ready',
+        state: stateAfterMaster(conversion.goal),
         exportJob: null,
         exportAsset: null,
         exportRetries: 0,
