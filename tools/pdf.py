@@ -174,6 +174,7 @@ FILTERS = (
 LEADING = re.compile(r"^[0-9\-]+")
 TRAILING = re.compile(r"[0-9\-]+$")
 SEPARATORS = " \t._"
+QUOTE_CHARS = re.compile("[\"'\u201c\u201d\u2018\u2019\u300c\u300d\u300e\u300f]")
 
 GLYPH_SAMPLE_PAGES = 16
 GLYPH_SAMPLE_CHARS = 20000
@@ -1038,19 +1039,26 @@ def finish(
 
 
 def clean_stem(stem: str) -> str:
-    """Strip a leading/trailing run of digits and '-' from a file's stem.
+    """Strip a leading/trailing digit run and quote marks from a stem.
 
-    Applied once, as a single contiguous run from each edge -- not
-    repeatedly and not token-by-token -- so a title that legitimately
-    starts or ends with a number in the middle of other characters is
-    left alone.
+    The digit run is applied once, as a single contiguous run from each
+    edge -- not repeatedly and not token-by-token -- so a title that
+    legitimately starts or ends with a number in the middle of other
+    characters is left alone.
 
     The separator the digits were hanging off goes with them, or the
     tidied name ends in the dot that used to introduce a volume number
     and "...出版社.19.pdf" becomes "...出版社..pdf". A leading one matters
     for a second reason: a name starting with '.' is a hidden file.
+
+    Quote marks -- straight, curly, or the CJK corner-bracket kind a
+    mirror site wraps around a subtitle -- are stripped everywhere in
+    the stem, not just the edges: a cover title is not improved by
+    carrying its own typographic emphasis into a filename or a title
+    field downstream.
     """
     cleaned = TRAILING.sub("", LEADING.sub("", stem))
+    cleaned = QUOTE_CHARS.sub("", cleaned)
     return cleaned.strip(SEPARATORS)
 
 
