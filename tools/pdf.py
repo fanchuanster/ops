@@ -176,6 +176,15 @@ TRAILING = re.compile(r"[0-9\-]+$")
 SEPARATORS = " \t._"
 QUOTE_CHARS = re.compile("[\"'\u201c\u201d\u2018\u2019\u300c\u300d\u300e\u300f]")
 
+COVER_MAX_WIDTH = 800
+COVER_MAX_HEIGHT = 1200
+COVER_JPEG_QUALITY = 82
+COVER_MAX_ZOOM = 3.0
+"""Mirrors apps/web/src/domain/cover.ts's box and quality -- NobleSee's
+own browser-side render (lib/client/coverImages.ts) fits a page into the
+same 800x1200 box at the same quality, so a server-rendered cover from
+this script looks like one the site would have produced itself."""
+
 GLYPH_SAMPLE_PAGES = 16
 GLYPH_SAMPLE_CHARS = 20000
 """How much of a book is read before judging whether it renders.
@@ -1060,6 +1069,38 @@ def clean_stem(stem: str) -> str:
     cleaned = TRAILING.sub("", LEADING.sub("", stem))
     cleaned = QUOTE_CHARS.sub("", cleaned)
     return cleaned.strip(SEPARATORS)
+
+
+def render_cover_image(source: Path, dest: Path) -> bool:
+    """Render `source`'s first page into `dest` as a JPEG, or False.
+
+    A stand-in for the browser-side render NobleSee normally does at
+    upload time (docs/BOOKS.md's "Covers" section) -- this script never
+    opens the file in a browser, so nothing renders the candidate page
+    unless something here does. Only a PDF has a page to render; there
+    is nothing to do for a .txt source, and False says so rather than
+    raising.
+    """
+    pymupdf = pymupdf_module()
+    if not pymupdf or source.suffix.lower() != ".pdf":
+        return False
+
+    try:
+        with pymupdf.open(source) as doc:
+            if doc.page_count == 0:
+                return False
+            page = doc[0]
+            rect = page.rect
+            if rect.width <= 0 or rect.height <= 0:
+                return False
+            zoom = min(COVER_MAX_WIDTH / rect.width, COVER_MAX_HEIGHT / rect.height)
+            zoom = min(zoom, COVER_MAX_ZOOM)
+            pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            pix.save(dest, output="jpeg", jpg_quality=COVER_JPEG_QUALITY)
+    except Exception:
+        return False
+    return dest.exists()
 
 
 def unique_path(path: Path) -> Path:

@@ -62,6 +62,14 @@ column flags a missing author, an unmatched collection, or a possible
 duplicate — those need a manual look before anyone uploads. Do not attempt to
 create the books; that is the next, separate, human-reviewed step.
 
+Warn before that step runs: `tools/ns.py create` now goes live in one call —
+it uploads the source, renders the PDF's first page as the cover (via
+PyMuPDF, matching `domain/cover.ts`'s box and quality), and publishes the
+book, all by default. There is no draft pause to catch a bad row afterward;
+review the CSV first. `--skip-cover` and `--skip-publish` opt out of either
+step, and `--rights-status` (default `unknown`, not `create`'s public-domain
+default) overrides what publishing claims about rights.
+
 ## Requirements
 
 - `NOBLESEE_TOKEN` in the environment — the same personal access token

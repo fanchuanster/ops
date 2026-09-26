@@ -14,24 +14,37 @@ Library first, CLI second:
     ns = NobleSee()  # token from NOBLESEE_TOKEN env var
     book_id = ns.create_book(Path("道德经.pdf"))
     ns.add_source(book_id, Path("道德经.txt"))
+    ns.set_cover_from_pdf(book_id, Path("道德经.pdf"), alt="Cover of 道德经")
     ns.publish(book_id)
 
     python3 tools/ns.py create 道德经.pdf --author 老子 --collection 15
     python3 tools/ns.py add-source 66 道德经.txt
+    python3 tools/ns.py set-cover 66 道德经.pdf
     python3 tools/ns.py update 66 --title 道德经 --rights-status public_domain
     python3 tools/ns.py publish 66
     python3 tools/ns.py list --limit 20
     python3 tools/ns.py delete 66
+
+The CLI's `create` does more than `create_book()` the library method
+does: unless told otherwise, it also renders the source PDF's first
+page as the cover (`--skip-cover` to leave the pipeline's own default in
+its place) and publishes the book (`--skip-publish` to leave it a
+draft, `--rights-status` to set anything other than the `unknown`
+default) -- the CSV-staging skill's whole point is a human reviewing
+the row before this runs, not a second manual step afterwards.
 
 The token is never a CLI argument you'd leave in shell history: it is
 read from the `NOBLESEE_TOKEN` environment variable, or passed to
 `NobleSee(token=...)` by a caller that already has it in memory.
 """
 
+
 import argparse
 import json
 import os
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError
@@ -197,6 +210,32 @@ class NobleSee:
             content_type=content_type,
         )
 
+    def upload_cover_image(self, book_id: int, image_path: Path, *, alt: str) -> int:
+        """Upload `image_path` to the `media` collection and set it as
+        `book_id`'s cover.
+
+        The one write this session's uploads never go through the
+        browser for: a generated cover normally comes from `pdf.js`
+        rendering the first page client-side (docs/BOOKS.md), which an
+        API-only upload has no browser to do. `tools/pdf.py`'s
+        `render_cover_image` is the stand-in -- this method just files
+        the result the same way `saveBookCover` (an admin/owner action)
+        would, through the generic `media` REST collection rather than
+        a route of its own (docs/API.md has none for covers).
+        """
+        body, content_type = _multipart_body(
+            payload={"alt": alt},
+            file_field="file",
+            filename=image_path.name,
+            content=image_path.read_bytes(),
+            file_content_type="image/jpeg",
+        )
+        result = self._request("POST", "/media", data=body, content_type=content_type)
+        media = result.get("doc", result)
+        media_id = media["id"]
+        self.update_book(book_id, cover=media_id)
+        return media_id
+
     def queue_for_conversion(self, book_id: int) -> dict[str, Any]:
         """Move a `draft` book into the real pipeline instead of leaving
         its original source unfiled.
@@ -246,6 +285,24 @@ class NobleSee:
             result = self.queue_for_conversion(book_id)
         return result
 
+    def set_cover_from_pdf(self, book_id: int, pdf_path: Path, *, alt: str) -> int | None:
+        """Render `pdf_path`'s first page and set it as `book_id`'s cover.
+
+        Returns the new media id, or None if nothing could be rendered
+        (no PyMuPDF, not a PDF, or a page that failed to render) --
+        callers treat that as "leave the pipeline's own default cover
+        in place" rather than an error, since a book still gets a cover
+        eventually (its first pipeline-rendered page, or the tile's
+        fallback character) even without this.
+        """
+        from pdf import render_cover_image
+
+        with tempfile.TemporaryDirectory(prefix="ns-cover-") as tmp:
+            dest = Path(tmp) / "cover.jpg"
+            if not render_cover_image(pdf_path, dest):
+                return None
+            return self.upload_cover_image(book_id, dest, alt=alt)
+
     def list_collections(self, *, limit: int = 200) -> dict[str, Any]:
         return self._request("GET", "/book-collections", query={"limit": limit})
 
@@ -272,6 +329,39 @@ def _url_quote(value: Any) -> str:
     from urllib.parse import quote
 
     return quote(str(value), safe="")
+
+
+def _multipart_body(
+    *,
+    payload: dict[str, Any],
+    file_field: str,
+    filename: str,
+    content: bytes,
+    file_content_type: str,
+) -> tuple[bytes, str]:
+    """A minimal multipart/form-data encoder for Payload's generic REST
+    collection endpoints, which -- unlike the bespoke `/api/upload`
+    route -- expect every non-file field folded into one `_payload`
+    part as a JSON string, not one form field apiece, the same way its
+    own admin UI posts a file with other data."""
+    boundary = f"NobleSeeBoundary{uuid.uuid4().hex}"
+    parts: list[bytes] = [
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="_payload"\r\n\r\n'
+            f"{json.dumps(payload, ensure_ascii=False)}\r\n"
+        ).encode("utf-8")
+    ]
+    parts.append(
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+            f"Content-Type: {file_content_type}\r\n\r\n"
+        ).encode("utf-8")
+    )
+    parts.append(content)
+    parts.append(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
 def _flatten_where(where: dict[str, Any], prefix: str = "where") -> dict[str, Any]:
@@ -318,6 +408,29 @@ def main(argv: list[str] | None = None) -> int:
     create_parser.add_argument("--author")
     create_parser.add_argument("--collection", type=int)
     create_parser.add_argument("--title")
+    create_parser.add_argument(
+        "--skip-cover",
+        action="store_true",
+        help="Don't render the first page as the cover.",
+    )
+    create_parser.add_argument(
+        "--skip-publish",
+        action="store_true",
+        help="Leave the book as a draft instead of publishing it.",
+    )
+    create_parser.add_argument(
+        "--rights-status",
+        default="unknown",
+        choices=RIGHTS_STATUSES,
+        help="Used only when publishing (default: unknown).",
+    )
+
+    set_cover_parser = subparsers.add_parser(
+        "set-cover", help="Render a PDF's first page and set it as a book's cover."
+    )
+    set_cover_parser.add_argument("book_id", type=int)
+    set_cover_parser.add_argument("path", type=Path)
+    set_cover_parser.add_argument("--alt")
 
     add_source_parser = subparsers.add_parser(
         "add-source", help="Attach another format to an existing book."
@@ -381,7 +494,22 @@ def main(argv: list[str] | None = None) -> int:
             }
             if fields:
                 ns.update_book(book_id, **fields)
+            if not args.skip_cover:
+                book = ns.get_book(book_id)
+                media_id = ns.set_cover_from_pdf(book_id, args.path, alt=f"Cover of {book['title']}")
+                if media_id is None:
+                    print("  no cover rendered (not a PDF, or the page failed to render)", file=sys.stderr)
+            if not args.skip_publish:
+                ns.publish(book_id, rights_status=args.rights_status)
             print(book_id)
+        elif args.command == "set-cover":
+            book = ns.get_book(args.book_id)
+            alt = args.alt or f"Cover of {book['title']}"
+            media_id = ns.set_cover_from_pdf(args.book_id, args.path, alt=alt)
+            if media_id is None:
+                print("error: nothing rendered (not a PDF, or the page failed to render)", file=sys.stderr)
+                return 1
+            print(media_id)
         elif args.command == "add-source":
             print(ns.add_source(args.book_id, args.path, name=args.name))
         elif args.command == "update":
