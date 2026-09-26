@@ -442,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     update_parser = subparsers.add_parser("update", help="PATCH book fields.")
     update_parser.add_argument("book_id", type=int)
     update_parser.add_argument("--title")
+    update_parser.add_argument("--subtitle")
     update_parser.add_argument("--author")
     update_parser.add_argument("--collection", type=int)
     update_parser.add_argument("--rights-status", choices=RIGHTS_STATUSES)
@@ -515,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "update":
             fields = {
                 "title": args.title,
+                "subtitle": args.subtitle,
                 "author": args.author,
                 "collection": args.collection,
                 "rightsStatus": args.rights_status,
