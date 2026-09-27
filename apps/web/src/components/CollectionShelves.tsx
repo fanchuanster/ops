@@ -75,7 +75,7 @@ export function BookGrid({
     <>
       <ul className="book-grid">
         {covered.map((book) => (
-          <BookTile key={book.id} book={book} showLevel newTab={newTab} />
+          <BookTile key={book.id} book={book} newTab={newTab} />
         ))}
       </ul>
       {rest.length > 0 ? <BookTextList books={rest} newTab={newTab} /> : null}

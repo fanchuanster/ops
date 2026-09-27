@@ -1945,19 +1945,6 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
-.tile__level {
-  display: block;
-  margin-top: 0.3rem;
-  font-family: var(--font-sans);
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-
-
-
 
 
 
