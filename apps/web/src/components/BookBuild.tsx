@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 
 import { buildEditions, buildMaster, type DetailsState } from '../app/(frontend)/actions/bookDetails'
 import { canBuildEpub, canBuildMaster, type SourceKind } from '../domain/publication'
@@ -20,11 +20,13 @@ function Convert({
   bookId,
   sourceKind,
   aiCorrection,
+  hasMaster,
   busy,
 }: {
   bookId: number
   sourceKind: SourceKind
   aiCorrection: boolean
+  hasMaster: boolean
   busy: boolean
 }) {
   const [state, action, pending] = useActionState<DetailsState, FormData>(buildMaster, {})
@@ -32,30 +34,84 @@ function Convert({
   return (
     <section className="build__card">
       <div>
-        <h3>Convert</h3>
+        <h3>
+          Convert
+          {hasMaster && aiCorrection ? (
+            <span className="build__chip build__chip--used">AI-corrected</span>
+          ) : null}
+        </h3>
         <p className="hint">Converts the original to a master DOCX, from PDF or plain text.</p>
+        {sourceKind === 'pdf' ? <p className="hint">{ADOBE_NOTE}</p> : null}
       </div>
 
       <form action={action}>
         <input type="hidden" name="bookId" value={bookId} />
-
-        <label className="build__toggle">
-          <span className="build__toggle-text">
-            <strong>AI correction</strong>
-            <small>{AI_NOTE}</small>
-          </span>
-          <input type="checkbox" name="aiCorrection" defaultChecked={aiCorrection} />
-        </label>
-
-        {sourceKind === 'pdf' ? <p className="hint">{ADOBE_NOTE}</p> : null}
-
-        <button type="submit" className="cta cta--quiet" disabled={busy || pending}>
-          Convert to DOCX
-        </button>
-
+        <ConvertSplit pending={busy || pending} />
         {state.error ? <p className="form-error">{state.error}</p> : null}
       </form>
     </section>
+  )
+}
+
+function ConvertSplit({ pending }: { pending: boolean }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const away = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open])
+
+  const close = () => setOpen(false)
+
+  return (
+    <div className="split-button split-button--quiet" ref={box}>
+      <button type="submit" name="aiCorrection" value="off" className="cta cta--quiet" disabled={pending}>
+        Convert to DOCX
+      </button>
+
+      <button
+        type="button"
+        className="split-button__toggle"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="More convert options"
+        disabled={pending}
+        onClick={() => setOpen((was) => !was)}
+      >
+        <span aria-hidden="true">▾</span>
+      </button>
+
+      {open ? (
+        <div className="split-button__menu" role="menu">
+          <button
+            type="submit"
+            role="menuitem"
+            name="aiCorrection"
+            value="on"
+            disabled={pending}
+            className="split-button__item"
+            onClick={close}
+          >
+            Convert with AI correction
+            <span className="split-button__note">{AI_NOTE}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -134,6 +190,7 @@ export function BookBuild({
           bookId={bookId}
           sourceKind={sourceKind}
           aiCorrection={aiCorrection}
+          hasMaster={hasMaster}
           busy={converting}
         />
       ) : null}
