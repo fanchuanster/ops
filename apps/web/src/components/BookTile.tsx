@@ -50,6 +50,7 @@ export function BookTile({
           )}
         </span>
         <span className="tile__title">{book.title}</span>
+        {book.author ? <span className="tile__author">{book.author}</span> : null}
         {showLevel && typeof book.level === 'number' ? (
           <span className="tile__level">{LEVEL_LABELS[levelFromId(book.level)]}</span>
         ) : null}
