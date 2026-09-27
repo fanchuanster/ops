@@ -6,8 +6,6 @@ import React from 'react'
 import { BookDetailsForm } from '../../../../../components/BookDetailsForm'
 import { BookCover } from '../../../../../components/BookCover'
 import { RetryConversion } from '../../../../../components/RetryConversion'
-import { BookBuild } from '../../../../../components/BookBuild'
-import { BookSources } from '../../../../../components/BookSources'
 import { ConversionProgress } from '../../../../../components/ConversionProgress'
 import { CorrectionReview } from '../../../../../components/CorrectionReview'
 import { BookFiles } from '../../../../../components/BookFiles'
@@ -157,11 +155,12 @@ export default async function BookDetailsPage({
         byAdmin={isAdmin}
       />
 
-      <BookBuild
+      <BookFiles
         bookId={Number(book.id)}
+        slug={book.slug ?? ''}
         sourceKind={sourceKind}
-        sources={sources}
         hasMaster={hasMaster}
+        hasEpub={(book.artifacts ?? []).some((artifact) => artifact.format === 'epub')}
         aiCorrection={book.conversion?.aiCorrection === true}
         converting={isConversionState(state) && isInFlight(state)}
       />
@@ -184,22 +183,6 @@ export default async function BookDetailsPage({
             <h3>Cover</h3>
             {cover}
           </section>
-
-          <BookSources
-            bookId={Number(book.id)}
-            sources={sources}
-            selected={sourceKind}
-            hasMaster={hasMaster}
-            converting={isConversionState(state) && isInFlight(state)}
-          />
-
-          <BookFiles
-            bookId={Number(book.id)}
-            slug={book.slug ?? ''}
-            sourceKind={sourceKind}
-            hasMaster={hasMaster}
-            hasEpub={(book.artifacts ?? []).some((artifact) => artifact.format === 'epub')}
-          />
 
           {book.conversion?.aiCorrection === true ? (
             <CorrectionReview

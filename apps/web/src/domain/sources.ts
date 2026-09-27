@@ -119,18 +119,6 @@ export const INTAKE_ERRORS: Record<IntakeRefusal, string> = {
     'is a second file of a type this book already has. A book holds one of each — a different scan or edition is a book of its own.',
 }
 
-export function canMasterFrom(kind: SourceKind): boolean {
-  return kind !== 'epub'
-}
-
-export function masterSources(sources: readonly BookSource[]): BookSource[] {
-  return sources.filter((source) => canMasterFrom(source.kind))
-}
-
-export function offersMasterChoice(sources: readonly BookSource[]): boolean {
-  return masterSources(sources).length > 1
-}
-
 export function selectedSource(
   conversion: ConversionLike | null | undefined,
 ): BookSource | null {
@@ -174,16 +162,3 @@ export const ADD_SOURCE_ERRORS: Record<AddSourceRefusal, string> = {
     'This book already has a DOCX master. Use “Replace and rebuild” below to put a corrected Word file in its place.',
 }
 
-export function switchedToSource(source: BookSource): {
-  sourceKind: SourceKind
-  sourceKey: string
-  sourceFilename: string
-  sourceHash: null
-} {
-  return {
-    sourceKind: source.kind,
-    sourceKey: source.storageKey,
-    sourceFilename: source.filename,
-    sourceHash: null,
-  }
-}

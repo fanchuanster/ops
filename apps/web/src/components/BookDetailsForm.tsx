@@ -7,6 +7,7 @@ import {
   submitDraft,
   type DetailsState,
 } from '../app/(frontend)/actions/bookDetails'
+import { AddSourceFile } from './AddSourceFile'
 import { AutoFillButton } from './AutoFillButton'
 import { describeBytes } from '../domain/kindle'
 import {
@@ -122,6 +123,7 @@ export function BookDetailsForm({
               </li>
             ))}
           </ul>
+          <AddSourceFile bookId={book.id} />
         </section>
       ) : null}
 
