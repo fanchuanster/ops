@@ -13,9 +13,6 @@ import { canBuildEpub, canBuildMaster, type SourceKind } from '../domain/publica
 const AI_NOTE =
   'Sends your book’s text to xAI, outside NobleSee. A person reviews every suggestion.'
 
-const ADOBE_NOTE =
-  'Converting sends your PDF to Adobe PDF Services, outside NobleSee, to have its pages read.'
-
 function ConvertAction({
   bookId,
   busy,
@@ -162,20 +159,11 @@ export function BookFiles({
           <li className="files__row">
             <span className="fmt fmt--epub">epub</span>
             <span className="files__what">Reader edition</span>
-            {hasEpub ? (
-              <a href={`/read/${slug}`}>Read it</a>
-            ) : (
-              <span className="files__state">Not generated yet</span>
-            )}
+            {hasEpub ? <a href={`/read/${slug}`}>Read it</a> : null}
             <GenerateAction bookId={bookId} busy={converting} disabled={!hasMaster} />
           </li>
         ) : null}
       </ul>
-
-      {canConvert && sourceKind === 'pdf' ? <p className="hint">{ADOBE_NOTE}</p> : null}
-      {canGenerate && !hasMaster ? (
-        <p className="hint">Generating the EPUB needs a DOCX master copy first.</p>
-      ) : null}
 
       {hasMaster ? (
         <form action={action} className="master__replace">
