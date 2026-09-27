@@ -1023,6 +1023,11 @@ h3 {
   white-space: nowrap;
 }
 
+.review-card__files .sources__add small {
+  flex-shrink: 1;
+  white-space: normal;
+}
+
 .review-card__form {
   display: flex;
   flex-direction: column;
@@ -1601,8 +1606,13 @@ h3 {
   cursor: pointer;
 }
 
-.cta:hover {
+.cta:hover:not(:disabled) {
   background: var(--accent-muted);
+}
+
+.cta:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .cta--compact {
@@ -3216,19 +3226,6 @@ h3 {
   margin: 0;
   font-style: italic;
   line-height: 1.7;
-}
-
-.cover-panel {
-  margin: 1.25rem 0 0;
-  padding: 1.5rem;
-  background: var(--paper-raised);
-  border: 0.5px solid var(--rule-soft);
-  border-radius: var(--radius-card);
-}
-
-.cover-panel h3 {
-  margin: 0 0 0.75rem;
-  font-size: 1.0625rem;
 }
 
 .cover-panel__body {

@@ -149,7 +149,7 @@ export default async function BookDetailsPage({
           depth: node.depth,
         }))}
         sources={sources}
-        cover={draft ? cover : undefined}
+        cover={cover}
         needsFirstPage={canMakeCover && !hasRenderedPages(generatedCover)}
         draft={draft}
         byAdmin={isAdmin}
@@ -179,11 +179,6 @@ export default async function BookDetailsPage({
 
       {draft ? null : (
         <>
-          <section className="cover-panel">
-            <h3>Cover</h3>
-            {cover}
-          </section>
-
           {book.conversion?.aiCorrection === true ? (
             <CorrectionReview
               bookId={Number(book.id)}
