@@ -157,16 +157,14 @@ export default async function BookDetailsPage({
         byAdmin={isAdmin}
       />
 
-      {draft ? null : (
-        <BookBuild
-          bookId={Number(book.id)}
-          sourceKind={sourceKind}
-          sources={sources}
-          hasMaster={hasMaster}
-          aiCorrection={book.conversion?.aiCorrection === true}
-          converting={isConversionState(state) && isInFlight(state)}
-        />
-      )}
+      <BookBuild
+        bookId={Number(book.id)}
+        sourceKind={sourceKind}
+        sources={sources}
+        hasMaster={hasMaster}
+        aiCorrection={book.conversion?.aiCorrection === true}
+        converting={isConversionState(state) && isInFlight(state)}
+      />
 
       {share && isInPublicLibrary(book) ? <p className="hint">{share}</p> : null}
 

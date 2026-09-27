@@ -1161,6 +1161,9 @@ h3 {
 }
 
 .build__card h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin: 0 0 0.35rem;
   font-size: 1.0625rem;
 }
@@ -1174,45 +1177,6 @@ h3 {
   flex-direction: column;
   align-items: flex-start;
   gap: 1rem;
-}
-
-.build__toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  width: 100%;
-  padding: 0.75rem 0.875rem;
-  background: var(--paper);
-  border: 0.5px solid var(--rule-soft);
-  border-radius: var(--radius-control);
-  font-family: var(--font-sans);
-  cursor: pointer;
-}
-
-.build__toggle-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.build__toggle strong {
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-
-.build__toggle small {
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--ink-faint);
-}
-
-.build__toggle input {
-  flex: 0 0 auto;
-  width: 1.125rem;
-  height: 1.125rem;
-  accent-color: var(--accent);
-  cursor: pointer;
 }
 
 .build__chips {
@@ -1788,6 +1752,24 @@ h3 {
   color: var(--ink-soft);
 }
 
+.subshelf__name {
+  margin: 0 0 1.25rem;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 500;
+}
+
+.subshelf__name + .shelf__lede {
+  margin-top: -0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.book-grid + .subshelf,
+.book-list + .subshelf,
+.subshelf + .subshelf {
+  margin-top: 2.5rem;
+}
+
 .library__body {
   display: grid;
   grid-template-columns: 13.75rem 1fr;
@@ -1931,6 +1913,36 @@ h3 {
   .home-shelf__books,
   .book-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.book-list {
+  list-style: none;
+  margin: 1.75rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 2.5rem;
+  row-gap: 0.875rem;
+}
+
+.book-list__item a {
+  font-size: 0.875rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.book-list__item a:hover {
+  color: var(--accent);
+}
+
+.book-list__author {
+  color: var(--ink-faint);
+}
+
+@media (max-width: 34rem) {
+  .book-list {
+    grid-template-columns: 1fr;
   }
 }
 .tile__level {
