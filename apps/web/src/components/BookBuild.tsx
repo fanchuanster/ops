@@ -80,7 +80,7 @@ function ConvertSplit({ pending }: { pending: boolean }) {
   return (
     <div className="split-button split-button--quiet" ref={box}>
       <button type="submit" name="aiCorrection" value="off" className="cta cta--quiet" disabled={pending}>
-        Convert to DOCX
+        Convert
       </button>
 
       <button
@@ -154,7 +154,7 @@ function Generate({
       <form action={action}>
         <input type="hidden" name="bookId" value={bookId} />
         <button type="submit" className="cta" disabled={busy || pending}>
-          Generate EPUB
+          Generate
         </button>
         {state.error ? <p className="form-error">{state.error}</p> : null}
       </form>
