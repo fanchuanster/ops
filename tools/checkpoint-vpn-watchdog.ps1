@@ -15,6 +15,10 @@
     its behalf when the user has it closed. It only reconnects a client
     that is alive but has dropped its tunnel.
 
+    trac.exe is invoked through System.Diagnostics.Process with
+    CreateNoWindow set, not the `&` call operator, so its console window
+    never flashes on screen when the Scheduled Task fires.
+
     The p12 certificate this site authenticates with needs its password
     on every connect; Check Point does not cache it. Run
     set-checkpoint-vpn-credential.ps1 once to store that password
@@ -94,10 +98,35 @@ function Test-ClientRunning {
     Get-Process -Name 'TrGUI' -ErrorAction SilentlyContinue | Select-Object -First 1
 }
 
+function ConvertTo-ProcessArgumentString {
+    param([string[]] $Arguments)
+
+    ($Arguments | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
+}
+
+function Invoke-TracCommand {
+    param([string] $TracExe, [string[]] $Arguments)
+
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $TracExe
+    $psi.Arguments = ConvertTo-ProcessArgumentString -Arguments $Arguments
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd()
+    $stderr = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+    "$stdout$stderr"
+}
+
 function Get-VpnStatus {
     param([string] $TracExe, [string] $Site)
 
-    $output = & $TracExe 'info' '-s' $Site 2>&1 | Out-String
+    $output = Invoke-TracCommand -TracExe $TracExe -Arguments @('info', '-s', $Site)
     $state = 'Unknown'
     if ($output -match '(?im)^\s*status:\s*(\S+)') { $state = $Matches[1] }
     $certPath = $null
@@ -123,9 +152,9 @@ function Start-VpnReconnect {
     param([string] $TracExe, [string] $Site, [string] $CertPath, [string] $Password)
 
     if ($Password -and $CertPath) {
-        return & $TracExe 'connect' '-s' $Site '-f' $CertPath '-p' $Password 2>&1 | Out-String
+        return Invoke-TracCommand -TracExe $TracExe -Arguments @('connect', '-s', $Site, '-f', $CertPath, '-p', $Password)
     }
-    & $TracExe 'connectgui' '-s' $Site 2>&1 | Out-String
+    Invoke-TracCommand -TracExe $TracExe -Arguments @('connectgui', '-s', $Site)
 }
 
 $lockPath = Join-Path $env:TEMP 'checkpoint-vpn-watchdog.lock'
