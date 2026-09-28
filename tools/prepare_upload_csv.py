@@ -10,32 +10,40 @@ same text -- same stem, different suffix, exactly the pairing this
 groups by. tools/clean-book.ps1 runs on the recent files first, so the
 mirror-site numeric prefix is off the filename and an oversized scan
 shrunk before anything here reads them -- pass --skip-clean to sample
-the files as found instead. Title, author, language and a candidate
-collection are all guessed from the (cleaned) filename and the book's
-own first two pages, the same way the upload route's extractMetadata()
-does it server-side (see apps/web/src/lib/extractMetadata.ts) -- except
-here the result lands in a spreadsheet, not a book record, because
-nothing is created until a person has looked at it. A title that
-already matches something in the catalog is dropped rather than guessed
-at twice.
+the files as found instead. Title, author, language and a candidate collection are read by sending
+the (cleaned) filenames and the book's own first page to xAI -- the
+same "Auto-fill with AI" call NobleSee's own upload form makes
+(apps/web/src/lib/identifyBook.ts, apps/web/src/domain/bookIdentity.ts),
+reused here rather than reimplemented as a second, weaker guesser, so a
+staged row already carries the read a person would otherwise get by
+clicking that button after upload. Requires XAI_API_KEY in the
+environment; without it, this falls back to a local filename/text
+heuristic and says so in each row's notes. A title that already matches
+something in the catalog is dropped rather than guessed at twice.
 
 Requires NOBLESEE_TOKEN in the environment (tools/ns.py) to read the
-existing catalog for the duplicate check and the collection guess.
+existing catalog for the duplicate check and the list of collections xAI
+can choose from.
 """
 
 import argparse
+import base64
 import csv
+import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ns import CONTENT_TYPE_BY_SUFFIX, NobleSee, NobleSeeError  # noqa: E402
-from pdf import QUOTE_CHARS, _is_ideograph, clean_stem, pymupdf_module  # noqa: E402
+from pdf import QUOTE_CHARS, _is_ideograph, clean_stem, pymupdf_module, render_cover_image  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,6 +52,31 @@ PAGE_SAMPLE = 2
 TEXT_SAMPLE_CHARS = 4000
 MIN_IDEOGRAPHS_FOR_CHINESE = 20
 TRADITIONAL_SHARE_FOR_HANT = 0.02
+
+XAI_BASE_URL = "https://api.x.ai/v1"
+XAI_IDENTIFY_MODEL = "grok-4.20-0309-reasoning"
+XAI_TIMEOUT_SECONDS = 120
+XAI_FIRST_PAGE_TEXT_CHARS = 3000
+XAI_MAX_FIELD = 200
+XAI_MAX_SHELF_DESCRIPTION = 160
+BOOK_LANGUAGES = ("zh-Hans", "zh-Hant", "en", "zh-en")
+XAI_PLACEHOLDER = re.compile(r"^(unknown|none|n/a|null|undefined|untitled|未知|无|無)$", re.IGNORECASE)
+
+# Mirrors apps/web/src/domain/bookIdentity.ts's IDENTIFY_SYSTEM verbatim,
+# so a row staged here gets the same read NobleSee's own "Auto-fill with
+# AI" button would give the book after upload.
+IDENTIFY_SYSTEM = "\n".join(
+    (
+        "You fill in a library record for a book from the names of the files its uploader sent and its first page — usually a scanned title page or cover, sometimes the opening text.",
+        'Reply with one JSON object: {"title": string|null, "author": string|null, "language": string|null, "collection": number|null}.',
+        "title: the book’s own title exactly as printed, in its original script. Keep a printed subtitle, volume or edition marker in full-width parentheses, e.g. 壽康寶鑑（現代全譯）. Never translate or romanize.",
+        "author: the author, compiler or translator as printed, in its original script, without role words like 著 or 编. Several names: join with \"、\".",
+        f"language: the language of the book's body text — one of {', '.join(BOOK_LANGUAGES)}. zh-en means Chinese and English in roughly equal measure.",
+        "collection: the id of the one listed collection this book plainly belongs to — an author collection when the author has one, otherwise the collection whose subject it is. null when none fits; never invent an id.",
+        "File names often carry catalogue numbers and site names; use them for what they plainly say, and where several agree, trust that more — but prefer what the page shows.",
+        "Anything neither shows, or that you cannot read with confidence, is null. Never guess from general knowledge.",
+    )
+)
 
 TITLE_JUNK = (
     re.compile(r"^untitled$", re.IGNORECASE),
@@ -360,20 +393,234 @@ def collection_titles(client: NobleSee) -> dict[str, str]:
     return {str(doc["id"]): doc.get("title", "") for doc in result.get("docs", [])}
 
 
+def shelf_path(doc: dict, by_id: dict[str, dict]) -> str:
+    titles: list[str] = []
+    current: dict | None = doc
+    seen: set[str] = set()
+    while current is not None:
+        titles.append(current.get("title", ""))
+        parent = current.get("parent")
+        parent_id = parent["id"] if isinstance(parent, dict) else parent
+        if parent_id is None or str(parent_id) in seen:
+            break
+        seen.add(str(parent_id))
+        current = by_id.get(str(parent_id))
+    return " / ".join(reversed(titles))
+
+
+def build_shelves(client: NobleSee) -> list[dict]:
+    """The same {id, path, description} list identifyPrompt() shows xAI
+    in the app, built here from /book-collections instead of Payload's
+    ancestryOf() -- there is no in-process collection tree in a script
+    that only ever talks to the REST API."""
+    docs = client.list_collections(limit=500).get("docs", [])
+    by_id = {str(doc["id"]): doc for doc in docs}
+    return [
+        {
+            "id": doc["id"],
+            "path": shelf_path(doc, by_id),
+            "description": doc.get("description") or "",
+        }
+        for doc in docs
+    ]
+
+
+def shelf_line(shelf: dict) -> str:
+    about = re.sub(r"\s+", " ", shelf["description"]).strip()[:XAI_MAX_SHELF_DESCRIPTION]
+    return f"{shelf['id']}: {shelf['path']} — {about}" if about else f"{shelf['id']}: {shelf['path']}"
+
+
+def file_lines(filenames: list[str]) -> str:
+    seen: set[str] = set()
+    names: list[str] = []
+    for name in filenames:
+        name = name.strip()
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name[:XAI_MAX_FIELD])
+    if not names:
+        return "Uploaded file names: none given."
+    if len(names) == 1:
+        return f"Uploaded file name: {names[0]}"
+    return "Uploaded file names:\n" + "\n".join(f"- {name}" for name in names)
+
+
+def identify_prompt(filenames: list[str], shelves: list[dict], page_kind: str, page_text: str | None) -> str:
+    lines = [file_lines(filenames)]
+    lines.append(
+        "Collections:\n" + "\n".join(shelf_line(shelf) for shelf in shelves)
+        if shelves
+        else "Collections: none yet — collection is null."
+    )
+    if page_kind == "image":
+        lines.append("The first page is attached as an image.")
+    elif page_kind == "text":
+        lines.append(f"First page text:\n{(page_text or '')[:XAI_FIRST_PAGE_TEXT_CHARS]}")
+    else:
+        lines.append("No first page is available. Work from the file names alone.")
+    return "\n".join(lines)
+
+
+def call_xai(system: str, user: str, image_data_url: str | None, api_key: str, model: str) -> str:
+    content: object = (
+        [
+            {"type": "text", "text": user},
+            {"type": "image_url", "image_url": {"url": image_data_url, "detail": "high"}},
+        ]
+        if image_data_url
+        else user
+    )
+    payload = {
+        "model": model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": content},
+        ],
+    }
+    request = Request(
+        f"{XAI_BASE_URL}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+    )
+    with urlopen(request, timeout=XAI_TIMEOUT_SECONDS) as response:
+        body = json.loads(response.read().decode("utf-8"))
+    return body["choices"][0]["message"]["content"]
+
+
+def parse_identity(raw: str, shelf_ids: set[int]) -> dict:
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end == -1:
+        return {}
+    try:
+        parsed = json.loads(raw[start : end + 1])
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+
+    def field(value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        text = re.sub(r"\s+", " ", value).strip()
+        if not text or XAI_PLACEHOLDER.match(text):
+            return None
+        return text[:XAI_MAX_FIELD]
+
+    def language(value: object) -> str | None:
+        return value if value in BOOK_LANGUAGES else None
+
+    def collection(value: object) -> int | None:
+        try:
+            number = int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+        return number if number in shelf_ids else None
+
+    identity = {
+        "title": field(parsed.get("title")),
+        "author": field(parsed.get("author")),
+        "language": language(parsed.get("language")),
+        "collection": collection(parsed.get("collection")),
+    }
+    return {key: value for key, value in identity.items() if value is not None}
+
+
+def identify_with_ai(
+    filenames: list[str],
+    shelves: list[dict],
+    pdf_path: Path | None,
+    text_sample: str,
+    api_key: str,
+    model: str,
+) -> dict | None:
+    """Sends `filenames` plus the first page -- rendered as an image when
+    the source is a PDF, else the sampled text -- to xAI, exactly what
+    identifyFromFirstPage() sends from inside the app. Returns {} rather
+    than None for "nothing found"; None means the call itself failed, so
+    the caller can fall back to the local heuristic instead of staging a
+    blank row."""
+    image_data_url = None
+    if pdf_path is not None:
+        with tempfile.TemporaryDirectory(prefix="ns-identify-") as tmp:
+            dest = Path(tmp) / "page.jpg"
+            if render_cover_image(pdf_path, dest):
+                image_data_url = f"data:image/jpeg;base64,{base64.b64encode(dest.read_bytes()).decode('ascii')}"
+
+    if image_data_url:
+        page_kind, page_text = "image", None
+    elif text_sample:
+        page_kind, page_text = "text", text_sample
+    else:
+        page_kind, page_text = "none", None
+
+    prompt = identify_prompt(filenames, shelves, page_kind, page_text)
+    try:
+        raw = call_xai(IDENTIFY_SYSTEM, prompt, image_data_url, api_key, model)
+    except Exception as error:  # noqa: BLE001 - any failure here falls back to the heuristic
+        print(f"  xAI identify failed: {error}", file=sys.stderr)
+        return None
+
+    shelf_ids = {shelf["id"] for shelf in shelves}
+    return parse_identity(raw, shelf_ids)
+
+
 def build_rows(
     groups: dict[str, dict[str, Path]],
     catalog: list[dict],
     collections_by_id: dict[str, str],
+    shelves: list[dict],
+    xai_api_key: str | None,
+    xai_model: str,
 ) -> list[dict[str, str]]:
     known_titles = existing_title_index(catalog)
     rows: list[dict[str, str]] = []
 
     for stem, paths in groups.items():
         text = sample_text(paths)
+        pdf_path = paths.get(".pdf")
+        txt_path = paths.get(".txt")
+
         title, author, author_is_guess = infer_title_and_author(stem, text)
         language = infer_language(text)
-
+        collection_id, _ = collection_guess(author, catalog)
+        collection_title = collections_by_id.get(collection_id, "") if collection_id else ""
         notes: list[str] = []
+        if not xai_api_key:
+            notes.append("XAI_API_KEY not set; used filename/text heuristic instead of AI")
+        if not author:
+            notes.append("author not detected; fill in manually")
+        elif author_is_guess:
+            notes.append("author guessed from filename; verify")
+        if not collection_id:
+            notes.append("no matching author in catalog; choose a collection manually")
+
+        if xai_api_key:
+            filenames = [path.name for path in paths.values()]
+            found = identify_with_ai(filenames, shelves, pdf_path, text, xai_api_key, xai_model)
+            if found is None:
+                notes.append("xAI identify failed; used filename/text heuristic instead")
+            else:
+                notes = []
+                if found.get("title"):
+                    title = found["title"]
+                else:
+                    notes.append("xAI found no title; filename guess used, verify")
+                if found.get("author"):
+                    author = found["author"]
+                else:
+                    notes.append("xAI found no author; fill in manually")
+                if found.get("language"):
+                    language = found["language"]
+                if found.get("collection"):
+                    collection_id = str(found["collection"])
+                    collection_title = collections_by_id.get(collection_id, "")
+                else:
+                    collection_id, collection_title = "", ""
+                    notes.append("xAI found no matching collection; choose one manually")
+
         if normalize_title(title) in known_titles:
             continue
         if any(
@@ -383,19 +630,6 @@ def build_rows(
         ):
             notes.append("possible duplicate: title overlaps an existing catalog entry")
 
-        collection_id, _ = collection_guess(author, catalog)
-        if collection_id:
-            collection_title = collections_by_id.get(collection_id, "")
-        else:
-            collection_title = ""
-            notes.append("no matching author in catalog; choose a collection manually")
-        if not author:
-            notes.append("author not detected; fill in manually")
-        elif author_is_guess:
-            notes.append("author guessed from filename; verify")
-
-        pdf_path = paths.get(".pdf")
-        txt_path = paths.get(".txt")
         other_paths = [
             path.name
             for suffix, path in paths.items()
@@ -455,16 +689,27 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Don't run tools/clean-book.ps1 first; sample the files as they are.",
     )
+    parser.add_argument("--xai-key", help="Overrides XAI_API_KEY.")
+    parser.add_argument(
+        "--no-ai",
+        action="store_true",
+        help="Skip xAI entirely and use the local filename/text heuristic, even if XAI_API_KEY is set.",
+    )
     args = parser.parse_args(argv)
 
     if not args.downloads.is_dir():
         print(f"error: no such directory: {args.downloads}", file=sys.stderr)
         return 1
 
+    xai_api_key = None if args.no_ai else (args.xai_key or os.environ.get("XAI_API_KEY"))
+    if not xai_api_key:
+        print("warning: XAI_API_KEY not set; falling back to the local filename/text heuristic.", file=sys.stderr)
+
     try:
         client = NobleSee(token=args.token)
         catalog = fetch_catalog(client)
         collections_by_id = collection_titles(client)
+        shelves = build_shelves(client) if xai_api_key else []
     except NobleSeeError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -473,7 +718,7 @@ def main(argv: list[str] | None = None) -> int:
         groups = group_by_stem(find_recent_files(args.downloads, args.hours))
     else:
         groups = find_download_groups(args.downloads, args.hours)
-    rows = build_rows(groups, catalog, collections_by_id)
+    rows = build_rows(groups, catalog, collections_by_id, shelves, xai_api_key, XAI_IDENTIFY_MODEL)
     output = args.output or default_output()
     write_csv(rows, output)
 
