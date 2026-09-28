@@ -7,6 +7,7 @@ import {
   submitDraft,
   type DetailsState,
 } from '../app/(frontend)/actions/bookDetails'
+import { AddSourceFile } from './AddSourceFile'
 import { AutoFillButton } from './AutoFillButton'
 import { describeBytes } from '../domain/kindle'
 import {
@@ -122,6 +123,7 @@ export function BookDetailsForm({
               </li>
             ))}
           </ul>
+          <AddSourceFile bookId={book.id} />
         </section>
       ) : null}
 
@@ -199,11 +201,9 @@ export function BookDetailsForm({
                 </option>
               ))}
             </select>
-            <Hint>
-              {draft && book.collection !== null
-                ? 'Suggested from the file names and first page'
-                : 'Only used if the book is ever published'}
-            </Hint>
+            {draft && book.collection !== null ? (
+              <Hint>Suggested from the file names and first page</Hint>
+            ) : null}
           </label>
 
           {book.canProposeLevel ? (
@@ -257,11 +257,7 @@ export function BookDetailsForm({
                 defaultValue={book.collectionOrder === null ? '' : String(book.collectionOrder)}
                 disabled={shelf === null}
               />
-              <Hint>
-                {shelf === null
-                  ? 'A book has a place only once it is on a shelf'
-                  : 'Position within the collection, lowest first'}
-              </Hint>
+              {shelf === null ? <Hint>A book has a place only once it is on a shelf</Hint> : null}
             </label>
           ) : null}
         </div>

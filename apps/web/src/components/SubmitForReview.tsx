@@ -62,15 +62,13 @@ export function SubmitForReview({
   }
 
   if (reviewState === 'approved') {
+    if (!reviewNote) return null
     return (
       <section className="submit-review">
-        <h3>Approved for the public library</h3>
-        {reviewNote ? (
-          <div className="editor-note">
-            <strong>Editor’s note</strong>
-            <p>{reviewNote}</p>
-          </div>
-        ) : null}
+        <div className="editor-note">
+          <strong>Editor’s note</strong>
+          <p>{reviewNote}</p>
+        </div>
       </section>
     )
   }

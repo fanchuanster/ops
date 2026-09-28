@@ -10,17 +10,33 @@ import { SiteSearch } from '../../components/SiteSearch'
 import { analyticsMeasurementId } from '../../lib/analytics'
 import { getCurrentUser } from '../../lib/auth'
 import { isGoogleSignInConfigured } from '../../lib/googleOAuth'
+import { siteUrl } from '../../lib/siteUrl'
 import './styles.css'
 
 export const dynamic = 'force-dynamic'
 
+const TITLE = 'NobleSee — books worth reading, made comfortable to read'
+const DESCRIPTION =
+  'Digital preservation of traditional Chinese classics, history and works of wisdom, rebuilt as clean reflowable editions for modern devices and e-readers.'
+
 export const metadata = {
+  metadataBase: new URL(siteUrl()),
   title: {
-    default: 'NobleSee — books worth reading, made comfortable to read',
+    default: TITLE,
     template: '%s — NobleSee',
   },
-  description:
-    'Digital preservation of traditional Chinese classics, history and works of wisdom, rebuilt as clean reflowable editions for modern devices and e-readers.',
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    siteName: 'NobleSee',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 }
 
 export default async function FrontendLayout({ children }: { children: React.ReactNode }) {

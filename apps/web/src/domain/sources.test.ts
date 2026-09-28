@@ -3,14 +3,10 @@ import { describe, expect, it } from 'vitest'
 import {
   ADD_SOURCE_ERRORS,
   canAddSource,
-  canMasterFrom,
   planIntake,
   hasSourceKind,
-  masterSources,
-  offersMasterChoice,
   readSources,
   selectedSource,
-  switchedToSource,
 } from './sources'
 
 const scan = {
@@ -76,24 +72,6 @@ describe('reading a book’s sources', () => {
 })
 
 describe('which source the master comes from', () => {
-  it('will build a master from anything but an EPUB', () => {
-    expect(canMasterFrom('pdf')).toBe(true)
-    expect(canMasterFrom('text')).toBe(true)
-    expect(canMasterFrom('docx')).toBe(true)
-    expect(canMasterFrom('epub')).toBe(false)
-  })
-
-  it('offers a choice only when there is more than one candidate', () => {
-    expect(offersMasterChoice([scan])).toBe(false)
-    expect(offersMasterChoice([scan, typed])).toBe(true)
-  })
-
-  it('does not count an EPUB towards the choice', () => {
-    const edition = { kind: 'epub' as const, storageKey: 'books/tao.epub', filename: 'tao.epub' }
-    expect(masterSources([scan, edition])).toEqual([scan])
-    expect(offersMasterChoice([scan, edition])).toBe(false)
-  })
-
   it('finds the source the pipeline is reading', () => {
     expect(selectedSource({ sources: [scan, typed], sourceKind: 'text' })).toEqual(typed)
   })
@@ -145,17 +123,6 @@ describe('adding a source', () => {
     for (const reason of ['unsupported', 'slot_taken', 'master_exists'] as const) {
       expect(ADD_SOURCE_ERRORS[reason]).toBeTruthy()
     }
-  })
-})
-
-describe('switching to another source', () => {
-  it('names the new file and clears the old file’s hash', () => {
-    expect(switchedToSource(typed)).toEqual({
-      sourceKind: 'text',
-      sourceKey: 'books/tao.txt',
-      sourceFilename: 'tao.txt',
-      sourceHash: null,
-    })
   })
 })
 

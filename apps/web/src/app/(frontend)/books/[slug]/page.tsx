@@ -13,6 +13,7 @@ import { isPubliclyDistributable } from '../../../../domain/rights'
 import { getCurrentUser } from '../../../../lib/auth'
 import { getBookBySlug } from '../../../../lib/catalog'
 import { ownsBook } from '../../../../lib/credits'
+import { siteUrl } from '../../../../lib/siteUrl'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,24 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params
   const book = await getBookBySlug(slug, await getCurrentUser())
   if (!book) return { title: 'Not found' }
-  return { title: book.title, description: book.description ?? undefined }
+
+  const cover = coverImageUrl({
+    uploadedId: uploadedCoverId(book.cover),
+    bookId: book.id,
+    generated: book.generatedCover ?? {},
+  })
+
+  return {
+    title: book.title,
+    description: book.description ?? undefined,
+    openGraph: {
+      type: 'book',
+      title: book.title,
+      description: book.description ?? undefined,
+      authors: book.author ?? undefined,
+      images: cover ? [cover] : undefined,
+    },
+  }
 }
 
 export default async function BookPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -69,8 +87,25 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
   const payload = await getPayload({ config })
   const alreadyOwned = reader ? await ownsBook(payload, reader.id, book.id) : false
 
+  const bookJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Book',
+    name: book.title,
+    url: `${siteUrl()}/books/${book.slug}`,
+    ...(book.author ? { author: { '@type': 'Person', name: book.author } } : {}),
+    ...(book.description ? { description: book.description } : {}),
+    ...(cover ? { image: `${siteUrl()}${cover}` } : {}),
+    ...(book.language ? { inLanguage: book.language } : {}),
+    bookFormat: 'https://schema.org/EBook',
+    isAccessibleForFree: true,
+  }
+
   return (
     <main className="page">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(bookJsonLd).replace(/</g, '\\u003c') }}
+      />
       <article>
         <header className="book-head">
           <div className="book-card__cover">

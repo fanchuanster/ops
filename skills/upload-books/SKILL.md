@@ -35,14 +35,19 @@ own defaults already match "past 24 hours" and the OS Downloads folder.
    instead.
 3. Groups the (now clean) files by filename stem across suffixes — `title.pdf`
    and `title.txt` are the same book, one row.
-4. Infers `title`, `author` and `language` from the filename and the book's
-   own first two pages (PDF) or first ~4000 characters (TXT) — the same idea
-   as the upload route's `extractMetadata()`
-   (`apps/web/src/lib/extractMetadata.ts`), reimplemented here since that code
-   is TypeScript running inside the Worker, not reachable from a local script.
-5. Reads the live catalog (`NOBLESEE_TOKEN`, same credential `tools/ns.py`
+4. Reads the live catalog (`NOBLESEE_TOKEN`, same credential `tools/ns.py`
    uses) to drop a book whose inferred title already matches one in NobleSee,
-   and to guess a `collection_id` from other books by the same author.
+   and to build the `book-collections` shelf list xAI is shown.
+5. Sends each group's (cleaned) filenames plus its first page — a rendered
+   image for a PDF, sampled text otherwise — to xAI, using the same model,
+   system prompt and JSON schema as `identifyFromFirstPage()`
+   (`apps/web/src/lib/identifyBook.ts`, `apps/web/src/domain/bookIdentity.ts`),
+   the call behind NobleSee's own "Auto-fill with AI" button. Requires
+   `XAI_API_KEY` in the environment; without it (or with `--skip-clean`'s
+   sibling `--no-ai`), falls back to a local filename/text regex heuristic
+   and says so in `notes` — Chinese-only role-marker patterns (编著/著/编述
+   etc.), so an English-language book's author is essentially never found
+   this way.
 6. Writes `tmp/copilot_new_downloads_files.csv` (or wherever `--output`
    points), overwriting it in place on every run rather than piling up a
    timestamped file per run, columns: `title`, `author`, `language`,
@@ -75,14 +80,23 @@ default) overrides what publishing claims about rights.
 - `NOBLESEE_TOKEN` in the environment — the same personal access token
   `tools/ns.py` reads, from `/account/tokens`. Ask for it (or `setx
   NOBLESEE_TOKEN ...`) if it is not set; never write it into a file.
-- PyMuPDF (`pip install pymupdf`) for reading a PDF's first two pages. Without
-  it, PDF-only groups fall back to a filename-derived title with no author or
-  language guess — say so rather than silently guessing.
+- `XAI_API_KEY` in the environment for the AI-backed title/author/language/
+  collection read. Ask for it (or `setx XAI_API_KEY ...`) the same way if
+  it is not set; without it the script falls back to the older filename/text
+  heuristic and flags every row as such.
+- PyMuPDF (`pip install pymupdf`) to render a PDF's first page as the image
+  sent to xAI (or, without `XAI_API_KEY`, to read its first two pages for the
+  fallback heuristic). Without it, PDF-only groups fall back further still to
+  a filename-derived title with no author or language guess.
 
 ## Known limits (tell the user, don't silently paper over them)
 
 - Duplicate detection matches on normalized title text. A simplified-vs-
   traditional retitling of the same book (like 寿康宝鉴 vs 壽康寶鑒) is **not**
   caught — flag it if you happen to notice one, but the script can't.
-- Author/collection inference is a best-effort text heuristic, not a
-  guarantee — every row is meant to be read, not trusted blind.
+- xAI reads what the page shows, not a general-knowledge lookup — a title or
+  author it cannot read with confidence from the filenames and first page
+  comes back null, and `notes` says so. Without `XAI_API_KEY`, the fallback
+  heuristic is weaker still (regex patterns tuned for Chinese role markers,
+  blind to English authorship credits) — every row is meant to be read, not
+  trusted blind either way.
