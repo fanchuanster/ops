@@ -20,6 +20,14 @@
     WScript.Shell.Run with window style 0 starts PowerShell fully
     hidden, so nothing flashes.
 
+    schtasks.exe's default power settings disallow starting the task on
+    battery and stop it if the machine switches to battery — meaning a
+    laptop unplugged for any stretch simply stops reconnecting with no
+    error anywhere. Right after creating the task, this script clears
+    both settings through the Schedule.Service COM API (a different,
+    unrestricted path from the PS_ScheduledTask CIM provider above), so
+    the watchdog runs on battery too.
+
     Re-running this script replaces the existing task and launcher
     rather than duplicating them.
 
@@ -67,6 +75,17 @@ $createOutput = & schtasks.exe /Create /TN $TaskName /TR $taskRun /SC MINUTE /MO
 if ($LASTEXITCODE -ne 0) {
     Write-Error "schtasks.exe failed to create the task:`n$createOutput"
 }
+
+$scheduleService = New-Object -ComObject Schedule.Service
+$scheduleService.Connect()
+$rootFolder = $scheduleService.GetFolder('\')
+$task = $rootFolder.GetTask($TaskName)
+$taskDefinition = $task.Definition
+$taskDefinition.Settings.DisallowStartIfOnBatteries = $false
+$taskDefinition.Settings.StopIfGoingOnBatteries = $false
+$TASK_CREATE_OR_UPDATE = 6
+$TASK_LOGON_INTERACTIVE_TOKEN = 3
+$rootFolder.RegisterTaskDefinition($TaskName, $taskDefinition, $TASK_CREATE_OR_UPDATE, $null, $null, $TASK_LOGON_INTERACTIVE_TOKEN) | Out-Null
 
 Write-Host "Registered task '$TaskName': checks the VPN every $IntervalMinutes minute(s) while you're logged in."
 Write-Host "Log file: $env:LOCALAPPDATA\ops-tools\checkpoint-vpn-watchdog.log"
