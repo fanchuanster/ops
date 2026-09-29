@@ -85,6 +85,13 @@ Scripts, all in this `tools/` folder:
 
 ## Operating notes
 
+- **Battery power**: `schtasks.exe`'s default task settings disallow
+  starting on battery and stop the task if the machine switches to
+  battery — on a laptop this silently stops all reconnect attempts
+  with no visible error. `register-checkpoint-vpn-watchdog-task.ps1`
+  clears both settings via the Task Scheduler COM API right after
+  creating the task; if a task predates this fix, re-run the
+  registration script to pick it up.
 - **Password exposure**: `trac.exe connect -f <p12> -p <password>`
   takes the password as a command-line argument, briefly visible on
   the `trac.exe` process command line while it runs. This is inherent
