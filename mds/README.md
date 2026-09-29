@@ -17,6 +17,9 @@ repo and which directory it governs:
 ```
 mds/
   sync.sh
+  sync.ps1
+  _user/CLAUDE-global.md
+  _memory/<project-slug>/*.md
   MSM_Automations/CLAUDE.md
   MSM_Automations/CLAUDE-coding.md
   MSM_Automations/CLAUDE-git.md
@@ -140,9 +143,46 @@ Then, for each skill under that repo's `skills/`, writes the two shapes above �
 is replaced rather than merged, so a supporting file deleted here does not linger
 there. The host repo is done last, on its own terms.
 
+On Windows run `sync.ps1` instead — the same steps and the same output, for
+Windows PowerShell 5.1 or PowerShell 7, honouring `WS_ROOT` the same way:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\sync.ps1
+```
+
+The two scripts are one behaviour written twice; a change to either goes into
+both.
+
 Run it after every edit. The flow is one-way — **edit here, sync out** — and a
 change made only in a repo's own copy is invisible to the other environment and
 will be overwritten by the next run.
+
+## Collecting into mds
+
+```bash
+bash sync.sh --collect
+bash sync.sh --collect-dry-run
+```
+
+Off by default: a plain `sync.sh` only writes out and never touches this folder.
+With `--collect` it first pulls guidance back in, so what was written in a
+checkout or by Claude itself lands here without a manual copy, and then syncs
+out as usual. Linux only; `sync.ps1` has no `--collect`. It collects:
+
+- `CLAUDE.md` and `CLAUDE-*.md` from each checkout that has an entry here.
+- Hand-written skills from `.claude/commands/<name>.md` and
+  `.claude/skills/<name>/`, stored as `<repo>/skills/<name>/SKILL.md`. A command
+  gets a `name` (and a `description` if it has no frontmatter) added. Files
+  carrying the generated banner are skipped, so a skill never round-trips.
+- `~/.claude/CLAUDE.md` as `_user/CLAUDE-global.md`, and auto-memory from
+  `~/.claude/projects/*/memory/` as `_memory/<project-slug>/`. Sync does not
+  write these back out; they are kept here for backup and reference.
+
+When the two copies differ, the newer file wins and a diff is printed. If the
+copy here is newer it is left alone and reported as skipped. `--collect-dry-run`
+reports what would be collected and stops before syncing; `WS_ROOT` and `CLAUDE_HOME`
+override the locations. Memory and the global file can hold personal notes, so
+check what `--collect-dry-run` lists before pushing this repo anywhere shared.
 
 ## The two repos behave differently
 

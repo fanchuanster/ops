@@ -83,6 +83,7 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
 
   const ownerId = typeof book.owner === 'object' ? book.owner?.id : book.owner
   const isOwnUpload = Boolean(ownerId) && String(ownerId) === String(reader?.id)
+  const coverOpensReader = readable && (distributable || isOwnUpload)
 
   const payload = await getPayload({ config })
   const alreadyOwned = reader ? await ownsBook(payload, reader.id, book.id) : false
@@ -109,7 +110,17 @@ export default async function BookPage({ params }: { params: Promise<{ slug: str
       <article>
         <header className="book-head">
           <div className="book-card__cover">
-            {cover ? (
+            {coverOpensReader ? (
+              <a href={`/read/${book.slug}`} title="Read this book">
+                {cover ? (
+                  <img src={cover} alt={coverAltFor(book.title)} />
+                ) : (
+                  <span className="book-card__cover--empty cjk" aria-hidden="true">
+                    {book.title}
+                  </span>
+                )}
+              </a>
+            ) : cover ? (
               <img src={cover} alt={coverAltFor(book.title)} />
             ) : (
               <span className="book-card__cover--empty cjk" aria-hidden="true">
