@@ -3,13 +3,14 @@ import { type RightsStatus, isPubliclyDistributable } from './rights'
 export interface LibraryMembership {
   status: string
   owner?: unknown
+  visibility?: Visibility | string | null
   review?: { state?: ReviewState | string | null } | null
 }
 
 export function isInPublicLibrary(book: LibraryMembership): boolean {
   if (book.status !== 'published') return false
   if (!book.owner) return true
-  return book.review?.state === 'approved'
+  return book.review?.state === 'approved' && book.visibility === 'public'
 }
 
 export const VISIBILITIES = ['public', 'private'] as const
@@ -20,6 +21,18 @@ export const DEFAULT_VISIBILITY: Visibility = 'public'
 
 export function parseVisibility(value: unknown): Visibility {
   return VISIBILITIES.find((known) => known === value) ?? DEFAULT_VISIBILITY
+}
+
+export function reviewAfterOriginalChange({
+  reviewState,
+  byAdmin,
+}: {
+  reviewState: ReviewState
+  byAdmin: boolean
+}): ReviewState {
+  if (byAdmin) return reviewState
+  if (reviewState === 'approved') return 'submitted'
+  return reviewState
 }
 
 export const REVIEW_STATES = ['unsubmitted', 'submitted', 'approved', 'rejected'] as const

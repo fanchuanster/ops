@@ -10,7 +10,7 @@ export const PAYMENT_WINDOW_MINUTES = 60
 export const COINS = [
   { id: 'btc', label: 'BTC' },
   { id: 'eth', label: 'ETH' },
-  { id: 'usdttrc20', label: 'USDT (TRC20)' },
+  { id: 'usdc', label: 'USDC (ERC20)' },
   { id: 'ltc', label: 'LTC' },
   { id: 'sol', label: 'SOL' },
 ] as const

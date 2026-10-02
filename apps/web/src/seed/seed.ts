@@ -137,6 +137,7 @@ async function seed() {
       pageCount: spec.pageCount,
       artifacts: artifactsFor(spec),
       review: { state: 'unsubmitted' as const },
+      visibility: 'public' as const,
       status: 'published' as const,
       collection: collectionIds.get(spec.collection) ?? null,
     }

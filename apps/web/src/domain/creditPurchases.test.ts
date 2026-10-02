@@ -43,7 +43,7 @@ describe('the coins', () => {
   })
 
   it('labels a coin for display', () => {
-    expect(coinLabel('usdttrc20')).toBe('USDT (TRC20)')
+    expect(coinLabel('usdc')).toBe('USDC (ERC20)')
     expect(coinLabel('xmr')).toBe('XMR')
   })
 })
