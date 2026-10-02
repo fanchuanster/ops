@@ -30,6 +30,7 @@ import * as migration_20260916_220000_drop_original_title from './20260916_22000
 import * as migration_20260918_120000_media_prefix from './20260918_120000_media_prefix';
 import * as migration_20260919_210000_title_slugs from './20260919_210000_title_slugs';
 import * as migration_20260923_030000_conversion_goal from './20260923_030000_conversion_goal';
+import * as migration_20261002_120000_credit_purchases from './20261002_120000_credit_purchases';
 
 export const migrations = [
   {
@@ -191,5 +192,10 @@ export const migrations = [
     up: migration_20260923_030000_conversion_goal.up,
     down: migration_20260923_030000_conversion_goal.down,
     name: '20260923_030000_conversion_goal'
+  },
+  {
+    up: migration_20261002_120000_credit_purchases.up,
+    down: migration_20261002_120000_credit_purchases.down,
+    name: '20261002_120000_credit_purchases'
   },
 ];

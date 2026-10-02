@@ -98,5 +98,6 @@ const LEDGER_LABEL: Record<string, string> = {
   unlock: 'Unlocked a book',
   resend: 'Sent again',
   uploader_share: 'Someone sent your book',
+  purchase: 'Bought credits',
   adjustment: 'Adjustment',
 }

@@ -53,3 +53,35 @@ book is 0.33, so paying whole credits per delivery would pay nothing at
 all for every book under four credits, which is most of them. A credit
 is paid each time the total crosses a hundred, and the remainder
 carries.
+
+---
+
+# Buying credits
+
+Credits can be bought with cryptocurrency through NOWPayments, at
+**$1 USD per credit**, 1 to 500 credits a purchase. Buying is a way to
+pay for sending books; it does not change what reading costs, which is
+nothing.
+
+- **A purchase is a row, and the row is the authority.** `credit-purchases`
+  records the credits and the price at the moment the invoice is made.
+  Neither the notification body nor the provider's response is trusted
+  for how much to grant — they only say *whether* it was paid.
+- **Only `finished` credits.** `partially_paid`, `confirming` and the
+  rest leave the purchase pending; underpayments are the provider's to
+  refund.
+- **Credited exactly once.** The status moves to `paid` with a
+  compare-and-swap before the ledger is touched, so the notification and
+  the page's own polling can both arrive and only one grants. If the
+  ledger write then fails the status is put back to `pending` and the
+  notification answered 500, so the provider retries.
+- **Two routes to the same settlement.** The IPN callback
+  (`/api/nowpayments/ipn`, HMAC-SHA512 over the key-sorted body) and the
+  open page polling the provider for the payment's status. Polling alone
+  is enough to credit, so a missing IPN secret degrades the flow rather
+  than breaking it; the callback answers 503 until the secret is set.
+- **Secrets:** `NOWPAYMENTS_API_KEY` and `NOWPAYMENTS_IPN_SECRET`, both
+  `wrangler secret put`. The IPN secret is created in the NOWPayments
+  dashboard, and the callback URL it posts to is sent with every payment.
+- **The QR code is drawn in the browser** so no encoder ships in the
+  Worker, which is measured against a size limit.
