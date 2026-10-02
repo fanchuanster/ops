@@ -11,6 +11,7 @@ import {
 import {
   COINS,
   MAX_PURCHASE_CREDITS,
+  MIN_PURCHASE_CREDITS,
   QUICK_AMOUNTS,
   coinLabel,
   type CoinId,
@@ -187,7 +188,7 @@ export function BuyCredits({ resume }: { resume: Invoice | null }) {
           id="buy-amount"
           className="buy-amount"
           type="number"
-          min={1}
+          min={MIN_PURCHASE_CREDITS}
           max={MAX_PURCHASE_CREDITS}
           step={1}
           value={credits}
@@ -221,7 +222,7 @@ export function BuyCredits({ resume }: { resume: Invoice | null }) {
       {error ? <p className="form-error">{error}</p> : null}
 
       <div className="buy-actions">
-        <button type="button" className="cta" disabled={pending || credits < 1} onClick={begin}>
+        <button type="button" className="cta" disabled={pending || credits < MIN_PURCHASE_CREDITS} onClick={begin}>
           {pending ? 'Creating payment…' : 'Continue to payment'}
         </button>
       </div>

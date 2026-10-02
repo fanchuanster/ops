@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MAX_PURCHASE_CREDITS,
+  MIN_PURCHASE_CREDITS,
   checkPurchaseAmount,
   coinLabel,
   isCoin,
@@ -17,6 +18,12 @@ describe('the amount', () => {
   it('accepts a whole number of credits in range', () => {
     expect(checkPurchaseAmount(25)).toEqual({ ok: true, credits: 25 })
     expect(checkPurchaseAmount('100')).toEqual({ ok: true, credits: 100 })
+  })
+
+  it('refuses anything under the three-dollar minimum', () => {
+    expect(MIN_PURCHASE_CREDITS).toBe(3)
+    expect(checkPurchaseAmount(2).ok).toBe(false)
+    expect(checkPurchaseAmount(3).ok).toBe(true)
   })
 
   it('refuses fractions, zero, negatives and rubbish', () => {
@@ -43,7 +50,7 @@ describe('the coins', () => {
   })
 
   it('labels a coin for display', () => {
-    expect(coinLabel('usdc')).toBe('USDC (ERC20)')
+    expect(coinLabel('usdcsol')).toBe('USDC (Solana)')
     expect(coinLabel('xmr')).toBe('XMR')
   })
 })

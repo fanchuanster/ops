@@ -1,6 +1,6 @@
 export const CREDIT_PRICE_USD = 1
 
-export const MIN_PURCHASE_CREDITS = 1
+export const MIN_PURCHASE_CREDITS = 3
 export const MAX_PURCHASE_CREDITS = 500
 
 export const QUICK_AMOUNTS = [10, 25, 50, 100, 250] as const
@@ -10,7 +10,7 @@ export const PAYMENT_WINDOW_MINUTES = 60
 export const COINS = [
   { id: 'btc', label: 'BTC' },
   { id: 'eth', label: 'ETH' },
-  { id: 'usdc', label: 'USDC (ERC20)' },
+  { id: 'usdcsol', label: 'USDC (Solana)' },
   { id: 'ltc', label: 'LTC' },
   { id: 'sol', label: 'SOL' },
 ] as const

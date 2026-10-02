@@ -59,7 +59,7 @@ carries.
 # Buying credits
 
 Credits can be bought with cryptocurrency through NOWPayments, at
-**$1 USD per credit**, 1 to 500 credits a purchase. Buying is a way to
+**$1 USD per credit**, 3 to 500 credits a purchase. Buying is a way to
 pay for sending books; it does not change what reading costs, which is
 nothing.
 
