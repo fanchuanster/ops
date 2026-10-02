@@ -27,7 +27,12 @@ A sub-repo's own `CLAUDE.md` (`Aviator/CLAUDE.md`) covers only what is specific 
 everything here still applies there.
 
 All of these are edited in the `mds` repo and synced out by `mds/sync.sh` — never in a
-checkout, where the next sync overwrites them. The `CLAUDE-` prefix is deliberate: it
+checkout, where the next sync overwrites them. `mds` is the source of truth for every
+`CLAUDE.md` and `CLAUDE-*.md` in this workspace, including the sub-repos' own. On Kiosk it
+is `../ops/mds/` relative to this workspace (`~/ws/ops/mds/`), and its tree mirrors the
+repo paths: `MSM_Automations/CLAUDE*.md` for this file and its imports,
+`MSM_Automations/jenkins-infra/CLAUDE.md` and `MSM_Automations/Aviator/CLAUDE.md` for the
+sub-repos. The `CLAUDE-` prefix is deliberate: it
 matches the `CL*.md` gitignore pattern both repos already carry, so a synced sub-file
 stays untracked exactly as `CLAUDE.md` does.
 
