@@ -7,6 +7,8 @@ import {
   coinLabel,
   isCoin,
   isResumable,
+  minimumCreditsFor,
+  paymentUri,
   priceInUsd,
   sameSignature,
   signedPayload,
@@ -101,5 +103,42 @@ describe('the notification signature', () => {
     expect(sameSignature('abc123', 'abc124')).toBe(false)
     expect(sameSignature('abc123', 'abc12')).toBe(false)
     expect(sameSignature('abc123', null)).toBe(false)
+  })
+})
+
+describe('the wallet payment link in the QR code', () => {
+  it('carries the amount so a scan fills it in', () => {
+    expect(paymentUri('btc', 'bc1qabc', '0.00012345')).toBe('bitcoin:bc1qabc?amount=0.00012345')
+    expect(paymentUri('ltc', 'ltc1qabc', '0.5')).toBe('litecoin:ltc1qabc?amount=0.5')
+  })
+
+  it('asks for ether in wei', () => {
+    expect(paymentUri('eth', '0xabc', '0.001')).toBe('ethereum:0xabc?value=1000000000000000')
+  })
+
+  it('names the USDC mint for the Solana stablecoin', () => {
+    expect(paymentUri('usdcsol', 'Sol1', '3.12')).toBe(
+      'solana:Sol1?amount=3.12&spl-token=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    )
+  })
+
+  it('writes small exponent amounts out in full', () => {
+    expect(paymentUri('btc', 'bc1qabc', '1e-7')).toBe('bitcoin:bc1qabc?amount=0.0000001')
+  })
+
+  it('falls back to the bare address when the amount is unusable', () => {
+    expect(paymentUri('btc', 'bc1qabc', 'nope')).toBe('bc1qabc')
+  })
+})
+
+describe('the minimum per coin', () => {
+  it('keeps the three-credit minimum on cheap-fee coins', () => {
+    expect(minimumCreditsFor('usdcsol')).toBe(3)
+    expect(minimumCreditsFor('ltc')).toBe(3)
+  })
+
+  it('asks for more where a network fee can reach a dollar', () => {
+    expect(minimumCreditsFor('eth')).toBe(10)
+    expect(minimumCreditsFor('btc')).toBe(25)
   })
 })

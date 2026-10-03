@@ -7,7 +7,9 @@ import { getPayload } from 'payload'
 
 import {
   checkPurchaseAmount,
+  coinLabel,
   isCoin,
+  minimumCreditsFor,
   newOrderId,
   priceInUsd,
   windowEndsAt,
@@ -17,6 +19,7 @@ import { findPurchaseByOrder, settleFromProvider } from '../../../lib/creditPurc
 import { logError } from '../../../lib/logError'
 import {
   createProviderPayment,
+  fetchQuote,
   fetchProviderPayment,
   nowPaymentsConfig,
 } from '../../../lib/nowpayments'
@@ -34,6 +37,8 @@ export type Invoice = {
 
 export type StartState = { error?: string; invoice?: Invoice }
 
+export type QuoteState = { payAmount?: string; minUsd?: number | null; error?: string }
+
 export type CheckState = { status: 'pending' | 'paid' | 'failed' | 'expired'; balance?: number }
 
 async function providerConfig() {
@@ -43,6 +48,23 @@ async function providerConfig() {
   )
 }
 
+export async function quotePurchase(credits: unknown, coin: unknown): Promise<QuoteState> {
+  const amount = checkPurchaseAmount(credits)
+  if (!amount.ok) return { error: amount.problem }
+  if (!isCoin(coin)) return { error: 'Choose a currency to pay with.' }
+  const coinMinimum = minimumCreditsFor(coin)
+  if (amount.credits < coinMinimum) {
+    return { error: `Paying with ${coinLabel(coin)} needs at least ${coinMinimum} credits — try USDC (Solana) for smaller amounts.` }
+  }
+
+  const provider = await providerConfig()
+  if (!provider) return { error: 'Paying with crypto is not set up on this site yet.' }
+
+  const quote = await fetchQuote(provider, { priceUsd: priceInUsd(amount.credits), payCurrency: coin })
+  if (!quote.ok) return { error: quote.error }
+  return { payAmount: quote.payAmount, minUsd: quote.minUsd }
+}
+
 export async function startPurchase(credits: unknown, coin: unknown): Promise<StartState> {
   const user = await getCurrentUser()
   if (!user) return { error: 'Sign in first.' }
@@ -50,6 +72,10 @@ export async function startPurchase(credits: unknown, coin: unknown): Promise<St
   const amount = checkPurchaseAmount(credits)
   if (!amount.ok) return { error: amount.problem }
   if (!isCoin(coin)) return { error: 'Choose a currency to pay with.' }
+  const coinMinimum = minimumCreditsFor(coin)
+  if (amount.credits < coinMinimum) {
+    return { error: `Paying with ${coinLabel(coin)} needs at least ${coinMinimum} credits — try USDC (Solana) for smaller amounts.` }
+  }
 
   const provider = await providerConfig()
   if (!provider) return { error: 'Paying with crypto is not set up on this site yet.' }

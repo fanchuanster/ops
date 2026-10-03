@@ -5,6 +5,7 @@ import { renderSVG } from 'uqr'
 
 import {
   checkPurchase,
+  quotePurchase,
   startPurchase,
   type Invoice,
 } from '../app/(frontend)/actions/credits'
@@ -13,7 +14,10 @@ import {
   MAX_PURCHASE_CREDITS,
   MIN_PURCHASE_CREDITS,
   QUICK_AMOUNTS,
+  coinFeeNote,
   coinLabel,
+  minimumCreditsFor,
+  paymentUri,
   type CoinId,
 } from '../domain/creditPurchases'
 
@@ -28,9 +32,12 @@ type Stage =
 export function BuyCredits({ resume }: { resume: Invoice | null }) {
   const [stage, setStage] = useState<Stage>(resume ? { name: 'invoice', invoice: resume } : { name: 'select' })
   const [credits, setCredits] = useState<number>(25)
-  const [coin, setCoin] = useState<CoinId>('btc')
+  const [coin, setCoin] = useState<CoinId>('usdcsol')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [quote, setQuote] = useState<{ payAmount: string; minUsd: number | null } | null>(null)
+  const [quoting, setQuoting] = useState(false)
+  const [addressOnly, setAddressOnly] = useState(false)
   const [pending, startTransition] = useTransition()
 
   const orderId = stage.name === 'invoice' ? stage.invoice.orderId : null
@@ -48,6 +55,27 @@ export function BuyCredits({ resume }: { resume: Invoice | null }) {
     }, POLL_MS)
     return () => window.clearInterval(timer)
   }, [orderId, invoiceCredits])
+
+  const selecting = stage.name === 'select'
+  const coinMinimum = minimumCreditsFor(coin)
+  const quotable = credits >= coinMinimum && credits <= MAX_PURCHASE_CREDITS
+
+  useEffect(() => {
+    if (!selecting || !quotable) return
+    let current = true
+    const timer = window.setTimeout(async () => {
+      setQuoting(true)
+      const result = await quotePurchase(credits, coin)
+      if (!current) return
+      setQuoting(false)
+      setQuote(result.payAmount ? { payAmount: result.payAmount, minUsd: result.minUsd ?? null } : null)
+    }, 400)
+    return () => {
+      current = false
+      window.clearTimeout(timer)
+      setQuote(null)
+    }
+  }, [selecting, quotable, credits, coin])
 
   function begin() {
     setError(null)
@@ -116,18 +144,50 @@ export function BuyCredits({ resume }: { resume: Invoice | null }) {
     return (
       <div className="buy-card">
         <h3>Complete your payment</h3>
-        <p className="hint">Send the exact amount below. Your credits arrive automatically.</p>
+        <p className="hint">
+          Scan the code with your wallet app, or copy the amount and address. Your credits
+          arrive automatically.
+        </p>
+
+        <div className="chips">
+          <button
+            type="button"
+            className="chip"
+            aria-current={!addressOnly}
+            onClick={() => setAddressOnly(false)}
+          >
+            QR with amount
+          </button>
+          <button
+            type="button"
+            className="chip"
+            aria-current={addressOnly}
+            onClick={() => setAddressOnly(true)}
+          >
+            QR with address only
+          </button>
+        </div>
+        {addressOnly ? (
+          <p className="hint">
+            {`Scanning fills in only the address. Enter ${invoice.payAmount} ${label} yourself. Use this if your wallet app rejects the amount QR.`}
+          </p>
+        ) : null}
 
         <div className="buy-invoice">
           <div
             className="buy-qr"
             role="img"
-            aria-label={`QR code for the ${label} address`}
-            dangerouslySetInnerHTML={{ __html: renderSVG(invoice.payAddress, { border: 1 }) }}
+            aria-label={`QR code to pay ${invoice.payAmount} ${label}`}
+            dangerouslySetInnerHTML={{ __html: renderSVG(
+                addressOnly
+                  ? invoice.payAddress
+                  : paymentUri(invoice.payCurrency, invoice.payAddress, invoice.payAmount),
+                { border: 1 },
+              ) }}
           />
           <dl className="buy-details">
             <div>
-              <dt>Amount due</dt>
+              <dt>Total to send</dt>
               <dd>{`${invoice.payAmount} ${label}`}</dd>
               <dd className="hint">{`≈ $${invoice.priceUsd.toFixed(2)} USD · for ${invoice.credits} credits`}</dd>
             </div>
@@ -146,6 +206,10 @@ export function BuyCredits({ resume }: { resume: Invoice | null }) {
         <p className="hint">
           Send only {label} to this address. Underpaid or late payments are refunded to the
           sending address.
+        </p>
+        <p className="buy-exchange-note">
+          <strong>Paying from an exchange?</strong>
+          {` Many exchanges take their withdrawal fee out of the amount you type. Enter ${invoice.payAmount} ${label} plus that fee, so we receive exactly ${invoice.payAmount} ${label}. Wallet apps add the network fee on top automatically.`}
         </p>
         <p className="hint" role="status">
           Waiting for payment confirmation…
@@ -217,12 +281,40 @@ export function BuyCredits({ resume }: { resume: Invoice | null }) {
             </button>
           ))}
         </div>
+        <span className="hint">
+          {`${coinFeeNote(coin)}${coinMinimum > MIN_PURCHASE_CREDITS ? ` · minimum ${coinMinimum} credits` : ''}`}
+        </span>
       </div>
+
+      <p className="buy-quote" role="status">
+        {!quotable ? null : quote ? (
+          <>
+            <span>{"You'll send about"}</span>
+            <strong>{`${quote.payAmount} ${coinLabel(coin)}`}</strong>
+            <span className="hint">
+              Your wallet adds the network fee when you send.
+            </span>
+            {quote.minUsd && credits < quote.minUsd ? (
+              <span className="form-error">
+                {`${coinLabel(coin)} payments need at least $${quote.minUsd.toFixed(2)}.`}
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span className="hint">{quoting ? 'Calculating total…' : ''}</span>
+        )}
+      </p>
+
+      {credits >= MIN_PURCHASE_CREDITS && credits < coinMinimum ? (
+        <p className="form-error">
+          {`${coinLabel(coin)} needs at least ${coinMinimum} credits because its network fee is high. Choose USDC (Solana) for smaller amounts.`}
+        </p>
+      ) : null}
 
       {error ? <p className="form-error">{error}</p> : null}
 
       <div className="buy-actions">
-        <button type="button" className="cta" disabled={pending || credits < MIN_PURCHASE_CREDITS} onClick={begin}>
+        <button type="button" className="cta" disabled={pending || credits < coinMinimum} onClick={begin}>
           {pending ? 'Creating payment…' : 'Continue to payment'}
         </button>
       </div>

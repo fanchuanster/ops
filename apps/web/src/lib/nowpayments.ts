@@ -87,6 +87,44 @@ export function createProviderPayment(
   })
 }
 
+export type QuoteResult =
+  | { ok: true; payAmount: string; minUsd: number | null }
+  | { ok: false; error: string }
+
+async function getJson(
+  config: NowPaymentsConfig,
+  path: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await fetch(`${API}${path}`, { headers: { 'x-api-key': config.apiKey } })
+    if (!response.ok) return null
+    return (await response.json()) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+export async function fetchQuote(
+  config: NowPaymentsConfig,
+  args: { priceUsd: number; payCurrency: string },
+): Promise<QuoteResult> {
+  const currency = encodeURIComponent(args.payCurrency)
+  const [estimate, minimum] = await Promise.all([
+    getJson(config, `/estimate?amount=${args.priceUsd}&currency_from=usd&currency_to=${currency}`),
+    getJson(config, `/min-amount?currency_from=${currency}&currency_to=usd&fiat_equivalent=usd`),
+  ])
+  const payAmount = estimate?.estimated_amount
+  if (typeof payAmount !== 'number' && typeof payAmount !== 'string') {
+    return { ok: false, error: 'No quote available right now.' }
+  }
+  const fiatMinimum = Number(minimum?.fiat_equivalent)
+  return {
+    ok: true,
+    payAmount: String(payAmount),
+    minUsd: Number.isFinite(fiatMinimum) && fiatMinimum > 0 ? fiatMinimum : null,
+  }
+}
+
 export function fetchProviderPayment(
   config: NowPaymentsConfig,
   paymentId: string,
