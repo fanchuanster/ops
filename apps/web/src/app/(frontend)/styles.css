@@ -2509,6 +2509,7 @@ body:has(.reader-page) .site-footer {
 }
 
 .reader {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -2659,6 +2660,14 @@ body:has(.reader-page) .site-footer {
 
 .reader__aside:hover {
   color: var(--accent);
+}
+
+.reader__loading {
+  position: absolute;
+  inset: auto 0 0;
+  margin: 0;
+  text-align: center;
+  pointer-events: none;
 }
 
 .reader__loading,
