@@ -53,3 +53,53 @@ book is 0.33, so paying whole credits per delivery would pay nothing at
 all for every book under four credits, which is most of them. A credit
 is paid each time the total crosses a hundred, and the remainder
 carries.
+
+---
+
+# Buying credits
+
+Credits can be bought with cryptocurrency through NOWPayments, at
+**$1 USD per credit**, 3 to 500 credits a purchase. Buying is a way to
+pay for sending books; it does not change what reading costs, which is
+nothing.
+
+- **A purchase is a row, and the row is the authority.** `credit-purchases`
+  records the credits and the price at the moment the invoice is made.
+  Neither the notification body nor the provider's response is trusted
+  for how much to grant — they only say *whether* it was paid.
+- **Only `finished` credits.** `partially_paid`, `confirming` and the
+  rest leave the purchase pending; underpayments are the provider's to
+  refund.
+- **Credited exactly once.** The status moves to `paid` with a
+  compare-and-swap before the ledger is touched, so the notification and
+  the page's own polling can both arrive and only one grants. If the
+  ledger write then fails the status is put back to `pending` and the
+  notification answered 500, so the provider retries.
+- **Two routes to the same settlement.** The IPN callback
+  (`/api/nowpayments/ipn`, HMAC-SHA512 over the key-sorted body) and the
+  open page polling the provider for the payment's status. Polling alone
+  is enough to credit, so a missing IPN secret degrades the flow rather
+  than breaking it; the callback answers 503 until the secret is set.
+- **Secrets:** `NOWPAYMENTS_API_KEY` and `NOWPAYMENTS_IPN_SECRET`, both
+  `wrangler secret put`. The IPN secret is created in the NOWPayments
+  dashboard, and the callback URL it posts to is sent with every payment.
+- **The merchant absorbs NOWPayments' fee; the customer sends exactly
+  the price.** `is_fee_paid_by_user` and `fixed_rate` were tried and
+  removed: either one lifts the provider's minimum payment from about
+  $2 to about $9–10 on every coin, which makes the $3 purchase fail
+  with "amountTo is too small". The blockchain network fee is the
+  sender's wallet's and is never in the amount; the screen says so. The
+  pre-invoice figure comes from `/estimate` and is labelled "about" —
+  the invoice's amount is the one that counts.
+- **Small purchases steer to cheap-fee coins.** USDC (Solana) is the
+  default; BTC needs 25 credits (the provider's own minimum is about $22) and ETH 10, because a network fee of a dollar
+  or more would be a third of a $3 purchase. The minimum is enforced in
+  `startPurchase`, not only in the form. An exchange that deducts its
+  withdrawal fee from the typed amount underpays us, so the invoice
+  tells the user to add it; absorbing that fee was rejected as
+  unpredictable and a real loss on small purchases.
+- **The QR code encodes a wallet payment URI** (`bitcoin:`, `ethereum:`
+  in wei, `solana:` with the USDC mint) so a scan fills in address and
+  amount; unknown coins fall back to the bare address.
+- **The QR code is drawn in the browser** so no encoder ships in the
+  Worker, which is measured against a size limit.

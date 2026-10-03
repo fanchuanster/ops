@@ -17,6 +17,7 @@ export type CreditReason =
   | 'unlock'
   | 'resend'
   | 'uploader_share'
+  | 'purchase'
   | 'adjustment'
 
 export function priceInCredits(pageCount: number | null | undefined): number {

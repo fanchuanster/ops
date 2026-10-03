@@ -12,7 +12,23 @@ ARGUMENTS_PLACEHOLDER="<the user's request>"
 COMMAND_DROPS=' name '
 SKILL_DROPS=' argument-hint '
 HOST_REFERENCE='.github/reference'
+CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
+GENERATED_MARKER='Generated from skills/'
+DIFF_LINES=40
+COLLECT=0
+DRY_RUN=0
+added=0
+updated=0
+skipped=0
 HOST_PRUNE=(-path '*/node_modules' -o -path '*/.git' -o -path "$MDS" -o -path "$HOST/tmp" -o -path "$HOST/content" -o -path "$HOST/.github")
+
+for arg in "$@"; do
+    case "$arg" in
+        --collect) COLLECT=1 ;;
+        --collect-dry-run) COLLECT=1; DRY_RUN=1 ;;
+        *) echo "usage: sync.sh [--collect | --collect-dry-run]" >&2; exit 2 ;;
+    esac
+done
 
 import_re='s/^@\(\.\/\)\?\([A-Za-z0-9._-][A-Za-z0-9._/-]*\)[[:space:]]*$/\2/p'
 
@@ -138,6 +154,131 @@ sync_host() {
     sync_reference "$HOST"
     sync_skills "$HOST" "$HOST"
 }
+
+store() {
+    [ "$DRY_RUN" -eq 1 ] || install -Dm644 "$1" "$2"
+}
+
+collect_file() {
+    local src="$1" dst="$2" label
+    label="${dst#"$MDS"/}"
+
+    if [ ! -e "$dst" ]; then
+        store "$src" "$dst"
+        echo "added $label"
+        added=$((added + 1))
+        return 0
+    fi
+
+    cmp -s "$src" "$dst" && return 0
+
+    if [ "$dst" -nt "$src" ]; then
+        echo "skip $label (mds copy is newer than $src)" >&2
+        skipped=$((skipped + 1))
+        return 0
+    fi
+
+    diff -u --label "mds/$label" --label "$src" "$dst" "$src" | head -n "$DIFF_LINES" || true
+    store "$src" "$dst"
+    echo "updated $label"
+    updated=$((updated + 1))
+}
+
+with_frontmatter() {
+    local file="$1" name="$2" description
+    if [ "$(head -n 1 "$file")" != '---' ]; then
+        description="$(grep -m1 -v '^[[:space:]]*$' "$file" | sed 's/^#* *//' | cut -c1-100 | sed 's/"/\\"/g')"
+        printf -- '---\nname: %s\ndescription: "%s"\n---\n\n' "$name" "$description"
+        cat "$file"
+        return 0
+    fi
+    awk -v name="$name" '
+        NR == 1 { fence = 1; next }
+        fence == 1 && /^---[[:space:]]*$/ {
+            fence = 2
+            print "---"
+            if (!hasname) print "name: " name
+            for (i = 1; i <= n; i++) print buf[i]
+            print "---"
+            next
+        }
+        fence == 1 { if ($0 ~ /^name:/) hasname = 1; buf[++n] = $0; next }
+        { print }
+    ' "$file"
+}
+
+collect_command() {
+    local repo="$1" command="$2" name staged
+    grep -qF "$GENERATED_MARKER" "$command" && return 0
+    name="$(basename "$command" .md)"
+    staged="$(mktemp)"
+    with_frontmatter "$command" "$name" > "$staged"
+    collect_file "$staged" "$MDS/$repo/skills/$name/SKILL.md"
+    rm -f "$staged"
+}
+
+collect_skill_dir() {
+    local repo="$1" dir="$2" name file
+    [ -f "$dir/SKILL.md" ] || return 0
+    grep -qF "$GENERATED_MARKER" "$dir/SKILL.md" && return 0
+    name="$(basename "$dir")"
+    while IFS= read -r file; do
+        collect_file "$file" "$MDS/$repo/skills/$name/${file#"$dir"/}"
+    done < <(find "$dir" -type f | sort)
+}
+
+collect_repo() {
+    local repo="$1" dest="$WS_ROOT/$1" file dir
+
+    if [ ! -d "$dest" ]; then
+        echo "skip $repo (no checkout at $dest)" >&2
+        return 0
+    fi
+
+    for file in "$dest/CLAUDE.md" "$dest"/CLAUDE-*.md; do
+        [ -f "$file" ] || continue
+        collect_file "$file" "$MDS/$repo/$(basename "$file")"
+    done
+
+    for file in "$dest"/.claude/commands/*.md; do
+        [ -f "$file" ] || continue
+        collect_command "$repo" "$file"
+    done
+
+    for dir in "$dest"/.claude/skills/*/; do
+        [ -d "$dir" ] || continue
+        collect_skill_dir "$repo" "${dir%/}"
+    done
+}
+
+collect_user() {
+    local file memory_dir slug
+    [ -f "$CLAUDE_HOME/CLAUDE.md" ] && collect_file "$CLAUDE_HOME/CLAUDE.md" "$MDS/_user/CLAUDE-global.md"
+
+    for memory_dir in "$CLAUDE_HOME"/projects/*/memory; do
+        [ -d "$memory_dir" ] || continue
+        slug="$(basename "$(dirname "$memory_dir")")"
+        for file in "$memory_dir"/*.md; do
+            [ -f "$file" ] || continue
+            collect_file "$file" "$MDS/_memory/$slug/$(basename "$file")"
+        done
+    done
+}
+
+collect_all() {
+    local rel prefix=""
+    while IFS= read -r rel; do
+        collect_repo "$(dirname "$rel")"
+    done < <(cd "$MDS" && find . -name 'CLAUDE.md' -printf '%P\n' | sort)
+    collect_user
+    [ "$DRY_RUN" -eq 0 ] || prefix="dry run: "
+    echo "${prefix}collected into mds: $added added, $updated updated, $skipped skipped"
+}
+
+if [ "$COLLECT" -eq 1 ]; then
+    collect_all
+    [ "$DRY_RUN" -eq 0 ] || exit 0
+fi
 
 cd "$MDS"
 while IFS= read -r rel; do

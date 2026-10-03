@@ -194,3 +194,23 @@ an instruction made every move to another shelf keep its old number.
 
 An unfiled book has no number at all — off the shelf there is nothing
 for it to be a position in — and sorts last.
+
+**The book details page always shows reading depth and visibility, and
+both are always editable.** Reading depth is the owner's *suggestion*
+(`review.proposedLevel`) at any stage, never applied by itself — an
+editor still sets the real level.
+
+**Review and visibility are two separate stored facts.** `review.state`
+is the editor's verdict; `visibility` (`public` or `private`) is the
+owner's choice. An owned book is in the public library only when it is
+**both approved and public** — either alone shows it to nobody, and an
+editor's approval never changes visibility. An upload is created
+private. Choosing Public on a book never reviewed submits it (an
+administrator's own offer publishes itself); choosing Public on one
+already approved just shows it, and Private hides it again, neither
+needing a review.
+
+A review is earned by the **original uploaded file** and nothing else.
+Replacing an original sends an approved book back to `submitted`;
+details, depth, visibility, the master, conversion and correction never
+do. Readers who already own the book keep it.

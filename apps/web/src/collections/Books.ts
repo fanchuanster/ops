@@ -5,6 +5,7 @@ import { BOOK_LEVELS, DEFAULT_BOOK_LEVEL, LEVEL_DESCRIPTIONS, LEVEL_IDS } from '
 import {
   type PublicationBlockedReason,
   REVIEW_STATES,
+  VISIBILITIES,
   canPublishToLibrary,
 } from '../domain/moderation'
 import { priceInCredits } from '../domain/credits'
@@ -18,7 +19,14 @@ export const readBooks: Access = ({ req }) => {
     and: [
       { status: { equals: 'published' } },
       { rightsStatus: { in: [...DISTRIBUTABLE_STATUSES] } },
-      { or: [{ owner: { exists: false } }, { 'review.state': { equals: 'approved' } }] },
+      {
+        or: [
+          { owner: { exists: false } },
+          {
+            and: [{ 'review.state': { equals: 'approved' } }, { visibility: { equals: 'public' } }],
+          },
+        ],
+      },
     ],
   }
 
@@ -280,6 +288,18 @@ export const Books: CollectionConfig = {
         description: `How deep into the library this book sits: ${BOOK_LEVELS.map(
           (level) => `${LEVEL_IDS[level]} = ${level} (${LEVEL_DESCRIPTIONS[level]})`,
         ).join('  ·  ')}  —  a reader browsing at one id sees every book with an id at or below it. Curation, not access control: a reader can change their own level freely.`,
+      },
+    },
+    {
+      name: 'visibility',
+      type: 'select',
+      required: true,
+      defaultValue: 'public',
+      index: true,
+      options: VISIBILITIES.map((value) => ({ label: value, value })),
+      admin: {
+        description:
+          'The owner’s choice, independent of review. A book is in the public library only when it is both approved and public; either alone shows it to nobody. Ignored for books with no owner.',
       },
     },
     {

@@ -1,0 +1,17 @@
+- [Jenkins log summaries](feedback_jenkins_log_summaries.md) — drop JVM/version boilerplate from console log summaries unless it's the problem
+- [No live Jenkins jobs](feedback_no_live_jenkins_jobs.md) — never trigger real Jenkins builds while investigating/testing auto_remediation; replay/read-only only
+- [PR target branch](feedback_pr_target_branch.md) — MSM_Automations MRs must target master, never apm_restart (git-status hint is wrong)
+- [SiteScope WMI/Oregon](project_sitescope_wmi_oregon.md) — WMI migration on INFRA prod SiteScopes; Oregon PPM sis.py now auto-cascades .89→.27, no manual revert needed
+- [K8s_Tools mix_replicas param](reference_k8s_tools_mix_replicas.md) — Jenkins K8s_Tools job param `farmname:mix_replicas` (e.g. ALMFRA9007P:32) sets minimal replicas for a farm during restart
+- [hermes read-only mount](project_hermes_readonly_mount.md) — hermes write access to MSM_Automations is a host ACL (uid 10000), not the docker mount; fixed via setfacl, check getfacl first if it recurs
+- [Jenkins domain not IP](feedback_jenkins_domain_not_ip.md) — link to almprodjenkins.saas.microfocus.com, not the 10.211.36.170 IP that Jenkins MCP tools return
+- [Octane story needs task](feedback_octane_story_needs_task.md) — every Octane story must get a subtask carrying estimated hours at creation; flag stories with 0 tasks as non-compliant
+- [MR create/merge conventions](feedback_mr_create_merge_conventions.md) — MSM_Automations MRs: force_remove_source_branch on create, always squash-merge, rewrite merge message from the actual diff
+- [Octane task comments](reference_octane_task_comments.md) — comment on a task via owner_task; task/work_item ids collide and mis-post silently
+- [GitLab merge API is PUT](reference_gitlab_merge_api_put.md) — POST gives a route-level 404 that looks like a missing MR; project ids for MSM/LRE/ALM
+- [.reset.sh (Aviator + MSM root)](reference_aviator_reset_script.md) — recreate local+remote wen_dev off main/master after a merge; compare trees first, squash merges fake "ahead"
+- [Jenkins build log via ssh](reference_jenkins_build_log_via_ssh.md) — read build consoles off the master's filesystem when Jenkins MCP tools are blocked
+- [No unverified field values](feedback_no_unverified_field_values.md) — leave BO/external fields empty unless confirmed AND verified in the system; never ship a guessed "placeholder"
+- [Oregon VPCE private-DNS incident](project_oregon_vpce_private_dns_incident.md) — hand-made STS/EC2/ECR endpoints hijacked VPC-wide DNS; TGW already reaches public AWS APIs
+- [PS1 scripts must be idempotent](feedback_ps1_idempotent_no_needless_restart.md) — no write and no service reload/restart when the setting is already correct
+- [Jenkins job config edits](reference_jenkins_job_config_edits.md) — use the MCP update tool; curl/requests to config.xml is classifier-blocked, read it off the master's disk

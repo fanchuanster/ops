@@ -2140,6 +2140,14 @@ h3 {
   display: block;
 }
 
+.book-card__cover a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
 .book-card__cover--empty {
   padding: 1rem;
   font-size: 1.5rem;
@@ -2462,10 +2470,22 @@ h3 {
   border-bottom: none;
 }
 
-.reader-page {
+body:has(.reader-page) {
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  overflow: hidden;
+}
+
+body:has(.reader-page) .site-footer {
+  display: none;
+}
+
+.reader-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .reader-nav {
@@ -2489,6 +2509,7 @@ h3 {
 }
 
 .reader {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -2639,6 +2660,14 @@ h3 {
 
 .reader__aside:hover {
   color: var(--accent);
+}
+
+.reader__loading {
+  position: absolute;
+  inset: auto 0 0;
+  margin: 0;
+  text-align: center;
+  pointer-events: none;
 }
 
 .reader__loading,
@@ -3605,5 +3634,162 @@ h3 {
   .suggestion__tag {
     min-width: 0;
     margin-right: 0.5rem;
+  }
+}
+
+.account-identity a.button-quiet {
+  margin-left: 1.25rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.buy-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  padding: 2rem;
+  background: var(--paper-raised);
+  border: 0.5px solid var(--rule-soft);
+  border-radius: var(--radius-card);
+  font-family: var(--font-sans);
+}
+
+.buy-card h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.buy-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.buy-amount {
+  width: 9rem;
+  font: inherit;
+  padding: 0.55rem 0.75rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+}
+
+.buy-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.9rem 1rem;
+  background: var(--paper);
+  border: 0.5px solid var(--rule-soft);
+  border-radius: var(--radius-control);
+}
+
+.buy-summary strong {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+.buy-exchange-note {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid currentColor;
+  font-size: 0.9rem;
+}
+
+.buy-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-height: 3.5rem;
+  margin: 0;
+}
+
+.buy-quote strong {
+  font-size: 1.15rem;
+}
+
+.buy-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.buy-invoice {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+.buy-qr {
+  width: 10rem;
+  padding: 0.5rem;
+  background: #fff;
+  border: 0.5px solid var(--rule);
+  border-radius: var(--radius-control);
+}
+
+.buy-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.buy-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.buy-details dt {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+.buy-details dd {
+  margin: 0.25rem 0 0;
+}
+
+.buy-address {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.buy-address code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.buy-card--done {
+  align-items: center;
+  text-align: center;
+}
+
+.buy-balance {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.buy-balance strong {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 400;
+}
+
+@media (max-width: 40rem) {
+  .buy-invoice {
+    grid-template-columns: 1fr;
   }
 }
