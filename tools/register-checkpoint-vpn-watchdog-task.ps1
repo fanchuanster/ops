@@ -31,6 +31,17 @@
     Re-running this script replaces the existing task and launcher
     rather than duplicating them.
 
+    A plain /SC MINUTE schedule only ticks at fixed wall-clock offsets
+    from whenever the task was created, so after a reboot it can sit
+    idle for most of an interval before its first check — several
+    minutes with the default settings, since Check Point's own client
+    doesn't auto-reconnect either. This script adds a second, logon
+    trigger (via the same Schedule.Service COM API used for the power
+    settings, since schtasks.exe /Create only accepts one schedule type
+    per invocation) that fires ~30 seconds after you log on, so the
+    first reconnect attempt happens right after boot instead of waiting
+    for the next periodic tick.
+
 .PARAMETER IntervalMinutes
     How often the watchdog checks the tunnel and reconnects if needed.
 
@@ -83,11 +94,18 @@ $task = $rootFolder.GetTask($TaskName)
 $taskDefinition = $task.Definition
 $taskDefinition.Settings.DisallowStartIfOnBatteries = $false
 $taskDefinition.Settings.StopIfGoingOnBatteries = $false
+
+$TASK_TRIGGER_LOGON = 9
+$logonTrigger = $taskDefinition.Triggers.Create($TASK_TRIGGER_LOGON)
+$logonTrigger.Enabled = $true
+$logonTrigger.UserId = "$env:USERDOMAIN\$env:USERNAME"
+$logonTrigger.Delay = 'PT30S'
+
 $TASK_CREATE_OR_UPDATE = 6
 $TASK_LOGON_INTERACTIVE_TOKEN = 3
 $rootFolder.RegisterTaskDefinition($TaskName, $taskDefinition, $TASK_CREATE_OR_UPDATE, $null, $null, $TASK_LOGON_INTERACTIVE_TOKEN) | Out-Null
 
-Write-Host "Registered task '$TaskName': checks the VPN every $IntervalMinutes minute(s) while you're logged in."
+Write-Host "Registered task '$TaskName': fires ~30s after you log on, then checks the VPN every $IntervalMinutes minute(s) while you're logged in."
 Write-Host "Log file: $env:LOCALAPPDATA\ops-tools\checkpoint-vpn-watchdog.log"
 Write-Host "To run one check immediately: schtasks /Run /TN `"$TaskName`""
 Write-Host "To remove it later: schtasks /Delete /TN `"$TaskName`" /F"
