@@ -27,7 +27,7 @@ variable "worker_deployed" {
 }
 
 # A custom domain creates and manages its own DNS record, which is why
-# dns.tf does not define one for the apex. Attaching this will REPLACE
+# dns.tf does not define one for the site's hostname. Attaching this will REPLACE
 # the proxied CNAME that previously pointed the apex at the Cloudflare
 # Tunnel — that record is now obsolete, since a Worker runs at the edge
 # and has no origin to tunnel to.

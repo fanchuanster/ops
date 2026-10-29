@@ -42,7 +42,7 @@ sell them something.
 
 # 1. PROJECT
 
-**NobleSee**, at **noblesee.com**: online reading, AI-assisted
+**NobleSee**, at **books.noblesee.com** (the apex noblesee.com points nowhere): online reading, AI-assisted
 digitization, EPUB/PDF editions, paid unlocks, donations,
 Send-to-Kindle, a credit economy, user blogs, affiliate sales, a
 conversion portal for readers' own material, and reading levels.

@@ -101,7 +101,7 @@ async function main() {
     })
 
     console.log(`\n  Created admin: ${email}`)
-    console.log(remote ? '  Sign in at https://noblesee.com/admin\n' : '  Sign in at http://localhost:8787/admin\n')
+    console.log(remote ? '  Sign in at https://books.noblesee.com/admin\n' : '  Sign in at http://localhost:8787/admin\n')
   } finally {
     rl?.close()
     await proxy.dispose()

@@ -41,6 +41,6 @@
   ],
 
   "vars": {
-    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com"
+    "NEXT_PUBLIC_SERVER_URL": "https://books.noblesee.com"
   }
 }
