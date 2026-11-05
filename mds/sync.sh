@@ -14,12 +14,15 @@ SKILL_DROPS=' argument-hint '
 HOST_REFERENCE='.github/reference'
 CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
 GENERATED_MARKER='Generated from skills/'
+COLLECT_REPOS=(MSM_Automations MSM_Automations/Aviator)
+USER_SKILL_SKIP=' synced '
 DIFF_LINES=40
 COLLECT=0
 DRY_RUN=0
 added=0
 updated=0
-skipped=0
+removed=0
+STAGE=''
 HOST_PRUNE=(-path '*/node_modules' -o -path '*/.git' -o -path "$MDS" -o -path "$HOST/tmp" -o -path "$HOST/content" -o -path "$HOST/.github")
 
 for arg in "$@"; do
@@ -155,33 +158,15 @@ sync_host() {
     sync_skills "$HOST" "$HOST"
 }
 
-store() {
-    [ "$DRY_RUN" -eq 1 ] || install -Dm644 "$1" "$2"
+collect_file() {
+    install -Dm644 "$1" "$STAGE/$2"
 }
 
-collect_file() {
-    local src="$1" dst="$2" label
-    label="${dst#"$MDS"/}"
-
-    if [ ! -e "$dst" ]; then
-        store "$src" "$dst"
-        echo "added $label"
-        added=$((added + 1))
-        return 0
-    fi
-
-    cmp -s "$src" "$dst" && return 0
-
-    if [ "$dst" -nt "$src" ]; then
-        echo "skip $label (mds copy is newer than $src)" >&2
-        skipped=$((skipped + 1))
-        return 0
-    fi
-
-    diff -u --label "mds/$label" --label "$src" "$dst" "$src" | head -n "$DIFF_LINES" || true
-    store "$src" "$dst"
-    echo "updated $label"
-    updated=$((updated + 1))
+keep_mds_skill() {
+    local repo="$1" name="$2"
+    [ -d "$MDS/$repo/skills/$name" ] || return 0
+    mkdir -p "$STAGE/$repo/skills"
+    cp -R "$MDS/$repo/skills/$name" "$STAGE/$repo/skills/"
 }
 
 with_frontmatter() {
@@ -209,21 +194,27 @@ with_frontmatter() {
 
 collect_command() {
     local repo="$1" command="$2" name staged
-    grep -qF "$GENERATED_MARKER" "$command" && return 0
     name="$(basename "$command" .md)"
+    if grep -qF "$GENERATED_MARKER" "$command"; then
+        keep_mds_skill "$repo" "$name"
+        return 0
+    fi
     staged="$(mktemp)"
     with_frontmatter "$command" "$name" > "$staged"
-    collect_file "$staged" "$MDS/$repo/skills/$name/SKILL.md"
+    collect_file "$staged" "$repo/skills/$name/SKILL.md"
     rm -f "$staged"
 }
 
 collect_skill_dir() {
     local repo="$1" dir="$2" name file
     [ -f "$dir/SKILL.md" ] || return 0
-    grep -qF "$GENERATED_MARKER" "$dir/SKILL.md" && return 0
     name="$(basename "$dir")"
+    if grep -qF "$GENERATED_MARKER" "$dir/SKILL.md"; then
+        keep_mds_skill "$repo" "$name"
+        return 0
+    fi
     while IFS= read -r file; do
-        collect_file "$file" "$MDS/$repo/skills/$name/${file#"$dir"/}"
+        collect_file "$file" "$repo/skills/$name/${file#"$dir"/}"
     done < <(find "$dir" -type f | sort)
 }
 
@@ -231,13 +222,13 @@ collect_repo() {
     local repo="$1" dest="$WS_ROOT/$1" file dir
 
     if [ ! -d "$dest" ]; then
-        echo "skip $repo (no checkout at $dest)" >&2
-        return 0
+        echo "abort: no checkout of $repo at $dest, rebuilding would delete its mds copy" >&2
+        exit 1
     fi
 
     for file in "$dest/CLAUDE.md" "$dest"/CLAUDE-*.md; do
         [ -f "$file" ] || continue
-        collect_file "$file" "$MDS/$repo/$(basename "$file")"
+        collect_file "$file" "$repo/$(basename "$file")"
     done
 
     for file in "$dest"/.claude/commands/*.md; do
@@ -253,26 +244,85 @@ collect_repo() {
 
 collect_user() {
     local file memory_dir slug
-    [ -f "$CLAUDE_HOME/CLAUDE.md" ] && collect_file "$CLAUDE_HOME/CLAUDE.md" "$MDS/_user/CLAUDE-global.md"
+    [ -f "$CLAUDE_HOME/CLAUDE.md" ] && collect_file "$CLAUDE_HOME/CLAUDE.md" "_user/CLAUDE-global.md"
 
     for memory_dir in "$CLAUDE_HOME"/projects/*/memory; do
         [ -d "$memory_dir" ] || continue
         slug="$(basename "$(dirname "$memory_dir")")"
         for file in "$memory_dir"/*.md; do
             [ -f "$file" ] || continue
-            collect_file "$file" "$MDS/_memory/$slug/$(basename "$file")"
+            collect_file "$file" "_memory/$slug/$(basename "$file")"
         done
+    done
+
+    for file in "$CLAUDE_HOME"/commands/*.md; do
+        [ -f "$file" ] || continue
+        collect_command _user "$file"
+    done
+
+    for dir in "$CLAUDE_HOME"/skills/*/; do
+        [ -d "$dir" ] || continue
+        case "$USER_SKILL_SKIP" in *" $(basename "$dir") "*) continue ;; esac
+        collect_skill_dir _user "${dir%/}"
     done
 }
 
-collect_all() {
-    local rel prefix=""
+collected_paths() {
+    local root="$1" repo
+    (
+        cd "$root"
+        for repo in "${COLLECT_REPOS[@]}"; do
+            find "$repo" -maxdepth 1 -type f \( -name 'CLAUDE.md' -o -name 'CLAUDE-*.md' \) 2>/dev/null
+            find "$repo/skills" -type f 2>/dev/null
+        done
+        find _user _memory -type f 2>/dev/null
+    ) | sort || true
+}
+
+report_rebuild() {
+    local old new rel
+    old="$(mktemp)"
+    new="$(mktemp)"
+    collected_paths "$MDS" > "$old"
+    collected_paths "$STAGE" > "$new"
     while IFS= read -r rel; do
-        collect_repo "$(dirname "$rel")"
-    done < <(cd "$MDS" && find . -name 'CLAUDE.md' -printf '%P\n' | sort)
+        echo "removed $rel"
+        removed=$((removed + 1))
+    done < <(comm -23 "$old" "$new")
+    while IFS= read -r rel; do
+        echo "added $rel"
+        added=$((added + 1))
+    done < <(comm -13 "$old" "$new")
+    while IFS= read -r rel; do
+        cmp -s "$MDS/$rel" "$STAGE/$rel" && continue
+        diff -u --label "mds/$rel" --label "collected/$rel" "$MDS/$rel" "$STAGE/$rel" | head -n "$DIFF_LINES" || true
+        echo "updated $rel"
+        updated=$((updated + 1))
+    done < <(comm -12 "$old" "$new")
+    rm -f "$old" "$new"
+}
+
+replace_collected() {
+    local repo
+    for repo in "${COLLECT_REPOS[@]}"; do
+        rm -f "$MDS/$repo/CLAUDE.md" "$MDS/$repo"/CLAUDE-*.md
+        rm -rf "${MDS:?}/$repo/skills"
+    done
+    rm -rf "${MDS:?}/_user" "${MDS:?}/_memory"
+    cp -R "$STAGE/." "$MDS/"
+}
+
+collect_all() {
+    local repo prefix=""
+    STAGE="$(mktemp -d)"
+    trap 'rm -rf "$STAGE"' EXIT
+    for repo in "${COLLECT_REPOS[@]}"; do
+        collect_repo "$repo"
+    done
     collect_user
-    [ "$DRY_RUN" -eq 0 ] || prefix="dry run: "
-    echo "${prefix}collected into mds: $added added, $updated updated, $skipped skipped"
+    report_rebuild
+    [ "$DRY_RUN" -eq 1 ] && prefix="dry run: " || replace_collected
+    echo "${prefix}rebuilt mds: $added added, $updated updated, $removed removed"
 }
 
 if [ "$COLLECT" -eq 1 ]; then

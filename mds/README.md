@@ -165,24 +165,51 @@ bash sync.sh --collect-dry-run
 ```
 
 Off by default: a plain `sync.sh` only writes out and never touches this folder.
-With `--collect` it first pulls guidance back in, so what was written in a
-checkout or by Claude itself lands here without a manual copy, and then syncs
-out as usual. Linux only; `sync.ps1` has no `--collect`. It collects:
+With `--collect` it first rebuilds the collected part of this folder from the
+sources, then syncs out as usual. Linux only; `sync.ps1` has no `--collect`.
 
-- `CLAUDE.md` and `CLAUDE-*.md` from each checkout that has an entry here.
+**Collect is a rebuild, not a merge.** Everything collect owns is deleted here
+and recreated from what the sources hold now, so a skill or memory removed at
+the source disappears here too instead of lingering forever. The source always
+wins; there is no "newer copy" comparison. Collect owns:
+
+- From `MSM_Automations` and `MSM_Automations/Aviator` only — the
+  `COLLECT_REPOS` list in `sync.sh` — their `CLAUDE.md`, `CLAUDE-*.md` and
+  `skills/`. Other entries here, such as `jenkins-infra`, are still synced out
+  but never collected or deleted, and the host repo is never collected because
+  its own checkout is already the source.
 - Hand-written skills from `.claude/commands/<name>.md` and
   `.claude/skills/<name>/`, stored as `<repo>/skills/<name>/SKILL.md`. A command
-  gets a `name` (and a `description` if it has no frontmatter) added. Files
-  carrying the generated banner are skipped, so a skill never round-trips.
-- `~/.claude/CLAUDE.md` as `_user/CLAUDE-global.md`, and auto-memory from
-  `~/.claude/projects/*/memory/` as `_memory/<project-slug>/`. Sync does not
-  write these back out; they are kept here for backup and reference.
+  gets a `name` (and a `description` if it has no frontmatter) added.
+- `_user/` and `_memory/`, rebuilt from the user scope: `~/.claude/CLAUDE.md` as
+  `_user/CLAUDE-global.md`, auto-memory from `~/.claude/projects/*/memory/` as
+  `_memory/<project-slug>/`, and skills from `~/.claude/commands/` and
+  `~/.claude/skills/` as `_user/skills/<name>/`. `~/.claude/skills/synced/` is
+  skipped: it is the Anthropic-managed set, licensed and re-delivered by the
+  client. Sync does not write any of these back out; they are kept here for
+  backup and reference.
 
-When the two copies differ, the newer file wins and a diff is printed. If the
-copy here is newer it is left alone and reported as skipped. `--collect-dry-run`
-reports what would be collected and stops before syncing; `WS_ROOT` and `CLAUDE_HOME`
-override the locations. Memory and the global file can hold personal notes, so
-check what `--collect-dry-run` lists before pushing this repo anywhere shared.
+A skill authored here, like `octane`, reaches the checkout only as a generated
+copy carrying the banner. Collect never reads a generated copy back; instead it
+takes it as proof that the source lives here and carries this folder's version
+into the rebuild untouched. Two consequences follow from the source winning:
+
+- **Sync out a new skill before collecting.** A skill created here that has
+  never been synced has no generated copy in the checkout, so a `--collect`
+  deletes it. Run plain `sync.sh` first.
+- **Sync out an edit to `CLAUDE.md` or `CLAUDE-*.md` before collecting.** The
+  checkout's copy replaces this one, so an unsynced edit here is lost.
+
+The rebuild is staged in a temporary directory and compared before anything
+here is touched, printing every added, removed and changed file with a diff.
+`--collect-dry-run` stops there. A repo in `COLLECT_REPOS` with no checkout
+aborts the run rather than deleting its copy here. Collecting on another
+machine replaces `_memory/` with that machine's projects, so collect on one
+machine. `WS_ROOT` and `CLAUDE_HOME` override the locations.
+
+`_memory/` and `_user/` are gitignored and exist only on the machine that
+collected them. Memory and the global file hold personal and work notes, and
+this repo is public, so they are a local backup, never part of a commit.
 
 ## The two repos behave differently
 
