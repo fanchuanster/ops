@@ -13,7 +13,7 @@ Request: $ARGUMENTS
 | Action | Status | Skill |
 |---|---|---|
 | Book leave | available | `book-leaves` |
-| Reimbursement | coming soon (wellness, via help.opentext.com ticket; see `ot\REIMBURSEMENT.md`) | — |
+| Reimbursement | available: wellness (Well+Being Fitness) only | `reimburse-wellness` |
 
 ## Behaviour
 
@@ -29,6 +29,9 @@ Request: $ARGUMENTS
    `python ot\book_leaves.py --type "<type>" --report` and show its available
    and booked days before asking for the start date `yyyymmdd`, optional end
    date, half day and dry run.
+   For Reimbursement, ask for the reimbursement type (only Wellness for now),
+   then follow `reimburse-wellness`: show the allowance, then ask for the
+   receipt images.
 
 ## Adding an action
 

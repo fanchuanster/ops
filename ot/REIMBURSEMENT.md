@@ -1,17 +1,31 @@
 # Reimbursement — what is known
 
-Notes for automating reimbursement from `opentext-central`. Nothing is built yet.
+Wellness is automated by `reimburse_wellness.py` (skill `reimburse-wellness`).
 
-## Wellness reimbursement (the one wanted)
+## Wellness reimbursement (Well+Being Fitness)
 
-- Filed as a ticket in the OpenText self-service portal, not in Concur.
-  Example ticket:
-  https://help.opentext.com/portal/site/selfservice?customView=TicketDetails&ticketId=5550992
-- Allowance: **300 USD per fiscal year**.
-- Evidence is receipt images supplied by the user.
-- Not yet explored: the form behind that ticket, its fields, how
-  attachments are uploaded, how sign-in to help.opentext.com behaves
-  headless, and how to read how much of the 300 USD is already used.
+- A request in the SMAX self-service portal at help.opentext.com, not
+  Concur: Ask HR → "Submit Well+Being Fitness Reimbursement Claim",
+  `https://help.opentext.com/saw/ess/offeringPage/2267531`. The old
+  `portal/site/selfservice?...ticketId=` links now land on the homepage.
+- Allowance: **320 a year in local currency (CAD)**. The form shows it
+  ("Maximum Annual Reimbursement Amount") and what is left ("Available Amount
+  to Claim"), both read-only. At most two submissions per fiscal year,
+  Jul 1 to Jun 30.
+- Sign-in, headless: Microsoft Entra ID. Type `OT_USERNAME` (an email) and
+  Next, or on later runs click it in "Pick an account"; SSO does the rest.
+  The session does not survive between runs.
+- Required fields: Claim Description (a rich-text editor), Date Membership
+  (or Fee) Paid (`MM/DD/YYYY`; typing then Enter leaves a datepicker backdrop
+  that must be clicked away), Reimbursement Amount Requested, Expense Type (a
+  combobox of five options, matched by prefix), and a receipt through the file
+  input. The six declarations are text, not checkboxes.
+- There is no draft: the only action is Submit. The automation previews first
+  and submits only with `--submit` after a go-ahead. Submit lands on
+  `/saw/ess/request-submitted/<request id>`, which reads "Your Request #<id>
+  was successfully created". Available Amount to Claim did not drop right
+  after a 100 claim, so it presumably updates once the claim is processed —
+  count submissions yourself rather than trusting that field.
 
 ## Concur (Travel & Expense) — explored, not the wellness route
 
