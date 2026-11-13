@@ -17,7 +17,7 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     if (!env.CONVERTER_SECRET) return
 
-    const origin = env.NEXT_PUBLIC_SERVER_URL ?? 'https://noblesee.com'
+    const origin = env.NEXT_PUBLIC_SERVER_URL ?? 'https://books.noblesee.com'
     const request = new Request(`${origin}${TICK_PATH}`, {
       method: 'POST',
       headers: { authorization: `Bearer ${env.CONVERTER_SECRET}` },

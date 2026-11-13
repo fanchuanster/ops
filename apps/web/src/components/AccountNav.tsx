@@ -25,6 +25,7 @@ export function AccountNav({ isAdmin = false }: { isAdmin?: boolean }) {
         {sections.map((section) => {
           const current =
             pathname === section.href ||
+            (section.href === '/account' && pathname === '/account/credits') ||
             (section.href === '/account/books' &&
               (pathname === '/account/upload' || pathname.startsWith('/account/books/')))
           return (

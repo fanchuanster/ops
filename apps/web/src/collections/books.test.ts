@@ -22,7 +22,12 @@ describe('anonymous', () => {
     expect(rule).not.toBe(true)
     expect(clauses(rule)).toContainEqual({ status: { equals: 'published' } })
     expect(clauses(rule)).toContainEqual({
-      or: [{ owner: { exists: false } }, { 'review.state': { equals: 'approved' } }],
+      or: [
+        { owner: { exists: false } },
+        {
+          and: [{ 'review.state': { equals: 'approved' } }, { visibility: { equals: 'public' } }],
+        },
+      ],
     })
   })
 

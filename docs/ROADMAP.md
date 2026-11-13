@@ -132,7 +132,7 @@ oversight.
   Readers are read-only — the design's suspend control has no account state
   behind it, and a button that only looks like it suspends someone is worse
   than no button.
-- **Infrastructure as code** — Terraform for R2, D1, DNS and the www redirect.
+- **Infrastructure as code** — Terraform for R2, D1, DNS and the custom domain.
 - **Converter, partially** — PyMuPDF rendering, PaddleOCR behind a replaceable
   interface, normalization/structure, and python-docx master generation, driven
   by a CLI.

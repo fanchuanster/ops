@@ -34,6 +34,9 @@ export default async function AccountLayout({ children }: { children: React.Reac
             <strong>{credits}</strong>
             <span>{credits === 1 ? 'credit' : 'credits'}</span>
           </p>
+          <a className="button-quiet" href="/account/credits">
+            Buy credits
+          </a>
         </header>
 
         <div className="account__body">

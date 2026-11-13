@@ -14,11 +14,14 @@ uploads never become public automatically.**
 ## 6.1 Publication
 
 A book is in the public library when `status` is `published` and, if it
-has an owner, `review.state` is `approved`. That is computed by
+has an owner, `review.state` is `approved` and `visibility` is `public`. That is computed by
 `isInPublicLibrary` in `domain/moderation.ts`, and every reader-facing
-screen and the `books` read access call it. **There is no stored public
-flag.** The `visibility` column dropped from the schema on 2026-09-19
-stays dead, because a stored flag is what drifted from approval before.
+screen and the `books` read access call it. **Public is computed from review and
+visibility, never stored on its own.** `visibility` was dropped from the schema on 2026-09-19 because it
+drifted from approval. It returned on 2026-10-03 as the owner's own
+choice, kept apart from review: it can only *narrow* what approval
+allows, never widen it, so it cannot make an unreviewed book public
+(BOOKS.md, the details page).
 
 **Do not restate that rule in a caller's `where`.** The access layer
 already applies it, together with the rights check. `owner` is

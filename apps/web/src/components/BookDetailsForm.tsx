@@ -12,7 +12,7 @@ import { AutoFillButton } from './AutoFillButton'
 import { describeBytes } from '../domain/kindle'
 import {
   BOOK_LEVELS,
-  DEFAULT_BOOK_LEVEL,
+  type BookLevel,
   LEVEL_LABELS,
   levelFromId,
 } from '../domain/levels'
@@ -43,7 +43,9 @@ export interface EditableBook {
   collection: number | null
   collectionOrder: number | null
   proposedLevel: number | null
-  canProposeLevel: boolean
+  level: BookLevel
+  visibility: Visibility
+  reviewState: string
   sourceKind: SourceKind
   plan: PublicationPlan
   aiCorrection: boolean
@@ -68,6 +70,29 @@ function Guessed({
 }) {
   if (!draft) return null
   return value ? <Hint>{guess}</Hint> : <Hint unsure>{UNSURE}</Hint>
+}
+
+function visibilityHint({
+  book,
+  chosen,
+  draft,
+  byAdmin,
+}: {
+  book: EditableBook
+  chosen: Visibility
+  draft: boolean
+  byAdmin: boolean
+}): string {
+  if (draft) return 'Private books stay off the public library'
+  const approved = book.reviewState === 'approved'
+  if (chosen !== book.visibility) {
+    if (chosen === 'private') return 'Saving hides it from the public library'
+    if (approved) return 'Saving shows it in the public library'
+    if (book.reviewState === 'submitted') return 'Saving makes it public once an editor approves it'
+    return byAdmin ? 'Saving publishes it to the library' : 'Saving submits it to an editor'
+  }
+  if (chosen === 'private') return approved ? 'Reviewed — private to you' : 'Private to you'
+  return approved ? 'In the public library' : 'Public once an editor approves it'
 }
 
 function pagesLabel(book: EditableBook): string | null {
@@ -103,7 +128,7 @@ export function BookDetailsForm({
     setFilledShelf(book.collection)
     setShelf(book.collection)
   }
-  const [visibility, setVisibility] = useState<Visibility>(DEFAULT_VISIBILITY)
+  const [visibility, setVisibility] = useState<Visibility>(draft ? DEFAULT_VISIBILITY : book.visibility)
   const offered = draft && visibility === 'public'
 
   const pages = pagesLabel(book)
@@ -206,43 +231,39 @@ export function BookDetailsForm({
             ) : null}
           </label>
 
-          {book.canProposeLevel ? (
-            <label>
-              <span className="field-label">Importance level</span>
-              <select
-                name="proposedLevel"
-                defaultValue={book.proposedLevel ? levelFromId(book.proposedLevel) : DEFAULT_BOOK_LEVEL}
-              >
-                {BOOK_LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {LEVEL_LABELS[level]}
-                  </option>
-                ))}
-              </select>
-              <Hint>
-                {byAdmin
-                  ? 'How much of the collection a reader needs'
-                  : 'Your suggestion — an editor decides'}
-              </Hint>
-            </label>
-          ) : null}
+          <label>
+            <span className="field-label">Reading depth</span>
+            <select
+              name="proposedLevel"
+              defaultValue={book.proposedLevel ? levelFromId(book.proposedLevel) : book.level}
+            >
+              {BOOK_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {LEVEL_LABELS[level]}
+                </option>
+              ))}
+            </select>
+            <Hint>
+              {byAdmin
+                ? 'How much of the collection a reader needs'
+                : 'Your suggestion — an editor decides'}
+            </Hint>
+          </label>
 
-          {draft ? (
-            <label>
-              <span className="field-label">Visibility</span>
-              <select
-                name="visibility"
-                value={visibility}
-                onChange={(event) =>
-                  setVisibility(event.currentTarget.value === 'private' ? 'private' : 'public')
-                }
-              >
-                <option value="public">Public</option>
-                <option value="private">Private</option>
-              </select>
-              <Hint>Private books stay off the public library</Hint>
-            </label>
-          ) : null}
+          <label>
+            <span className="field-label">Visibility</span>
+            <select
+              name="visibility"
+              value={visibility}
+              onChange={(event) =>
+                setVisibility(event.currentTarget.value === 'private' ? 'private' : 'public')
+              }
+            >
+              <option value="public">Public</option>
+              <option value="private">Private</option>
+            </select>
+            <Hint>{visibilityHint({ book, chosen: visibility, draft, byAdmin })}</Hint>
+          </label>
 
           {byAdmin ? (
             <label>

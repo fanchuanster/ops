@@ -56,7 +56,7 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-DEFAULT_BASE_URL = "https://noblesee.com/api"
+DEFAULT_BASE_URL = "https://books.noblesee.com/api"
 
 # The `/upload` route's `name` query param has an undocumented, unvalidated
 # limit on the server (docs/API.md) -- past it the route answers an opaque
@@ -121,7 +121,7 @@ class NobleSeeError(RuntimeError):
 
 
 class NobleSee:
-    """Admin-token client for https://noblesee.com/api.
+    """Admin-token client for https://books.noblesee.com/api.
 
     The token must belong to an administrator for collection-wide reads
     and for editing books owned by other users; `/api/upload` (create a

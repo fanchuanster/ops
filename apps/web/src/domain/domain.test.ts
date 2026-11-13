@@ -434,13 +434,26 @@ describe('an administrator publishing directly', () => {
       expect(isInPublicLibrary({ status: 'published' })).toBe(true)
     })
 
-    it('keeps an owned upload private until its review is approved', () => {
+    it('keeps an owned upload private until its review is approved and the owner makes it public', () => {
       expect(isInPublicLibrary({ status: 'published', owner: 5 })).toBe(false)
       expect(
         isInPublicLibrary({ status: 'published', owner: 5, review: { state: 'submitted' } }),
       ).toBe(false)
       expect(
-        isInPublicLibrary({ status: 'published', owner: 5, review: { state: 'approved' } }),
+        isInPublicLibrary({
+          status: 'published',
+          owner: 5,
+          review: { state: 'approved' },
+          visibility: 'private',
+        }),
+      ).toBe(false)
+      expect(
+        isInPublicLibrary({
+          status: 'published',
+          owner: 5,
+          review: { state: 'approved' },
+          visibility: 'public',
+        }),
       ).toBe(true)
     })
   })

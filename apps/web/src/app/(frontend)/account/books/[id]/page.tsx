@@ -29,6 +29,7 @@ import { isInPublicLibrary } from '../../../../../domain/moderation'
 import { isConversionState, isInFlight, uploadStep } from '../../../../../domain/pipeline'
 import { readSourceKind, resolvePlan } from '../../../../../domain/publication'
 import { readSources } from '../../../../../domain/sources'
+import { levelFromId } from '../../../../../domain/levels'
 import { shareDescription } from '../../../../../domain/uploaderShare'
 import { loadSuggestions } from '../../../actions/correction'
 import { getCurrentUser } from '../../../../../lib/auth'
@@ -138,7 +139,9 @@ export default async function BookDetailsPage({
           collectionOrder:
             typeof book.collectionOrder === 'number' ? book.collectionOrder : null,
           proposedLevel: book.review?.proposedLevel ?? null,
-          canProposeLevel: reviewState === 'unsubmitted' || reviewState === 'rejected',
+          level: levelFromId(book.level ?? 0),
+          visibility: book.visibility === 'public' ? 'public' : 'private',
+          reviewState,
           sourceKind,
           plan,
           aiCorrection: book.conversion?.aiCorrection === true,

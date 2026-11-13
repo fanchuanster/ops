@@ -78,7 +78,7 @@
   "vars": {
     // Payload scopes CSRF and CORS to this origin and builds absolute
     // URLs from it, so it must be the real public name, not a guess.
-    "NEXT_PUBLIC_SERVER_URL": "https://noblesee.com",
+    "NEXT_PUBLIC_SERVER_URL": "https://books.noblesee.com",
 
     // Google Analytics 4. Not a secret — a measurement ID is served
     // inside every page by design — so it is a var and not a

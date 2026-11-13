@@ -9,6 +9,7 @@ import { buildConfig } from 'payload'
 
 import { BookCollections } from './collections/BookCollections'
 import { CreditLedger } from './collections/CreditLedger'
+import { CreditPurchases } from './collections/CreditPurchases'
 import { Downloads } from './collections/Downloads'
 import { Entitlements } from './collections/Entitlements'
 import { Books } from './collections/Books'
@@ -43,6 +44,7 @@ export default buildConfig({
     Downloads,
     Entitlements,
     CreditLedger,
+    CreditPurchases,
     ReadingProgress,
   ],
   editor: lexicalEditor(),

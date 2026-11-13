@@ -40,6 +40,7 @@ export const CreditLedger: CollectionConfig = {
         { label: 'Unlocked a book', value: 'unlock' },
         { label: 'Sent a book again', value: 'resend' },
         { label: 'Share of a reader sending your book', value: 'uploader_share' },
+        { label: 'Bought with crypto', value: 'purchase' },
         { label: 'Manual adjustment', value: 'adjustment' },
       ],
     },

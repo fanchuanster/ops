@@ -47,7 +47,7 @@ export default async function TokensPage() {
       </p>
 
       <pre className="code-block">
-        <code>{`curl -H 'Authorization: users API-Key <token>' \\\n     ${process.env.NEXT_PUBLIC_SERVER_URL || 'https://noblesee.com'}/api/books`}</code>
+        <code>{`curl -H 'Authorization: users API-Key <token>' \\\n     ${process.env.NEXT_PUBLIC_SERVER_URL || 'https://books.noblesee.com'}/api/books`}</code>
       </pre>
 
       {isAdmin(user) ? (

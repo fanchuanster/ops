@@ -10,6 +10,7 @@ import {
   canPublishToLibrary,
   canSubmitForReview,
   parseVisibility,
+  type Visibility,
 } from '../../../domain/moderation'
 import { levelId, parseProposedLevel } from '../../../domain/levels'
 import {
@@ -58,7 +59,11 @@ export async function saveBookDetails(
   if (written.error !== undefined) return { error: written.error }
 
   const bookId = Number(formData.get('bookId'))
+  const offered = await offerIfPublic(user, bookId, parseVisibility(formData.get('visibility')))
+  if (offered.error) return { error: offered.error }
+
   revalidateDetails(bookId, written.slugs)
+  revalidatePath('/books')
   redirect(`/account/books/${bookId}`)
 }
 
@@ -124,11 +129,7 @@ async function writeDetails(
 
   const language = String(formData.get('language') || '')
 
-  const reviewState = book.review?.state ?? 'unsubmitted'
-  const proposed =
-    reviewState === 'unsubmitted' || reviewState === 'rejected'
-      ? parseProposedLevel(formData.get('proposedLevel'))
-      : null
+  const proposed = parseProposedLevel(formData.get('proposedLevel'))
 
   const alreadyConverting = book.conversion?.state !== 'draft'
 
@@ -176,6 +177,9 @@ async function writeDetails(
         author: String(formData.get('author') || '').trim() || null,
         ...(language ? { language: language as 'zh-Hant' } : {}),
         collection: collectionId,
+        ...(formData.has('visibility')
+          ? { visibility: parseVisibility(formData.get('visibility')) }
+          : {}),
         ...(proposed ? { review: { ...book.review, proposedLevel: levelId(proposed) } } : {}),
         ...(ordersShelves
           ? {
@@ -231,6 +235,23 @@ export async function submitForReview(
   return {}
 }
 
+async function offerIfPublic(
+  user: SignedIn,
+  bookId: number,
+  wanted: Visibility,
+): Promise<DetailsState> {
+  if (wanted !== 'public') return {}
+
+  const payload = await getPayload({ config })
+  const book = await payload
+    .findByID({ collection: 'books', id: bookId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+  const reviewState = book?.review?.state ?? 'unsubmitted'
+  if (reviewState !== 'unsubmitted' && reviewState !== 'rejected') return {}
+
+  return offerToLibrary(user, bookId)
+}
+
 async function offerToLibrary(
   user: SignedIn,
   bookId: number,
@@ -264,6 +285,7 @@ async function offerToLibrary(
     id: bookId,
     data: {
       rightsStatus,
+      visibility: 'public',
       review: {
         ...book.review,
         state: 'submitted',

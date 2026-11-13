@@ -10,6 +10,7 @@ import {
 } from '../domain/adobe'
 import type { ArtifactFormat } from '../domain/conversion'
 import { type BookId, artifactKey } from '../domain/bookStorage'
+import { type ReviewState, reviewAfterOriginalChange } from '../domain/moderation'
 import { type CorrectionState, correctionStateForMaster } from '../domain/correction'
 import {
   type ConversionState,
@@ -317,6 +318,7 @@ export async function addSourceToBook(
   payload: Payload,
   book: Book,
   { kind, sourceKey, filename }: { kind: SourceKind; sourceKey: string; filename: string },
+  byAdmin = false,
 ): Promise<string | null> {
   const conversion = (book.conversion ?? {}) as Record<string, unknown>
   const decision = canAddSource({
@@ -349,10 +351,18 @@ export async function addSourceToBook(
         ],
       },
       ...statusFor(filed.artifacts),
+      ...reviewForChangedOriginal(book, byAdmin),
     },
     overrideAccess: true,
   })
   return null
+}
+
+function reviewForChangedOriginal(book: Book, byAdmin: boolean) {
+  const current = (book.review?.state ?? 'unsubmitted') as ReviewState
+  const next = reviewAfterOriginalChange({ reviewState: current, byAdmin })
+  if (next === current) return {}
+  return { review: { ...book.review, state: next } }
 }
 
 const CONTENT_TYPES: Record<SourceKind, string> = {

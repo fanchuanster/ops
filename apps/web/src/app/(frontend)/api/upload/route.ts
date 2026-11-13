@@ -119,7 +119,7 @@ export async function POST(request: Request): Promise<Response> {
       kind,
       sourceKey,
       filename,
-    })
+    }, Boolean(user.roles?.includes('admin')))
     await bucket.delete(sourceKey).catch(() => {})
     if (refusal) return fail(409, refusal)
     return Response.json({ bookId: target.id })
@@ -159,6 +159,7 @@ export async function POST(request: Request): Promise<Response> {
         status: 'draft',
         owner: Number(user.id),
         review: { state: 'unsubmitted' },
+        visibility: 'private',
         conversion: {
           state: 'draft',
           sourceKey,
