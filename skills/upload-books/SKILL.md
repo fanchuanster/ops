@@ -75,6 +75,27 @@ review the CSV first. `--skip-cover` and `--skip-publish` opt out of either
 step, and `--rights-status` (default `unknown`, not `create`'s public-domain
 default) overrides what publishing claims about rights.
 
+A long CJK filename can exceed the upload route's undocumented 52-UTF-8-byte
+limit on `name` (docs/API.md), which the route answers with an opaque `500`
+rather than a validation error. `tools/ns.py` now shortens any filename over
+that automatically (`_fit_upload_filename`) to the longest whole-character
+prefix that fits, instead of a caller falling back to a meaningless stand-in
+name like `source.pdf`. Nothing to do here except trust that the stored
+`sourceFilename` may be a trimmed — but still meaningful — version of the
+original, never a placeholder.
+
+Publishing a book is three fields, not one: `status`, a `rightsStatus` that
+actually permits distribution (`public_domain`, `licensed`, or
+`permission_granted` — never the `unknown` default), and `review.state`
+set to `approved`. `docs/RIGHTS.md` 6.1's `isInPublicLibrary` checks all
+three; a book with `status: published` but `rightsStatus: unknown` or an
+unapproved review is published in name only and stays invisible to readers.
+`ns.py publish` sets the first two; call `update 66 --status ...` or PATCH
+`review` directly for the third when the book should actually go live, and
+default to `public_domain` unless the human reviewing the row says
+otherwise — this catalog is mostly pre-modern texts entered by the
+maintainer (docs/RIGHTS.md 6.1), so that is the true default, not `unknown`.
+
 ## Requirements
 
 - `NOBLESEE_TOKEN` in the environment — the same personal access token

@@ -65,6 +65,13 @@ Requirements the route enforces, in order:
 - **Content-Type must be one of** `application/pdf`, the DOCX MIME type,
   `application/epub+zip`, `text/plain`, `text/markdown` — sent as a real
   header, not guessed from the filename.
+- **`name` must stay under 52 UTF-8 bytes.** Undocumented and
+  unvalidated server-side: past that length the route 500s instead of
+  answering `400`, found empirically 2026-10-02. `tools/ns.py` works
+  around it (`_fit_upload_filename`), shortening a long filename to the
+  longest whole-character prefix that fits rather than send the request
+  as-is or fall back to a placeholder name. A caller going around
+  `ns.py` must shorten the `name` query param itself.
 - **`Content-Length` must be set and truthful** (`FixedLengthStream`
   reads exactly that many bytes from the body) and under
   `MAX_UPLOAD_BYTES`.

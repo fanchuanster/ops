@@ -57,7 +57,8 @@ param(
     [string] $SiteName = 'SaaS',
     [string] $TracExePath,
     [string] $CredentialPath = (Join-Path $env:LOCALAPPDATA 'ops-tools\checkpoint-vpn.cred'),
-    [string] $LogPath = (Join-Path $env:LOCALAPPDATA 'ops-tools\checkpoint-vpn-watchdog.log')
+    [string] $LogPath = (Join-Path $env:LOCALAPPDATA 'ops-tools\checkpoint-vpn-watchdog.log'),
+    [int] $BootWaitSeconds = 600
 )
 
 function Write-Log {
@@ -168,8 +169,27 @@ catch {
     exit 0
 }
 
+function Get-UptimeSeconds {
+    ((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalSeconds
+}
+
+function Wait-ForClientAfterBoot {
+    $deadline = (Get-Date).AddSeconds($BootWaitSeconds - (Get-UptimeSeconds))
+    while ((Get-Date) -lt $deadline) {
+        if (Test-ClientRunning) { return }
+        Start-Sleep -Seconds 3
+    }
+}
+
 try {
+    if ((Get-UptimeSeconds) -lt $BootWaitSeconds) {
+        Wait-ForClientAfterBoot
+    }
+
     if (-not (Test-ClientRunning)) {
+        if ((Get-UptimeSeconds) -lt $BootWaitSeconds) {
+            Write-Log "TrGUI.exe not running $([int](Get-UptimeSeconds))s after boot; nothing to reconnect."
+        }
         exit 0
     }
 
