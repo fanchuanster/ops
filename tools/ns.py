@@ -36,6 +36,12 @@ the row before this runs, not a second manual step afterwards.
 The token is never a CLI argument you'd leave in shell history: it is
 read from the `NOBLESEE_TOKEN` environment variable, or passed to
 `NobleSee(token=...)` by a caller that already has it in memory.
+
+Every upload's filename is quietly fit under `UPLOAD_FILENAME_MAX_BYTES`
+before it is sent (`_fit_upload_filename`) -- the server's `/upload`
+route 500s past that length instead of validating it, so a long title
+is shortened to the longest whole-character prefix that still fits,
+never swapped for a placeholder like `source.pdf`.
 """
 
 
@@ -50,7 +56,15 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-DEFAULT_BASE_URL = "https://noblesee.com/api"
+DEFAULT_BASE_URL = "https://books.noblesee.com/api"
+
+# The `/upload` route's `name` query param has an undocumented, unvalidated
+# limit on the server (docs/API.md) -- past it the route answers an opaque
+# `500` instead of a `400`. Found empirically 2026-10-02: 52 UTF-8 bytes
+# passes, 53 fails, independent of content. `_fit_upload_filename` below
+# keeps every upload under that so a long title never degrades to a
+# meaningless stand-in name like `source.pdf`.
+UPLOAD_FILENAME_MAX_BYTES = 52
 
 CONTENT_TYPE_BY_SUFFIX = {
     ".pdf": "application/pdf",
@@ -65,6 +79,25 @@ The upload endpoint trusts the `Content-Type` header, not the filename,
 so a caller has to send the right one — this is the same table, kept in
 one place instead of re-derived per script.
 """
+
+
+def _fit_upload_filename(filename: str, *, max_bytes: int = UPLOAD_FILENAME_MAX_BYTES) -> str:
+    """Shorten `filename` to `max_bytes` of UTF-8, keeping the extension
+    and as much of the original stem as fits.
+
+    Truncates one character at a time rather than one byte, so a
+    multi-byte character (every CJK title in this catalog) is never
+    split into invalid UTF-8.
+    """
+    if len(filename.encode("utf-8")) <= max_bytes:
+        return filename
+    suffix = Path(filename).suffix
+    stem = filename[: len(filename) - len(suffix)] if suffix else filename
+    budget = max_bytes - len(suffix.encode("utf-8"))
+    while stem and len(stem.encode("utf-8")) > budget:
+        stem = stem[:-1]
+    return f"{stem}{suffix}"
+
 
 RIGHTS_STATUSES = (
     "public_domain",
@@ -88,7 +121,7 @@ class NobleSeeError(RuntimeError):
 
 
 class NobleSee:
-    """Admin-token client for https://noblesee.com/api.
+    """Admin-token client for https://books.noblesee.com/api.
 
     The token must belong to an administrator for collection-wide reads
     and for editing books owned by other users; `/api/upload` (create a
@@ -198,7 +231,7 @@ class NobleSee:
                 f"Unsupported extension {suffix!r} for {path.name}; "
                 f"expected one of {sorted(CONTENT_TYPE_BY_SUFFIX)}.",
             )
-        filename = name or path.name
+        filename = _fit_upload_filename(name or path.name)
         query: dict[str, Any] = {"name": filename}
         if book_id is not None:
             query["book"] = book_id

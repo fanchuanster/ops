@@ -100,12 +100,22 @@ Display as a table: ID | Name | Phase | Sprint | # Tasks (pending/total) | Est h
 `estimated_hours`/`invested_hours` are read-only rollups from the item's tasks (see API quirks
 below) so they must be requested explicitly via `fields`, same as above; they're absent from
 `list_my_items`'s own default `fields` string. Append a totals row summing Est h and Inv h
-across the displayed (non-Done/Closed, unless the user asked for all) items.
+across the displayed items.
 `item['sprint']` is a dict (`{'name': ..., 'start_date': ..., 'end_date': ...}`) or `None` if
 unassigned — show `item['sprint']['name']` or `-`. The `/work_items` list endpoint does **not**
 return `sprint` (see the quirk below), so `list_my_items` re-reads it from each item's subtype
 endpoint whenever `sprint` is in `fields`. Don't drop `sprint` from `fields` and expect it back.
-Only show items that are not Done/Closed unless the user asks for all.
+Show every item that is not Done/Closed, plus every Done/Closed item planned in the current
+sprint (`client.find_current_sprint()['name']` equals `item['sprint']['name']`), so the
+sprint's finished work stays visible until the sprint ends. Show all items only when the
+user asks for all. Name the current sprint and its dates above the table, and mark the
+Done/Closed rows (e.g. bold).
+```python
+current = client.find_current_sprint()['name']
+shown = [i for i in items
+         if (i.get('phase') or {}).get('name') not in ('Done', 'Closed')
+         or (i.get('sprint') or {}).get('name') == current]
+```
 
 ### Show item detail
 ```python
@@ -315,7 +325,8 @@ att_id = client.add_attachment(item_id, 'screenshot.png', file_bytes, 'image/png
 ## Interpreting requests
 
 - no arguments at all / "list" / "list my tickets" / "show my work" → list active items
-  (not Done/Closed). An empty request is always a list, never a prompt for what to do.
+  (not Done/Closed) plus every item planned in the current sprint, Done/Closed included. An
+  empty request is always a list, never a prompt for what to do.
 - "create a story/defect/quality story/task" → create it with the default owner so Octane
   follows it for the user, then confirm the follow record landed (see "Follow every item you
   create" above) and report the new id together with whether it is followed

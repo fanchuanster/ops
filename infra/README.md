@@ -27,11 +27,10 @@ The token needs:
 | Account | Workers R2 Storage — Edit | the artifact bucket, CORS, lifecycle |
 | Account | D1 — Edit           | the application database                 |
 | Account | Workers Scripts — Edit | `wrangler deploy`, custom domain       |
-| Zone    | DNS — Edit          | the `www` record                         |
-| Zone    | Single Redirect — Edit | the www→apex redirect ruleset            |
+| Zone    | DNS — Edit          | the mail records                         |
 
 Editing a Cloudflare token **replaces** its permission list rather than adding
-to it, so granting one permission can silently revoke another. Set all five in
+to it, so granting one permission can silently revoke another. Set all four in
 a single edit.
 
 **D1 only appears if the token is scoped to one specific account.** With
@@ -167,10 +166,11 @@ individually rather than destroying wholesale.
 
 ## Known drift
 
-The apex `noblesee.com` record still points at the retired Cloudflare Tunnel
-and is **not** managed here. `cloudflare_workers_custom_domain` creates and
-owns that record, so it will be replaced at step 3 above. Until then the apex
-resolves to a tunnel with nothing behind it.
+The site is served on `books.noblesee.com`, whose record
+`cloudflare_workers_custom_domain` creates and owns. The apex `noblesee.com`
+and `www` deliberately point nowhere; if a hand-made apex record (such as the
+old Cloudflare Tunnel CNAME) is still in the zone, delete it in the dashboard —
+it is not managed here.
 
 
 ## OCR — no longer here

@@ -10,12 +10,12 @@ describe('which requests are measured', () => {
 
   const configured = (host: string | null) => {
     process.env.GA_MEASUREMENT_ID = 'G-794BNPG3ZJ'
-    process.env.NEXT_PUBLIC_SERVER_URL = 'https://noblesee.com'
+    process.env.NEXT_PUBLIC_SERVER_URL = 'https://books.noblesee.com'
     return analyticsMeasurementId(host)
   }
 
   it('measures a request to the canonical site', () => {
-    expect(configured('noblesee.com')).toBe('G-794BNPG3ZJ')
+    expect(configured('books.noblesee.com')).toBe('G-794BNPG3ZJ')
   })
 
   it('ignores the Host header case', () => {
@@ -31,14 +31,14 @@ describe('which requests are measured', () => {
   })
 
   it('renders no tag when analytics is not configured', () => {
-    process.env.NEXT_PUBLIC_SERVER_URL = 'https://noblesee.com'
+    process.env.NEXT_PUBLIC_SERVER_URL = 'https://books.noblesee.com'
     delete process.env.GA_MEASUREMENT_ID
-    expect(analyticsMeasurementId('noblesee.com')).toBeNull()
+    expect(analyticsMeasurementId('books.noblesee.com')).toBeNull()
   })
 
   it('refuses a measurement id that is not one', () => {
     process.env.GA_MEASUREMENT_ID = 'https://evil.example/x.js#'
-    process.env.NEXT_PUBLIC_SERVER_URL = 'https://noblesee.com'
-    expect(analyticsMeasurementId('noblesee.com')).toBeNull()
+    process.env.NEXT_PUBLIC_SERVER_URL = 'https://books.noblesee.com'
+    expect(analyticsMeasurementId('books.noblesee.com')).toBeNull()
   })
 })

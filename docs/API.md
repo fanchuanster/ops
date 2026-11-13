@@ -4,7 +4,7 @@ the header format, and what is deliberately absent.*
 
 # THE API
 
-Base: **`https://noblesee.com/api`**, locally `http://localhost:8787`.
+Base: **`https://books.noblesee.com/api`**, locally `http://localhost:8787`.
 The live surface is documented by the site itself at `/api/docs`,
 generated from the collection configs so it cannot drift, and
 administrators-only because it maps every collection and field.
@@ -65,6 +65,13 @@ Requirements the route enforces, in order:
 - **Content-Type must be one of** `application/pdf`, the DOCX MIME type,
   `application/epub+zip`, `text/plain`, `text/markdown` — sent as a real
   header, not guessed from the filename.
+- **`name` must stay under 52 UTF-8 bytes.** Undocumented and
+  unvalidated server-side: past that length the route 500s instead of
+  answering `400`, found empirically 2026-10-02. `tools/ns.py` works
+  around it (`_fit_upload_filename`), shortening a long filename to the
+  longest whole-character prefix that fits rather than send the request
+  as-is or fall back to a placeholder name. A caller going around
+  `ns.py` must shorten the `name` query param itself.
 - **`Content-Length` must be set and truthful** (`FixedLengthStream`
   reads exactly that many bytes from the body) and under
   `MAX_UPLOAD_BYTES`.
@@ -80,7 +87,7 @@ $token = "<personal access token>"
 $file  = "C:\path\to\100556018-让生命恢复纯净.pdf"
 $name  = [System.Web.HttpUtility]::UrlEncode("100556018-让生命恢复纯净.pdf")
 Invoke-WebRequest `
-  -Uri "https://noblesee.com/api/upload?book=53&name=$name" `
+  -Uri "https://books.noblesee.com/api/upload?book=53&name=$name" `
   -Method Post `
   -Headers @{ Authorization = "users API-Key $token" } `
   -ContentType "application/pdf" `

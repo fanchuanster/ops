@@ -8,7 +8,8 @@ locals {
   d1_name     = "noblesee${local.suffix}"
   worker_name = "noblesee${local.suffix}"
 
-  hostname = var.environment == "production" ? var.domain : "${var.environment}.${var.domain}"
+  # The site lives on books.<domain>; the apex serves nothing.
+  hostname = var.environment == "production" ? "books.${var.domain}" : "${var.environment}-books.${var.domain}"
 
   tags = {
     project     = "noblesee"

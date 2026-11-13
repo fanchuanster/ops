@@ -5,7 +5,7 @@ interface __BaseEnv_CloudflareEnv {
 	ARTIFACTS: R2Bucket;
 	DB: D1Database;
 	ASSETS: Fetcher;
-	NEXT_PUBLIC_SERVER_URL: "https://noblesee.com";
+	NEXT_PUBLIC_SERVER_URL: "https://books.noblesee.com";
 }
 declare namespace Cloudflare {
 	interface Env extends __BaseEnv_CloudflareEnv {}

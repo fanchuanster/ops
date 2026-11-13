@@ -149,7 +149,7 @@ failing the typecheck until the types are regenerated.
 
 ```bash
 ./tools/smoke-test.sh                                # HTTP-level checks, localhost:8787
-BASE_URL=https://noblesee.com ./tools/smoke-test.sh  # read-only against production
+BASE_URL=https://books.noblesee.com ./tools/smoke-test.sh  # read-only against production
 ```
 
 The signed-in checks register a reader and record deliveries, so they write to
@@ -318,7 +318,7 @@ apps/web/                    the application — public site, API and admin
   worker-entry.ts            OpenNext's handler plus the conversion cron
   src/lib/conversion/        the pipeline: DOCX, EPUB, the LLM client, the runner
 content/seed/                generated book artifacts (DOCX/EPUB/PDF)
-infra/                       Terraform: R2, D1, DNS, the www redirect
+infra/                       Terraform: R2, D1, DNS, the custom domain
 tools/                       smoke test, seed-content generator, R2 mirror, PDF shrinker
 docs/                        architecture decisions and roadmap
 ```
