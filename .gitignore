@@ -271,3 +271,7 @@ infra/.gcloud-home/
 
 # Collected by mds/sync.sh --collect; personal, kept local only
 mds/_user/
+
+# Local agent tooling
+.agents/
+openspec/
