@@ -19,7 +19,6 @@ mds/
   sync.sh
   sync.ps1
   _user/CLAUDE-global.md
-  _memory/<project-slug>/*.md
   MSM_Automations/CLAUDE.md
   MSM_Automations/CLAUDE-coding.md
   MSM_Automations/CLAUDE-git.md
@@ -181,9 +180,8 @@ wins; there is no "newer copy" comparison. Collect owns:
 - Hand-written skills from `.claude/commands/<name>.md` and
   `.claude/skills/<name>/`, stored as `<repo>/skills/<name>/SKILL.md`. A command
   gets a `name` (and a `description` if it has no frontmatter) added.
-- `_user/` and `_memory/`, rebuilt from the user scope: `~/.claude/CLAUDE.md` as
-  `_user/CLAUDE-global.md`, auto-memory from `~/.claude/projects/*/memory/` as
-  `_memory/<project-slug>/`, and skills from `~/.claude/commands/` and
+- `_user/`, rebuilt from the user scope: `~/.claude/CLAUDE.md` as
+  `_user/CLAUDE-global.md`, and skills from `~/.claude/commands/` and
   `~/.claude/skills/` as `_user/skills/<name>/`. `~/.claude/skills/synced/` is
   skipped: it is the Anthropic-managed set, licensed and re-delivered by the
   client. Sync does not write any of these back out; they are kept here for
@@ -204,12 +202,12 @@ The rebuild is staged in a temporary directory and compared before anything
 here is touched, printing every added, removed and changed file with a diff.
 `--collect-dry-run` stops there. A repo in `COLLECT_REPOS` with no checkout
 aborts the run rather than deleting its copy here. Collecting on another
-machine replaces `_memory/` with that machine's projects, so collect on one
+machine rebuilds `_user/` from that machine's user scope, so collect on one
 machine. `WS_ROOT` and `CLAUDE_HOME` override the locations.
 
-`_memory/` and `_user/` are gitignored and exist only on the machine that
-collected them. Memory and the global file hold personal and work notes, and
-this repo is public, so they are a local backup, never part of a commit.
+`_user/` is gitignored and exists only on the machine that
+collected it. The global file holds personal and work notes, and
+this repo is public, so it is a local backup, never part of a commit.
 
 ## The two repos behave differently
 

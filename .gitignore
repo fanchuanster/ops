@@ -270,5 +270,4 @@ infra/.gcloud-home/
 .claude/commands/
 
 # Collected by mds/sync.sh --collect; personal, kept local only
-mds/_memory/
 mds/_user/

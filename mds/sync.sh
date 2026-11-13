@@ -243,17 +243,8 @@ collect_repo() {
 }
 
 collect_user() {
-    local file memory_dir slug
+    local file dir
     [ -f "$CLAUDE_HOME/CLAUDE.md" ] && collect_file "$CLAUDE_HOME/CLAUDE.md" "_user/CLAUDE-global.md"
-
-    for memory_dir in "$CLAUDE_HOME"/projects/*/memory; do
-        [ -d "$memory_dir" ] || continue
-        slug="$(basename "$(dirname "$memory_dir")")"
-        for file in "$memory_dir"/*.md; do
-            [ -f "$file" ] || continue
-            collect_file "$file" "_memory/$slug/$(basename "$file")"
-        done
-    done
 
     for file in "$CLAUDE_HOME"/commands/*.md; do
         [ -f "$file" ] || continue
@@ -275,7 +266,7 @@ collected_paths() {
             find "$repo" -maxdepth 1 -type f \( -name 'CLAUDE.md' -o -name 'CLAUDE-*.md' \) 2>/dev/null
             find "$repo/skills" -type f 2>/dev/null
         done
-        find _user _memory -type f 2>/dev/null
+        find _user -type f 2>/dev/null
     ) | sort || true
 }
 
@@ -308,7 +299,7 @@ replace_collected() {
         rm -f "$MDS/$repo/CLAUDE.md" "$MDS/$repo"/CLAUDE-*.md
         rm -rf "${MDS:?}/$repo/skills"
     done
-    rm -rf "${MDS:?}/_user" "${MDS:?}/_memory"
+    rm -rf "${MDS:?}/_user"
     cp -R "$STAGE/." "$MDS/"
 }
 
