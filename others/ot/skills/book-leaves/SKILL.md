@@ -6,7 +6,7 @@ argument-hint: "[type] <start yyyymmdd> [end yyyymmdd] | [days] at year end"
 
 # Book Leaves Skill
 
-Books leave through `ot/book_leaves.py`. Request: $ARGUMENTS
+Books leave through `others/ot/book_leaves.py`. Request: $ARGUMENTS
 
 Parse it for the leave type (one of: `Vacation` (default), `Floating Holiday`,
 `Sickness`, `Bereavement Leave`, `Volunteer Hours`,
@@ -19,14 +19,14 @@ the available and booked days of that type (booked days in the past are left
 out) and relay them:
 
 ```powershell
-python ot\book_leaves.py --type "<type>" --report
+python others\ot\book_leaves.py --type "<type>" --report
 ```
 
 Then run:
 
 ```powershell
-python ot\book_leaves.py [--type "<type>"] --start <yyyymmdd> [--end <yyyymmdd>] [--half-day] [--dry-run]
-python ot\book_leaves.py [--type "<type>"] --days <days> [--dry-run]
+python others\ot\book_leaves.py [--type "<type>"] --start <yyyymmdd> [--end <yyyymmdd>] [--half-day] [--dry-run]
+python others\ot\book_leaves.py [--type "<type>"] --days <days> [--dry-run]
 ```
 
 The second form, with no dates, books on the last working days of this year.
@@ -73,8 +73,8 @@ needed. Use `--dry-run` only when the user asks for one.
 
 ## Requirements
 
-- Google Chrome and `pip install -r ot\requirements.txt`.
-- Login is single sign-on. The automation profile is `ot\.profile`
+- Google Chrome and `pip install -r others\ot\requirements.txt`.
+- Login is single sign-on. The automation profile is `others\ot\.profile`
   (gitignored); `--headed` shows the browser if sign-in ever needs a person.
 - Public holidays are national only. A provincial-only holiday is not blocked
   unless Talent Central lists it.

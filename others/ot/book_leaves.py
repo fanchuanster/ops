@@ -35,7 +35,7 @@ from leaves import (
 
 CENTRAL_URL = "https://central.opentext.com/"
 PROFILE_DIR = Path(__file__).parent / ".profile"
-SCREENSHOT_DIR = Path(__file__).parent.parent / "tmp"
+SCREENSHOT_DIR = Path(__file__).parents[2] / "tmp"
 LEAVE_TYPES = [
     VACATION,
     FLOATING,
