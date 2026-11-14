@@ -6,7 +6,7 @@ reconnects it automatically if the client is running but idle. It never
 starts the client and never connects on its behalf when the client
 itself is closed.
 
-Scripts, all in this `tools/` folder:
+Scripts, all in this folder:
 
 - `checkpoint-vpn-watchdog.ps1` — the actual check-and-reconnect logic.
 - `set-checkpoint-vpn-credential.ps1` — one-time setup to store the p12
@@ -38,14 +38,14 @@ Scripts, all in this `tools/` folder:
 
 1. Get the scripts onto the machine — clone this repo, or just copy
    `checkpoint-vpn-watchdog.ps1`, `set-checkpoint-vpn-credential.ps1`
-   and `register-checkpoint-vpn-watchdog-task.ps1` from `tools/`.
+   and `register-checkpoint-vpn-watchdog-task.ps1` from `others/checkpoint-vpn/`.
 
 2. Store the p12 password. Run this interactively yourself, as the
    Windows account that will run the VPN — the password is typed once
    here and never appears in any script argument or log after this:
 
    ```powershell
-   powershell -File .\tools\set-checkpoint-vpn-credential.ps1
+   powershell -File .\others\checkpoint-vpn\set-checkpoint-vpn-credential.ps1
    ```
 
    Saves it DPAPI-encrypted to
@@ -57,7 +57,7 @@ Scripts, all in this `tools/` folder:
    named "SaaS" on this machine):
 
    ```powershell
-   powershell -File .\tools\register-checkpoint-vpn-watchdog-task.ps1 -SiteName "SaaS" -IntervalMinutes 1
+   powershell -File .\others\checkpoint-vpn\register-checkpoint-vpn-watchdog-task.ps1 -SiteName "SaaS" -IntervalMinutes 1
    ```
 
    Registers via `schtasks.exe` (not the `Register-ScheduledTask`

@@ -26,7 +26,7 @@ Request: $ARGUMENTS
 4. Once an action is chosen, invoke its skill and follow its instructions,
    collecting any inputs it needs with `ask_user` when they were not given.
    For Book leave, ask for the leave type first, then run
-   `python ot\book_leaves.py --type "<type>" --report` and show its available
+   `python others\ot\book_leaves.py --type "<type>" --report` and show its available
    and booked days before asking for the start date `yyyymmdd`, optional end
    date, half day and dry run.
    For Reimbursement, ask for the reimbursement type (only Wellness for now),
@@ -35,6 +35,6 @@ Request: $ARGUMENTS
 
 ## Adding an action
 
-Build the action as its own skill under `skills\`, with its script under
-`ot\`, then add a row to the table above. This skill only routes; it holds no
+Build the action as its own skill under `others\ot\skills\`, with its script under
+`others\ot\`, then add a row to the table above. This skill only routes; it holds no
 automation itself.

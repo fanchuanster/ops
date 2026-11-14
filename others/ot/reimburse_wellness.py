@@ -21,7 +21,7 @@ from wellness import (
 HOME_URL = "https://help.opentext.com/homepage"
 OFFERING_URL = "https://help.opentext.com/saw/ess/offeringPage/2267531"
 PROFILE_DIR = Path(__file__).parent / ".profile"
-SCREENSHOT_DIR = Path(__file__).parent.parent / "tmp"
+SCREENSHOT_DIR = Path(__file__).parents[2] / "tmp"
 PREVIEW_TOP = SCREENSHOT_DIR / "ot_wellness_preview_1.png"
 PREVIEW_BOTTOM = SCREENSHOT_DIR / "ot_wellness_preview_2.png"
 SUBMITTED = SCREENSHOT_DIR / "ot_wellness_submitted.png"

@@ -7,14 +7,14 @@ argument-hint: "[receipt image paths]"
 # Reimburse Wellness Skill
 
 Files a Well+Being Fitness Reimbursement claim through
-`ot/reimburse_wellness.py`. Request: $ARGUMENTS
+`others/ot/reimburse_wellness.py`. Request: $ARGUMENTS
 
 ## Flow
 
 1. Show the allowance first and relay it:
 
    ```powershell
-   python ot\reimburse_wellness.py --report
+   python others\ot\reimburse_wellness.py --report
    ```
 
 2. Ask for the receipt images if none were given. Each must be a file on
@@ -29,7 +29,7 @@ Files a Well+Being Fitness Reimbursement claim through
 4. Fill the form and preview it. This never submits:
 
    ```powershell
-   python ot\reimburse_wellness.py --paid <yyyymmdd> --amount <amount> --type "<type>" --description "<text>" --receipt <path> [--receipt <path>]
+   python others\ot\reimburse_wellness.py --paid <yyyymmdd> --amount <amount> --type "<type>" --description "<text>" --receipt <path> [--receipt <path>]
    ```
 
    Show the user the logged fields and both preview screenshots,
