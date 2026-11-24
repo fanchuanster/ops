@@ -13,7 +13,7 @@ Request: $ARGUMENTS
 | Action | Status | Skill |
 |---|---|---|
 | Book leave | available | `book-leaves` |
-| Reimbursement | available: wellness (Well+Being Fitness) only | `reimburse-wellness` |
+| Reimbursement | available: wellness (Well+Being Fitness) only; also checks claim status (`--status`) | `reimburse-wellness` |
 
 ## Behaviour
 

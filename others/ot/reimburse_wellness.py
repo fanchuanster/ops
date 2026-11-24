@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -20,6 +21,9 @@ from wellness import (
 
 HOME_URL = "https://help.opentext.com/homepage"
 OFFERING_URL = "https://help.opentext.com/saw/ess/offeringPage/2267531"
+REQUESTS_URL = "https://help.opentext.com/saw/ess/myRequests/myOpenRequests"
+REQUEST_TITLE = "Submit Well+Being Fitness Reimbursement Claim"
+REQUEST_TABS = ("Open", "Closed")
 PROFILE_DIR = Path(__file__).parent / ".profile"
 SCREENSHOT_DIR = Path(__file__).parents[2] / "tmp"
 PREVIEW_TOP = SCREENSHOT_DIR / "ot_wellness_preview_1.png"
@@ -154,8 +158,31 @@ def submit(page: Page) -> None:
     logger.info("Screenshot: %s", SUBMITTED)
 
 
+def wellness_requests(page: Page, tab: str) -> list[str]:
+    page.goto(REQUESTS_URL)
+    page.wait_for_timeout(STEP_MS * 5)
+    page.get_by_text(tab).first.click()
+    page.wait_for_timeout(STEP_MS * 5)
+    entries = re.split(r"\n(?=\d{6,}:\n)", page.inner_text("body"))
+    return [entry for entry in entries if entry.splitlines()[1:2] == [REQUEST_TITLE]]
+
+
+def report_status(page: Page) -> None:
+    found = False
+    for tab in REQUEST_TABS:
+        for entry in wellness_requests(page, tab):
+            found = True
+            lines = [line for line in entry.splitlines() if line.strip()]
+            logger.info("[%s] %s | %s | %s", tab, lines[0].rstrip(":"), lines[3], lines[4])
+    if not found:
+        logger.info("no wellness claim found in your open or closed requests")
+
+
 def claim(page: Page, args: argparse.Namespace) -> None:
     sign_in(page, os.environ["OT_USERNAME"])
+    if args.status:
+        report_status(page)
+        return
     open_form(page)
     available = report(page)
     if args.report:
@@ -195,8 +222,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--submit", action="store_true", help="submit the claim; without it the form is only filled and previewed")
     parser.add_argument("--headed", action="store_true", help="show the browser")
     parser.add_argument("--report", action="store_true", help="only show the allowance and what is available")
+    parser.add_argument("--status", action="store_true", help="list submitted wellness claims and whether each is open or closed")
     args = parser.parse_args()
-    if args.report:
+    if args.report or args.status:
         return args
     if args.paid is None or args.amount is None or not args.description or not args.receipt:
         parser.error("give --paid, --amount, --description and at least one --receipt")

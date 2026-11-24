@@ -45,6 +45,18 @@ Expense types: `Fitness Activities` (default; gym, yoga, online cardio),
 (meditation, personal training, nutrition counselling, race fees),
 `Fitness Wearable Technology`.
 
+## Checking a claim's status
+
+```powershell
+python ot\reimburse_wellness.py --status
+```
+
+Lists every wellness claim in My Requests (help.opentext.com) as
+`[Open|Closed] <request id> | <description> | <created>`, newest first, across
+all fiscal years. Closed means the request reached Done; the list does not say
+whether it was approved or rejected. A drop in "Available to claim" from
+`--report` confirms the amount was counted.
+
 ## Behaviour
 
 - Allowance is 320 a year in local currency (CAD), and the fiscal year runs
